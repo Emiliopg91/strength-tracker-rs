@@ -580,3 +580,6 @@ exit:
 notes:
   en: Notes
   es: Notas
+group_by_exercises:
+  en: Group by exercises
+  es: Agrupar por ejercicios

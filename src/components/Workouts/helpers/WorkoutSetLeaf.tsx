@@ -277,7 +277,7 @@ export function WorkoutSetLeaf({
         type="text"
         maxRows={1}
         size="small"
-        sx={{ width: 340 }}
+        sx={{ width: 500 }}
         value={leaf.notes ?? ""}
         slotProps={{
           htmlInput: {

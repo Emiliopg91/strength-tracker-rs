@@ -127,12 +127,6 @@ async fn mtp_dev_check_and_sync(app: AppHandle, devices: &mut Vec<DeviceListItem
             );
             devices.push(device.clone());
 
-            download_pending_workouts(&app, &device.serial_number).await;
-            push_pending_workouts(&app, &device.serial_number).await;
-
-            let payload: DeviceListItem = device.clone();
-            let _ = app.emit("device_connected", payload);
-
             if auto_sync {
                 devs_to_sync.push(device.serial_number.clone());
                 show_notification(NotificationDefinition {
@@ -151,6 +145,12 @@ async fn mtp_dev_check_and_sync(app: AppHandle, devices: &mut Vec<DeviceListItem
                     kind: NotificationKind::Temporal,
                 });
             }
+
+            download_pending_workouts(&app, &device.serial_number).await;
+            push_pending_workouts(&app, &device.serial_number).await;
+
+            let payload: DeviceListItem = device.clone();
+            let _ = app.emit("device_connected", payload);
         }
 
         for device in devices.iter() {
@@ -239,6 +239,11 @@ async fn push_pending_workouts(app: &AppHandle, serial: &str) {
             continue;
         }
         info!("Pending workout '{workout}' sent to device {serial}");
+        show_notification(NotificationDefinition {
+            title: workout.to_string(),
+            body: translate("ok_workout_send", lang),
+            kind: NotificationKind::Temporal,
+        });
 
         let device = serial.clone();
         if let Err(e) = run_blocking(app.clone(), move |db| {

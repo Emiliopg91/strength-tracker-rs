@@ -164,7 +164,7 @@ export function Home() {
 
         setLastSession(sessions[0]);
 
-        setRest(newStats.today.load > 100 || overreaching);
+        setRest(newStats.today.load > 50 || overreaching);
       }
     });
   };
