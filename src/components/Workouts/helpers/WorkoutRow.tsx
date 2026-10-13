@@ -7,9 +7,15 @@ type Props = {
   workout: WorkoutListItem;
   onSelect: (name: string) => void;
   onOpenEdit: (name: string) => void;
+  onOpenDuplicate: (name: string) => void;
 };
 
-export function WorkoutRow({ workout, onSelect, onOpenEdit }: Props) {
+export function WorkoutRow({
+  workout,
+  onSelect,
+  onOpenEdit,
+  onOpenDuplicate,
+}: Props) {
   const { translate, formatDuration, formatTimeDate, formatNumber } =
     useContext(I18nSettingsContext);
 
@@ -34,6 +40,7 @@ export function WorkoutRow({ workout, onSelect, onOpenEdit }: Props) {
           <WorkoutActionsMenu
             workoutName={workout.name}
             onOpenEdit={() => onOpenEdit(workout.name)}
+            onOpenDuplicate={() => onOpenDuplicate(workout.name)}
             dense
           />
         )}

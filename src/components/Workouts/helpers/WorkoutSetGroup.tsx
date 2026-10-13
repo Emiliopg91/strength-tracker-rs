@@ -18,7 +18,7 @@ import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
 import ClearIcon from "@mui/icons-material/Clear";
 import AddCircleOutlineRoundedIcon from "@mui/icons-material/AddCircleOutlineRounded";
-import { ExerciseOption } from "@/hooks/useExerciseCatalog";
+import { ExerciseOption } from "@/context/AppContext";
 
 type Props = {
   group: StepGroup;

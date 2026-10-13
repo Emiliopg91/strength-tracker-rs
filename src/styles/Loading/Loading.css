@@ -5,3 +5,7 @@
   /* MUI theme.zIndex.drawer (1200) + 1 */
   z-index: 1301;
 }
+
+.loading-backdrop-hidden {
+  background-color: transparent !important;
+}

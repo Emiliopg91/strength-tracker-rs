@@ -19,12 +19,14 @@ import { DeviceContext } from "@/context/DeviceContext";
 type Props = {
   workoutName: string;
   onOpenEdit: () => void;
+  onOpenDuplicate?: () => void;
   dense?: boolean;
 };
 
 export function WorkoutActionsMenu({
   workoutName,
   onOpenEdit,
+  onOpenDuplicate = undefined,
   dense = false,
 }: Props) {
   const withLoading = useLoadingTask();
@@ -104,6 +106,16 @@ export function WorkoutActionsMenu({
             </Paper>
           </Popper>
         </MenuItem>
+        {onOpenDuplicate && (
+          <MenuItem
+            onClick={() => {
+              closeMenus();
+              onOpenDuplicate();
+            }}
+          >
+            <ListItemText>{translate("duplicate")}</ListItemText>
+          </MenuItem>
+        )}
       </Menu>
     </>
   );

@@ -11,4 +11,12 @@ export const theme = createTheme({
       paper: "#101010",
     },
   },
+  components: {
+    MuiDialog: {
+      defaultProps: {
+        // The fade-in renders as a see-through flicker in the webview
+        transitionDuration: 0,
+      },
+    },
+  },
 });

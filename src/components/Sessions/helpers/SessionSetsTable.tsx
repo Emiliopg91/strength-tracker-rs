@@ -8,7 +8,7 @@ import {
   TextField,
 } from "@mui/material";
 import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
-import { ExerciseOption, useExerciseCatalog } from "@/hooks/useExerciseCatalog";
+import { AppContext, ExerciseOption } from "@/context/AppContext";
 
 type Props = {
   series: SessionSet[];
@@ -27,10 +27,8 @@ export function SessionSetsTable({
 }: Props) {
   const { translate, getWeightUnit, formatDuration } =
     useContext(I18nSettingsContext);
-  // On failure the exercise name is rendered as plain text instead of a selector
-  const exercisesCatalog = useExerciseCatalog(() => {
-    console.warn("Could not load exercises catalog");
-  });
+  // Without catalog the exercise name is rendered as plain text instead of a selector
+  const { exercisesCatalog } = useContext(AppContext);
 
   const [hasRests] = useState(series.find((s) => s.rest) !== undefined);
 

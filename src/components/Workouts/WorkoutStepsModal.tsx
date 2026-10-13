@@ -14,7 +14,7 @@ import { WorkoutSetGroup } from "./helpers/WorkoutSetGroup";
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
 import { BackendClient } from "@/utils/backend/client";
 import { useLoadingTask } from "@/hooks/useLoadingTask";
-import { useExerciseCatalog } from "@/hooks/useExerciseCatalog";
+import { AppContext } from "@/context/AppContext";
 
 type Props = {
   workout: WorkoutDetails;
@@ -25,7 +25,7 @@ type Props = {
 export function WorkoutStepsModal({ workout, isEdit, onClose }: Props) {
   const withLoading = useLoadingTask();
   const { translate, fromKg, toKg } = useContext(I18nSettingsContext);
-  const exercisesCatalog = useExerciseCatalog(onClose);
+  const { exercisesCatalog } = useContext(AppContext);
 
   useEffect(() => {
     setName(workout.name);
@@ -99,6 +99,7 @@ export function WorkoutStepsModal({ workout, isEdit, onClose }: Props) {
                 error={name.length == 0}
                 onChange={onNameChange}
                 value={name}
+                sx={{ width: 600 }}
               ></TextField>
             )}
             <IconButton onClick={onClose} className="modal-close-button">

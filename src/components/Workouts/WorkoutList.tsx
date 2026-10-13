@@ -42,28 +42,32 @@ export function WorkoutsList() {
   );
   const [isEdit, setIsEdit] = useState(false);
 
-  const openEdit = (workout: WorkoutDetails | undefined) => {
-    if (workout === undefined) {
-      setIsEdit(false);
-      const workout: WorkoutDetails = {
-        name: "",
-        avg_time: 0,
-        avg_volume: 0,
-        enabled: true,
-        latest_session: 0,
-        session_count: 0,
-        sessions: [],
-        notes: null,
-        steps: WorkoutUtils.toWorkoutSteps(
-          [structuredClone(WorkoutUtils.DEFAULT_GROUP)],
-          "",
-          toKg,
-        ),
-      };
+  const openEdit = (workout: WorkoutDetails | undefined, edit: boolean) => {
+    setIsEdit(edit);
+    if (edit) {
       setWorkoutEdit(workout);
     } else {
-      setIsEdit(true);
-      setWorkoutEdit(workout);
+      if (workout === undefined) {
+        const workout: WorkoutDetails = {
+          name: "",
+          avg_time: 0,
+          avg_volume: 0,
+          enabled: true,
+          latest_session: 0,
+          session_count: 0,
+          sessions: [],
+          notes: null,
+          steps: WorkoutUtils.toWorkoutSteps(
+            [structuredClone(WorkoutUtils.DEFAULT_GROUP)],
+            "",
+            toKg,
+          ),
+        };
+        setWorkoutEdit(workout);
+      } else {
+        workout.name = workout.name + " - 2";
+        setWorkoutEdit(workout);
+      }
     }
     setWorkoutDetails(undefined);
   };
@@ -81,7 +85,15 @@ export function WorkoutsList() {
   };
 
   const openEditByName = (name: string) => {
-    BackendClient.getWorkoutDetails(name).then(openEdit);
+    BackendClient.getWorkoutDetails(name).then((workout) =>
+      openEdit(workout, true),
+    );
+  };
+
+  const openDuplicateByName = (name: string) => {
+    BackendClient.getWorkoutDetails(name).then((workout) => {
+      openEdit(workout, false);
+    });
   };
 
   const setWorkoutState = (name: string, status: boolean) => {
@@ -116,6 +128,7 @@ export function WorkoutsList() {
                 workout={workout}
                 onSelect={getWorkoutDetails}
                 onOpenEdit={openEditByName}
+                onOpenDuplicate={openDuplicateByName}
               />
             ))}
           </tbody>
@@ -129,7 +142,7 @@ export function WorkoutsList() {
             showEnable={true}
             onClose={() => setWorkoutDetails(undefined)}
             onUpdate={setWorkoutState}
-            onOpenEdit={openEdit}
+            onOpenEdit={(workout) => openEdit(workout, true)}
           />
         )}
       </div>
@@ -150,7 +163,7 @@ export function WorkoutsList() {
       <div className="list-action-bar">
         <Button
           className="full-width-button"
-          onClick={() => openEdit(undefined)}
+          onClick={() => openEdit(undefined, false)}
           variant="contained"
         >
           {translate("create_workout")}

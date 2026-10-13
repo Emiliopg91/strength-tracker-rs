@@ -22,6 +22,7 @@ type Props = {
   onClose: () => void;
   onUpdate?: (name: string, status: boolean) => void;
   onOpenEdit: (workout: WorkoutDetails) => void;
+  onOpenDuplicate?: (workout: WorkoutDetails) => void;
 };
 
 export function WorkoutModal({
@@ -30,6 +31,7 @@ export function WorkoutModal({
   onClose,
   onUpdate,
   onOpenEdit,
+  onOpenDuplicate,
 }: Props) {
   const withLoading = useLoadingTask();
   const {
@@ -75,10 +77,19 @@ export function WorkoutModal({
         {workout.name.length > 0 && workout.steps.length > 0 && (
           // Positioned like .modal-close-button, just to its left
           <Box sx={{ position: "absolute", right: "48px", top: "8px" }}>
-            <WorkoutActionsMenu
-              workoutName={workout.name}
-              onOpenEdit={() => onOpenEdit(workout)}
-            />
+            {onOpenDuplicate && (
+              <WorkoutActionsMenu
+                workoutName={workout.name}
+                onOpenEdit={() => onOpenEdit(workout)}
+                onOpenDuplicate={() => onOpenDuplicate(workout)}
+              />
+            )}
+            {!onOpenDuplicate && (
+              <WorkoutActionsMenu
+                workoutName={workout.name}
+                onOpenEdit={() => onOpenEdit(workout)}
+              />
+            )}
           </Box>
         )}
         <IconButton onClick={onClose} className="modal-close-button">

@@ -581,5 +581,8 @@ notes:
   en: Notes
   es: Notas
 group_by_exercises:
-  en: Group by exercises
-  es: Agrupar por ejercicios
+  en: Group by exercise
+  es: Agrupar por ejercicio
+duplicate:
+  en: Duplicate
+  es: Duplicar
