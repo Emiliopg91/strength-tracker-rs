@@ -5,6 +5,4 @@ UPDATE session SET active_calories=total_calories-metabolic_calories;
 ALTER TABLE session DROP COLUMN total_calories;
 ALTER TABLE session DROP COLUMN metabolic_calories;
 
-ALTER TABLE session ADD COLUMN had_pr BOOLEAN NOT NULL DEFAULT false;
-
 DELETE FROM settings where name='auto_sync';
