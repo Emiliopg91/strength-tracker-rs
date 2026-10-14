@@ -34,13 +34,14 @@ export function AppProvider({
         }
       })
       .finally(() => {
-        setBackendReady(true);
+        // The exercises table is static, so it is fetched once
+        BackendClient.getExercisesCatalog()
+          .then(setRawCatalog)
+          .catch(() => console.warn("Could not load exercises catalog"))
+          .finally(() => {
+            setBackendReady(true);
+          });
       });
-
-    // The exercises table is static, so it is fetched once
-    BackendClient.getExercisesCatalog()
-      .then(setRawCatalog)
-      .catch(() => console.warn("Could not load exercises catalog"));
 
     return () => {
       unregisterSessionsAdded();

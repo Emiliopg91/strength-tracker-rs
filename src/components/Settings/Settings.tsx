@@ -33,7 +33,6 @@ export function Settings({ onClose }: Props) {
 
   const [weightUnit, setWeightUnit] = useState(settings.weight_unit);
   const [distanceUnit, setDistanceUnit] = useState(settings.distance_unit);
-  const [autoSync, setAutoSync] = useState(settings.auto_sync);
   const [startOnBoot, setStartOnBoot] = useState(settings.start_boot);
   const [language, setLanguage] = useState(settings.language);
   const [onDeviceConnect, setOnDeviceConnect] = useState(
@@ -58,15 +57,6 @@ export function Settings({ onClose }: Props) {
         updateSettings({ distance_unit: value });
       },
     );
-  };
-
-  const updateAutoSync = (value: boolean) => {
-    withLoading(
-      BackendClient.updateSettingsValue("auto_sync", value ? "true" : "false"),
-    ).then(() => {
-      setAutoSync(value);
-      updateSettings({ auto_sync: value });
-    });
   };
 
   const updateStartOnBoot = (value: boolean) => {
@@ -288,26 +278,6 @@ export function Settings({ onClose }: Props) {
                       </MenuItem>
                       <MenuItem value="true">
                         {translate("start_automatically")}
-                      </MenuItem>
-                    </Select>
-                  </td>
-                </tr>
-                <tr>
-                  <td>{translate("auto_sync")}</td>
-                  <td>
-                    <Select
-                      size="small"
-                      fullWidth
-                      value={autoSync ? "true" : "false"}
-                      onChange={(e) =>
-                        updateAutoSync(e.target.value === "true")
-                      }
-                    >
-                      <MenuItem value="true">
-                        {translate("auto_sync_true")}
-                      </MenuItem>
-                      <MenuItem value="false">
-                        {translate("auto_sync_false")}
                       </MenuItem>
                     </Select>
                   </td>

@@ -12,7 +12,6 @@ export const KM_TO_MI = 0.621371;
 export const DEFAULT_SETTINGS: Settings = {
   distance_unit: DistanceUnit.Kilometers,
   weight_unit: WeightUnit.Kilograms,
-  auto_sync: true,
   start_boot: false,
   language: Languages.English,
   on_device_connect: false,

@@ -274,15 +274,6 @@ distance_unit_kilometers:
 distance_unit_miles:
   en: Miles
   es: Millas
-auto_sync:
-  en: Sync devices
-  es: Sincronizar dispositivos
-auto_sync_true:
-  en: Automatically
-  es: Automaticamente
-auto_sync_false:
-  en: Manually
-  es: Manualmente
 pace:
   en: Pace
   es: Ritmo

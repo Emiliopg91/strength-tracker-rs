@@ -7,7 +7,6 @@ use std::fmt;
 use crate::utils::{constants, translations::Languages};
 
 pub mod settings_keys {
-    pub const AUTO_SYNC: &str = "auto_sync";
     pub const DISTANCE_UNIT: &str = "distance_unit";
     pub const LANGUAGE: &str = "language";
     pub const START_ON_BOOT: &str = "start_boot";
@@ -86,26 +85,6 @@ impl Settings {
             .or_replace()
             .item(&mut Settings {
                 name: settings_keys::LANGUAGE.to_string(),
-                value: value.to_string(),
-            })
-            .execute(db)
-            .map(|_| ())
-    }
-
-    /// Reads whether auto-sync on device connect is enabled, defaulting to `true` if unset.
-    pub fn get_auto_sync(db: &DatabasePool) -> bool {
-        SettingsRepository::select_by_id(db, settings_keys::AUTO_SYNC)
-            .ok()
-            .flatten()
-            .and_then(|r| r.value.parse().ok())
-            .unwrap_or(true)
-    }
-    /// Persists the auto-sync setting.
-    pub fn set_auto_sync(db: &DatabasePool, value: bool) -> rusqlite_orm::errors::Result<()> {
-        SettingsRepository::insert()
-            .or_replace()
-            .item(&mut Settings {
-                name: settings_keys::AUTO_SYNC.to_string(),
                 value: value.to_string(),
             })
             .execute(db)

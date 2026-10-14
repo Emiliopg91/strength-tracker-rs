@@ -189,7 +189,6 @@ export const Heatmap = memo(function Heatmap({ data }: HeatmapProps) {
     const width = Math.max(0, cellSize - 1);
     const height = width;
     const isRecord = point.records > 0;
-    const isToday = point.month === todayMonth && point.day === todayDay;
     return (
       <rect
         x={cx - width / 2}
@@ -198,8 +197,8 @@ export const Heatmap = memo(function Heatmap({ data }: HeatmapProps) {
         height={height}
         rx={1}
         fill={getHeatColor(point.load)}
-        stroke={isRecord ? "#A0A000" : isToday ? "#ffffff" : "none"}
-        strokeWidth={isRecord || isToday ? 2 : 0}
+        stroke={isRecord ? "#FFFF00" : "none"}
+        strokeWidth={isRecord ? 2 : 0}
       />
     );
   };

@@ -376,19 +376,13 @@ export function SessionSetsTable({
           />
         </div>
       )}
-      <table hidden={!groupedSets}>
+      <table>
         <colgroup>
           <col className="col-320" />
           <col className="col-230" />
         </colgroup>
-        {groupedBySerie()}
-      </table>
-      <table hidden={groupedSets}>
-        <colgroup>
-          <col className="col-320" />
-          <col className="col-230" />
-        </colgroup>
-        {groupedByExercises()}
+        {groupedSets && groupedBySerie()}
+        {!groupedSets && groupedByExercises()}
       </table>
     </div>
   );

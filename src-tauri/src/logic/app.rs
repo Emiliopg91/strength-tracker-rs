@@ -10,8 +10,8 @@ use tauri_plugin_autostart::ManagerExt;
 use crate::{
     SettingsLock, constants,
     dao::settings::settings_keys::{
-        AUTO_SYNC, CLOSE_TO_TRAY, DISTANCE_UNIT, LANGUAGE, ON_DEVICE_CONNECT, START_INTO_TRAY,
-        START_ON_BOOT, WEIGHT_UNIT,
+        CLOSE_TO_TRAY, DISTANCE_UNIT, LANGUAGE, ON_DEVICE_CONNECT, START_INTO_TRAY, START_ON_BOOT,
+        WEIGHT_UNIT,
     },
     dto::{
         app::{AppEnvironment, Settings},
@@ -109,12 +109,6 @@ pub async fn update_settings_value(app: AppHandle, name: &str, value: &str) -> R
         let database = app.state::<DatabasePool>();
         let settings = app.state::<SettingsLock>();
         match name.as_str() {
-            AUTO_SYNC => {
-                let value = value == "true";
-                crate::dao::settings::Settings::set_auto_sync(&database, value)
-                    .map_err(|e| e.to_string())?;
-                settings.write().unwrap().auto_sync = value;
-            }
             DISTANCE_UNIT => {
                 let value = value.as_str().try_into()?;
                 crate::dao::settings::Settings::set_distance_unit(&database, &value)

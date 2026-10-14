@@ -115,10 +115,10 @@ async fn mtp_dev_check_and_sync(app: AppHandle, devices: &mut Vec<DeviceListItem
             })
             .unwrap_or_default();
 
-        let (lang, auto_sync) = {
+        let lang = {
             let settings_state = app.state::<SettingsLock>();
             let settings = settings_state.read().unwrap();
-            (settings.language, settings.auto_sync)
+            settings.language
         };
         for device in &newly_enrolled {
             info!(
@@ -127,27 +127,16 @@ async fn mtp_dev_check_and_sync(app: AppHandle, devices: &mut Vec<DeviceListItem
             );
             devices.push(device.clone());
 
-            if auto_sync {
-                devs_to_sync.push(device.serial_number.clone());
-                show_notification(NotificationDefinition {
-                    title: translate("device_connected", lang),
-                    body: translate_and_replace(
-                        "syncing_device",
-                        &[&device.manufacturer, &device.model],
-                        lang,
-                    ),
-                    kind: NotificationKind::Temporal,
-                });
-            } else {
-                show_notification(NotificationDefinition {
-                    title: translate("device_connected", lang),
-                    body: format!("{} {}", device.manufacturer, device.model),
-                    kind: NotificationKind::Temporal,
-                });
-            }
-
-            download_pending_workouts(&app, &device.serial_number).await;
-            push_pending_workouts(&app, &device.serial_number).await;
+            devs_to_sync.push(device.serial_number.clone());
+            show_notification(NotificationDefinition {
+                title: translate("device_connected", lang),
+                body: translate_and_replace(
+                    "syncing_device",
+                    &[&device.manufacturer, &device.model],
+                    lang,
+                ),
+                kind: NotificationKind::Temporal,
+            });
 
             let payload: DeviceListItem = device.clone();
             let _ = app.emit("device_connected", payload);
@@ -183,6 +172,9 @@ async fn mtp_dev_check_and_sync(app: AppHandle, devices: &mut Vec<DeviceListItem
             if let Ok(i) = _import_from_device(&app, &dev).await {
                 imported += i;
             }
+
+            download_pending_workouts(&app, &dev).await;
+            push_pending_workouts(&app, &dev).await;
         }
         let _ = app.emit("finish_loading", ());
         if imported > 0 {

@@ -27,7 +27,6 @@ fn units_parse_and_display_roundtrip() {
 fn seeded_defaults() {
     let db = common::test_db();
 
-    assert!(Settings::get_auto_sync(&db));
     assert!(!Settings::get_start_on_boot(&db));
     assert!(!Settings::get_on_device_connect(&db));
     assert!(matches!(
@@ -45,7 +44,6 @@ fn seeded_defaults() {
 fn setters_roundtrip() {
     let db = common::test_db();
 
-    Settings::set_auto_sync(&db, false).unwrap();
     Settings::set_start_on_boot(&db, true).unwrap();
     Settings::set_on_device_connect(&db, true).unwrap();
     Settings::set_weight_unit(&db, &WeightUnit::Pounds).unwrap();
@@ -53,7 +51,6 @@ fn setters_roundtrip() {
     Settings::set_language(&db, &Languages::Spanish).unwrap();
     Settings::set_version(&db, &Version::new(2, 5, 0)).unwrap();
 
-    assert!(!Settings::get_auto_sync(&db));
     assert!(Settings::get_start_on_boot(&db));
     assert!(Settings::get_on_device_connect(&db));
     assert!(matches!(Settings::get_weight_unit(&db), WeightUnit::Pounds));
@@ -65,7 +62,6 @@ fn setters_roundtrip() {
     assert_eq!(Settings::get_version(&db), Version::new(2, 5, 0));
 
     let settings = app::Settings::from(&db);
-    assert!(!settings.auto_sync);
     assert!(settings.start_boot);
     assert!(settings.on_device_connect);
     assert!(matches!(settings.weight_unit, WeightUnit::Pounds));
@@ -80,7 +76,6 @@ fn invalid_stored_values_fall_back_to_defaults() {
     for (name, value) in [
         (settings_keys::WEIGHT_UNIT, "Stones"),
         (settings_keys::DISTANCE_UNIT, "Leagues"),
-        (settings_keys::AUTO_SYNC, "maybe"),
         (settings_keys::VERSION, "not-a-version"),
     ] {
         SettingsRepository::insert()
@@ -101,6 +96,5 @@ fn invalid_stored_values_fall_back_to_defaults() {
         Settings::get_distance_unit(&db),
         DistanceUnit::Kilometers
     ));
-    assert!(Settings::get_auto_sync(&db));
     assert_eq!(Settings::get_version(&db), Version::new(0, 1, 0));
 }

@@ -68,7 +68,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/devices.rs:637
+	// From src-tauri/src/logic/devices.rs:629
 	public static getRegisteredDevices(): Promise<DeviceListItem[]> {
 	  return BackendClient.inner_invoke("get_registered_devices"); 
 	}
@@ -92,7 +92,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/app.rs:200
+	// From src-tauri/src/logic/app.rs:194
 	public static getTranslations(): Promise<Record<string, string>> {
 	  return BackendClient.inner_invoke("get_translations"); 
 	}
@@ -110,7 +110,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/devices.rs:515
+	// From src-tauri/src/logic/devices.rs:507
 	public static importFromDevice(serial: string): Promise<number> {
 	  return BackendClient.inner_invoke("import_from_device", { serial }); 
 	}
@@ -140,7 +140,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/devices.rs:403
+	// From src-tauri/src/logic/devices.rs:395
 	public static sendToDevice(workout: string, serial: string): Promise<void> {
 	  return BackendClient.inner_invoke("send_to_device", { workout, serial }); 
 	}
