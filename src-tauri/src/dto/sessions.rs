@@ -27,7 +27,7 @@ impl From<&Session> for SessionListItem {
         Self {
             name: value.name.clone(),
             timestamp: value.date,
-            active_calories: value.total_calories - value.metabolic_calories,
+            active_calories: value.active_calories,
             training_load: value.training_load,
             sport: value.sport,
             sub_sport: value.sub_sport,
@@ -102,8 +102,7 @@ pub struct SessionDetails {
     pub total_elapsed_time: u32,
     pub active_time: u32,
 
-    pub total_calories: u16,
-    pub metabolic_calories: u16,
+    pub active_calories: u16,
 
     pub training_load: u16,
     pub sport: u8,
@@ -176,8 +175,7 @@ impl From<(&Session, &[Exercise], &[Set], &[Lap])> for SessionDetails {
             timestamp: value.0.date,
             total_elapsed_time: value.0.total_elapsed_time,
             active_time: value.0.active_time,
-            metabolic_calories: value.0.metabolic_calories,
-            total_calories: value.0.total_calories,
+            active_calories: value.0.active_calories,
             training_load: value.0.training_load,
             sport: value.0.sport,
             sub_sport: value.0.sub_sport,

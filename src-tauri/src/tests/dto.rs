@@ -16,7 +16,7 @@ fn session_list_item_active_calories() {
     let item = SessionListItem::from(&common::session(1_700_000_000));
 
     assert_eq!(item.timestamp, 1_700_000_000);
-    assert_eq!(item.active_calories, 400);
+    assert_eq!(item.active_calories, 100);
     assert_eq!(item.training_load, 80);
     assert!(!item.has_record);
 }

@@ -62,6 +62,7 @@ export enum Languages {
 
 // From src-tauri/src/dto/sessions.rs:97
 export interface SessionDetails {
+  active_calories: number;
   active_time: number;
   altitudes: (number | null)[];
   coordinates: ([number, number] | null)[];
@@ -70,7 +71,6 @@ export interface SessionDetails {
   heart_rates: (number | null)[];
   laps: SessionLap[];
   max_hr: number;
-  metabolic_calories: number;
   name: string;
   notes: string;
   sets: SessionSet[];
@@ -78,7 +78,6 @@ export interface SessionDetails {
   sport: number;
   sub_sport: number;
   timestamp: number;
-  total_calories: number;
   total_elapsed_time: number;
   training_load: number;
 }
@@ -103,7 +102,7 @@ export interface SessionListItem {
   training_load: number;
 }
 
-// From src-tauri/src/dto/sessions.rs:206
+// From src-tauri/src/dto/sessions.rs:204
 export interface SessionLocation {
   location: string;
   session: number;
@@ -121,7 +120,7 @@ export interface SessionSet {
   weight: number;
 }
 
-// From src-tauri/src/dto/sessions.rs:199
+// From src-tauri/src/dto/sessions.rs:197
 export interface SessionSetsUpdate {
   notes: string | null;
   sets: SessionSet[];

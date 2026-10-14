@@ -41,15 +41,7 @@ export function SessionDetailsTable({ session }: Props) {
         </tr>
         <tr>
           <td>{translate("calories")}:</td>
-          <td>
-            {formatNumber(
-              session.total_calories - session.metabolic_calories,
-              0,
-            ) +
-              " / " +
-              formatNumber(session.total_calories, 0)}{" "}
-            Kcal
-          </td>
+          <td>{formatNumber(session.active_calories, 0)} Kcal</td>
         </tr>
         {session.distance != null && session.distance > 0 && (
           <>
