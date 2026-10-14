@@ -2,8 +2,8 @@
 
 // From src-tauri/src/dto/app.rs:5
 export enum AppEnvironment {
-	Debug = "Debug",
-	Release = "Release",
+  Debug = "Debug",
+  Release = "Release",
 }
 
 // From src-tauri/src/dto/body_metrics.rs:6
@@ -17,8 +17,8 @@ export interface BodyMetricListItem {
 
 // From src-tauri/src/rclone/providers/mod.rs:11
 export enum CloudProvider {
-	OneDrive = "OneDrive",
-	DropBox = "DropBox",
+  OneDrive = "OneDrive",
+  DropBox = "DropBox",
 }
 
 // From src-tauri/src/dto/devices.rs:7
@@ -30,8 +30,8 @@ export interface DeviceListItem {
 
 // From src-tauri/src/dao/settings.rs:200
 export enum DistanceUnit {
-	Kilometers = "Kilometers",
-	Miles = "Miles",
+  Kilometers = "Kilometers",
+  Miles = "Miles",
 }
 
 // From src-tauri/src/dto/exercises.rs:29
@@ -56,8 +56,8 @@ export interface ExerciseListItem {
 
 // From src-tauri/src/utils/translations.rs:10
 export enum Languages {
-	Spanish = "Spanish",
-	English = "English",
+  Spanish = "Spanish",
+  English = "English",
 }
 
 // From src-tauri/src/dto/sessions.rs:97
@@ -140,15 +140,15 @@ export interface Settings {
 
 // From src-tauri/src/dao/workout_step.rs:38
 export enum StepType {
-	Exercise = "Exercise",
-	Rest = "Rest",
-	Repeat = "Repeat",
+  Exercise = "Exercise",
+  Rest = "Rest",
+  Repeat = "Repeat",
 }
 
 // From src-tauri/src/dao/settings.rs:228
 export enum WeightUnit {
-	Kilograms = "Kilograms",
-	Pounds = "Pounds",
+  Kilograms = "Kilograms",
+  Pounds = "Pounds",
 }
 
 // From src-tauri/src/dao/workout.rs:8
@@ -203,4 +203,3 @@ export interface WorkoutStep {
   weight: number | null;
   workout: string;
 }
-
