@@ -5,13 +5,13 @@ import { useLoadingTask } from "@/hooks/useLoadingTask";
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
 import { BackendClient } from "@/utils/backend/client";
 import { SessionListItem } from "@/utils/backend/models";
-import { useContext, useMemo, useState } from "react";
+import { useContext, useState } from "react";
 import { SessionModal } from "./SessionModal";
 import { SessionRow } from "./helpers/SessionRow";
 import { BackendListener } from "@/utils/backend/listener";
 import { SessionFrontDetails, SessionUtils } from "@/utils/SessionUtils";
 import "@/styles/Sessions/SessionList.css";
-import { Button, TextField } from "@mui/material";
+import { Button } from "@mui/material";
 import { SessionsCompareModal } from "./SessionsCompareModal";
 import { useFilterList } from "@/hooks/useFilterList";
 

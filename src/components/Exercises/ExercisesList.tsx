@@ -1,12 +1,11 @@
 import { ExerciseDetails, ExerciseListItem } from "@/utils/backend/models";
 import { ExerciseModal } from "./ExerciseModal";
 import { ExerciseRow } from "./helpers/ExerciseRow";
-import { useContext, useMemo, useState } from "react";
+import { useContext, useState } from "react";
 import { BackendClient } from "@/utils/backend/client";
 import { AppContext } from "@/context/AppContext";
 import { useBackendList } from "@/hooks/useBackendList";
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
-import { TextField } from "@mui/material";
 import { useFilterList } from "@/hooks/useFilterList";
 
 export function ExercisesList() {
