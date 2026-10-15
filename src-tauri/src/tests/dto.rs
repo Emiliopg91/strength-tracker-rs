@@ -62,7 +62,6 @@ fn session_details_without_additional_data() {
     assert_eq!(details.sets.len(), 1);
     assert!(details.heart_rates.is_empty());
     assert!(details.coordinates.is_empty());
-    assert!(details.speeds.is_empty());
     assert!(details.distance.is_none());
     assert!(details.notes.is_empty());
     assert!(details.device.is_none());
@@ -80,7 +79,6 @@ fn session_details_with_additional_data() {
     let mut data = common::additional_data(1);
     data.heart_rates = Some(vec![100, AdditionalData::INVALID_HEAR_RATE]);
     data.coordinates = Some(AdditionalData::build_coordinates_blob(&[(1, 2)]));
-    data.speeds = Some(AdditionalData::build_speeds_blob(&[2.5]));
     data.distance = Some(5_250.0);
     data.notes = Some("Easy run".to_string());
     session.additional_data = Some(data);
@@ -89,7 +87,6 @@ fn session_details_with_additional_data() {
 
     assert_eq!(details.heart_rates, vec![Some(100), None]);
     assert_eq!(details.coordinates, vec![Some((1, 2))]);
-    assert_eq!(details.speeds, vec![Some(2.5)]);
     assert_eq!(details.distance, Some(5.25));
     assert_eq!(details.notes, "Easy run");
     assert_eq!(details.device.as_deref(), Some("Garmin Forerunner 265"));

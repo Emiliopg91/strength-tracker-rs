@@ -114,7 +114,6 @@ pub struct SessionDetails {
     pub coordinates: Vec<Option<(i32, i32)>>,
     pub altitudes: Vec<Option<f64>>,
     pub laps: Vec<SessionLap>,
-    pub speeds: Vec<Option<f64>>,
     pub distance: Option<f64>,
     pub notes: String,
 
@@ -140,7 +139,6 @@ impl From<(&Session, &[Exercise], &[Set], &[Lap])> for SessionDetails {
         let mut heart_rates = Vec::new();
         let mut max_hr = 189;
         let mut gps_coordinates = Vec::new();
-        let mut speeds = Vec::new();
         let mut distance = None;
         let mut altitudes = Vec::new();
         let mut notes = "".to_string();
@@ -152,9 +150,6 @@ impl From<(&Session, &[Exercise], &[Set], &[Lap])> for SessionDetails {
             }
             if let Some(coords) = add_data.get_coordinates_semicircle() {
                 gps_coordinates = coords;
-            }
-            if let Some(spds) = add_data.get_speeds() {
-                speeds = round_samples(spds, 1000.0);
             }
             if let Some(nts) = add_data.notes.clone() {
                 notes = nts
@@ -185,7 +180,6 @@ impl From<(&Session, &[Exercise], &[Set], &[Lap])> for SessionDetails {
             device,
             laps,
             coordinates: gps_coordinates,
-            speeds,
             distance,
             altitudes,
             notes,

@@ -119,8 +119,6 @@ pub struct SessionExport {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub coordinates: Option<Vec<Option<(f64, f64)>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub speeds: Option<Vec<Option<f64>>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub altitudes: Option<Vec<Option<f64>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub heart_rates: Option<Vec<Option<u8>>>,
@@ -132,14 +130,12 @@ impl From<(&Session, Option<&AdditionalData>, Option<&Vec<Set>>)> for SessionExp
     fn from(values: (&Session, Option<&AdditionalData>, Option<&Vec<Set>>)) -> Self {
         let mut heart_rates = None;
         let mut coordinates: Option<Vec<Option<(f64, f64)>>> = None;
-        let mut speeds: Option<Vec<Option<f64>>> = None;
         let mut series = None;
         let mut altitudes = None;
 
         if let Some(add_data) = values.1 {
             heart_rates = add_data.get_heart_rates();
             coordinates = add_data.get_coordinates_degrees();
-            speeds = add_data.get_speeds();
             altitudes = add_data.get_altitudes();
         }
 
@@ -164,7 +160,6 @@ impl From<(&Session, Option<&AdditionalData>, Option<&Vec<Set>>)> for SessionExp
             sets: series,
             heart_rates,
             coordinates,
-            speeds,
             altitudes,
         }
     }

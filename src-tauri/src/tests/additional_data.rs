@@ -65,19 +65,6 @@ fn coordinates_trailing_bytes_are_ignored() {
 }
 
 #[test]
-fn speeds_blob_roundtrip_with_invalid() {
-    let values = [0.0, 3.25, AdditionalData::INVALID_SPEED, 12.5];
-
-    let mut data = common::additional_data(1);
-    data.speeds = Some(AdditionalData::build_speeds_blob(&values));
-
-    assert_eq!(
-        data.get_speeds().unwrap(),
-        vec![Some(0.0), Some(3.25), None, Some(12.5)]
-    );
-}
-
-#[test]
 fn altitudes_blob_roundtrip_with_invalid() {
     let values = [-12.5, 0.0, AdditionalData::INVALID_ALTITUDE, 2_345.75];
 
@@ -107,7 +94,6 @@ fn missing_blobs_are_none() {
 
     assert!(data.get_coordinates_semicircle().is_none());
     assert!(data.get_coordinates_degrees().is_none());
-    assert!(data.get_speeds().is_none());
     assert!(data.get_altitudes().is_none());
     assert!(data.get_heart_rates().is_none());
 }
