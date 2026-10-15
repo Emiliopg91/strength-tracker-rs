@@ -1,11 +1,13 @@
 import { ExerciseDetails, ExerciseListItem } from "@/utils/backend/models";
 import { ExerciseModal } from "./ExerciseModal";
 import { ExerciseRow } from "./helpers/ExerciseRow";
-import { useContext, useState } from "react";
+import { useContext, useMemo, useState } from "react";
 import { BackendClient } from "@/utils/backend/client";
 import { AppContext } from "@/context/AppContext";
 import { useBackendList } from "@/hooks/useBackendList";
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
+import { TextField } from "@mui/material";
+import { useFilterList } from "@/hooks/useFilterList";
 
 export function ExercisesList() {
   const { sessionsVersion } = useContext(AppContext);
@@ -31,8 +33,13 @@ export function ExercisesList() {
     });
   };
 
+  const [filter, filteredExercises] = useFilterList(exercises, (exercise) => {
+    return [translate("exercise_" + exercise.category + "_" + exercise.id)];
+  });
+
   return (
     <>
+      {filter}
       <table>
         <colgroup>
           <col className="col-400" />
@@ -49,7 +56,7 @@ export function ExercisesList() {
           </tr>
         </thead>
         <tbody>
-          {exercises.map((exercise, idx) => (
+          {filteredExercises.map((exercise, idx) => (
             <ExerciseRow
               key={idx}
               exercise={exercise}

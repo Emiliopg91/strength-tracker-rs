@@ -577,3 +577,6 @@ group_by_exercises:
 duplicate:
   en: Duplicate
   es: Duplicar
+filter:
+  en: Filter...
+  es: Filtrar...

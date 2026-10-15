@@ -5,19 +5,20 @@ import { useLoadingTask } from "@/hooks/useLoadingTask";
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
 import { BackendClient } from "@/utils/backend/client";
 import { SessionListItem } from "@/utils/backend/models";
-import { useContext, useState } from "react";
+import { useContext, useMemo, useState } from "react";
 import { SessionModal } from "./SessionModal";
 import { SessionRow } from "./helpers/SessionRow";
 import { BackendListener } from "@/utils/backend/listener";
 import { SessionFrontDetails, SessionUtils } from "@/utils/SessionUtils";
 import "@/styles/Sessions/SessionList.css";
-import { Button } from "@mui/material";
+import { Button, TextField } from "@mui/material";
 import { SessionsCompareModal } from "./SessionsCompareModal";
+import { useFilterList } from "@/hooks/useFilterList";
 
 export function SessionsList() {
   const { sessionsVersion } = useContext(AppContext);
   const withLoading = useLoadingTask();
-  const { translate, fromKg } = useContext(I18nSettingsContext);
+  const { translate, fromKg, formatTimeDate } = useContext(I18nSettingsContext);
   const [sessions, setSessions, refreshList] = useBackendList<SessionListItem>(
     () => BackendClient.getSessions(null),
     [sessionsVersion],
@@ -85,8 +86,19 @@ export function SessionsList() {
     setComparingSessions([details[0], details[1]]);
   };
 
+  const [filter, filteredSessions] = useFilterList(sessions, (session) => {
+    return [
+      formatTimeDate(session.timestamp),
+      session.name,
+      translate("sport_" + session.sport) +
+        " - " +
+        translate("sport_" + session.sport + "_" + session.sub_sport),
+    ];
+  });
+
   return (
     <>
+      {filter}
       <div id="list-layer">
         <table>
           <thead>
@@ -101,7 +113,7 @@ export function SessionsList() {
           </thead>
 
           <tbody>
-            {sessions.map((session, idx) => (
+            {filteredSessions.map((session, idx) => (
               <SessionRow
                 key={idx}
                 session={session}
