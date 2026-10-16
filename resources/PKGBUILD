@@ -7,7 +7,7 @@ url="https://github.com/Emiliopg91/${pkgname}"
 license=('GPL-2')
 
 source=(
-  "git+$url.git"
+  "git+$url.git#tag=$pkgver"
 )
 sha256sums=(
   'SKIP'
