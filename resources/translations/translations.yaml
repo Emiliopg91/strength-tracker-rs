@@ -103,21 +103,9 @@ import_sessions:
 import_from_device:
   en: From {}
   es: Desde {}
-import_sessions_from_device:
-  en: Import sessions from {}
-  es: Importar sesiones desde {}
-imported_session:
-  en: Session imported succesfully
-  es: Sesión importada con éxito
-no_device_found:
-  en: No device found
-  es: No se detectó dispositivo
 loading:
   en: Loading...
   es: Cargando...
-total_time:
-  en: Total time
-  es: Tiempo total
 active_time:
   en: Active time
   es: Tiempo activo
@@ -127,15 +115,6 @@ total_calories:
 active_calories:
   en: Active calories
   es: Calorias activas
-avg_heart_rate:
-  en: Average heart rate
-  es: Frecuencia cardiaca media
-max_heart_rate:
-  en: Max heart rate
-  es: Frecuencia cardiaca máxima
-min_heart_rate:
-  en: Min heart rate
-  es: Frecuencia cardiaca mínima
 exercise:
   en: Exercise
   es: Ejercicio
@@ -214,30 +193,12 @@ heart_rate:
 syncing_device:
   en: Syncing {} {}
   es: Sincronizando {} {}
-error_persisting_session:
-  en: "Error persisting session: {}"
-  es: "Error guardando sesión: {}"
 error_parsing_session:
   en: "Error parsing session file: {}"
   es: "Error leyendo archivo de sesión: {}"
 imported_from:
   en: Imported from
   es: Importado desde
-hr_zone_1:
-  en: Warm up
-  es: Calentamiento
-hr_zone_2:
-  en: Easy
-  es: Suave
-hr_zone_3:
-  en: Aerobic
-  es: Aeróbico
-hr_zone_4:
-  en: Threshold
-  es: Umbral
-hr_zone_5:
-  en: Maximum
-  es: Máximo
 sport:
   en: Sport
   es: Deporte
@@ -274,9 +235,6 @@ distance_unit_kilometers:
 distance_unit_miles:
   en: Miles
   es: Millas
-pace:
-  en: Pace
-  es: Ritmo
 name:
   en: Name
   es: Nombre
@@ -289,21 +247,12 @@ start_on_boot_true:
 start_on_boot_false:
   en: Manually
   es: Manualmente
-select_output_folder:
-  en: Select output folder
-  es: Selecciona directorio de salida
-select_file_import:
-  en: Select file to import
-  es: Selecciona archivo a importar
 database_operations:
   en: Database management
   es: Gestión de base de datos
 backup_database:
   en: Backup
   es: Exportar
-restore_database:
-  en: Restore
-  es: Restaurar
 ok_on_export:
   en: Database exported succesfully
   es: Base de datos exportada correctamente
@@ -331,9 +280,6 @@ lang_es:
 application:
   en: Application
   es: Aplicación
-interface:
-  en: Interface
-  es: Interfaz
 ok_import_sessions:
   en: Sessions imported succesfully
   es: Sesiones importadas con éxito
@@ -394,12 +340,6 @@ import_session_to_begin:
 home:
   en: Home
   es: Inicio
-summary:
-  en: Summary
-  es: Resumen
-last_7_days:
-  en: Last 7 days
-  es: Últimos 7 dias
 last_30_days:
   en: Last 30 days
   es: Últimos 30 dias

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use rusqlite_orm::{
     dao::Repository,
@@ -20,7 +20,9 @@ use crate::{
         notifications::{NotificationDefinition, NotificationKind},
         workouts::{WorkoutDetails, WorkoutListItem, WorkoutSession},
     },
-    logic::{notifications::show_notification, report_error, run_blocking},
+    logic::{
+        notifications::show_notification, report_error, row_f64, row_int, row_text, run_blocking,
+    },
     utils::translations::translate,
 };
 
@@ -40,6 +42,12 @@ pub async fn get_workout_list(
                 .collect::<Vec<_>>();
 
             let sessions = SessionRepository::select()
+                .columns(&[
+                    entity::columns::NAME,
+                    entity::columns::DATE,
+                    entity::columns::TOTAL_ELAPSED_TIME,
+                    entity::columns::TRAINING_LOAD,
+                ])
                 .where_(Where::NotNull(session::entity::columns::WORKOUT))
                 .order_by(OrderBy::Desc(entity::columns::DATE))
                 .fetch_in(conn)?;
@@ -58,18 +66,18 @@ pub async fn get_workout_list(
                         None
                     }
                 })
-                .collect::<Vec<_>>();
+                .collect::<HashSet<_>>();
 
             sessions.iter().for_each(|s| {
                 let entry = workout_stats
-                    .entry(s.name.clone())
+                    .entry(row_text(s, entity::columns::NAME.as_ref()))
                     .or_insert((0_u32, 0_u32, None, 0_u32));
                 entry.0 += 1_u32;
-                entry.1 += s.total_elapsed_time;
+                entry.1 += row_int(s, entity::columns::TOTAL_ELAPSED_TIME.as_ref()) as u32;
                 if entry.2.is_none() {
-                    entry.2 = Some(s.date);
+                    entry.2 = Some(row_int(s, entity::columns::DATE.as_ref()) as u32);
                 }
-                entry.3 += s.training_load as u32
+                entry.3 += row_int(s, entity::columns::TRAINING_LOAD.as_ref()) as u32
             });
 
             let with_steps = WorkoutStepRepository::select()
@@ -82,7 +90,7 @@ pub async fn get_workout_list(
                         _ => None,
                     },
                 )
-                .collect::<Vec<_>>();
+                .collect::<HashSet<_>>();
 
             let mut res = workout_stats
                 .into_iter()
@@ -140,34 +148,36 @@ pub async fn get_workout_details(
                 Some(&[OrderBy::Desc(entity::columns::DATE)]),
             )?;
 
-            let mut latest = sessions.first().map(|latest| latest.date);
+            let latest = sessions.first().map(|latest| latest.date);
             let mut count = 0_u32;
             let mut time = 0_u32;
             let mut volume = 0_f32;
 
             let series = SetRepository::select()
-                .where_(Where::In(
+                .columns(&[
                     set::entity::columns::SESSION,
-                    sessions.iter().map(|s| Value::from(s.date)).collect(),
+                    set::entity::columns::REPS,
+                    set::entity::columns::WEIGHT,
+                ])
+                .where_(Where::InSub(
+                    set::entity::columns::SESSION,
+                    SessionRepository::select()
+                        .columns(&[entity::columns::DATE])
+                        .where_(Where::Eq(entity::columns::NAME, name.clone().into()))
+                        .to_subquery(),
                 ))
                 .fetch_in(conn)?;
 
             let mut volume_by_session = HashMap::new();
             for serie in &series {
-                *volume_by_session.entry(serie.session).or_insert(0.0) +=
-                    (serie.reps as f32) * serie.weight;
+                *volume_by_session
+                    .entry(row_int(serie, set::entity::columns::SESSION.as_ref()) as u32)
+                    .or_insert(0.0) += row_int(serie, set::entity::columns::REPS.as_ref()) as f32
+                    * row_f64(serie, set::entity::columns::WEIGHT.as_ref()) as f32;
             }
 
             let mut session_list = Vec::new();
             for session in &sessions {
-                if latest.is_none() {
-                    latest = Some(session.date);
-                } else if let Some(latest_o) = latest
-                    && session.date > latest_o
-                {
-                    latest = Some(session.date);
-                }
-
                 count += 1;
                 time += session.total_elapsed_time;
 

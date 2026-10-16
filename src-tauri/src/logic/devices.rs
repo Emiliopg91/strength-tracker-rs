@@ -89,15 +89,11 @@ async fn mtp_dev_check_and_sync(app: AppHandle, devices: &mut Vec<DeviceListItem
                 let mut enrolled = Vec::new();
                 for device in &cur_dev {
                     if !already_known.contains(&device.serial_number) {
-                        let enrol_err =
-                            match DeviceRepository::select_by_id_in(tx, &device.serial_number) {
-                                Ok(None) => DeviceRepository::insert()
-                                    .item(&mut Device::from(device))
-                                    .execute_in(tx)
-                                    .err(),
-                                Ok(Some(_)) => None,
-                                Err(e) => Some(e),
-                            };
+                        let enrol_err = DeviceRepository::insert()
+                            .or_ignore()
+                            .item(&mut Device::from(device))
+                            .execute_in(tx)
+                            .err();
 
                         match enrol_err {
                             Some(e) => {

@@ -7,7 +7,10 @@ pub mod notifications;
 pub mod sessions;
 pub mod workouts;
 
-use rusqlite_orm::database::DatabasePool;
+use rusqlite_orm::{
+    database::DatabasePool,
+    types::{row::Row, value::Value},
+};
 use tauri::{AppHandle, Manager};
 use tauri_plugin_log::log::error;
 
@@ -45,4 +48,29 @@ where
     tokio::task::spawn_blocking(move || f(&app.state::<DatabasePool>()))
         .await
         .expect("blocking DB task panicked")
+}
+
+/// Reads an integer column from a non-mapped select row.
+pub(crate) fn row_int(row: &Row, column: &str) -> i64 {
+    match row.get(column) {
+        Some(Value::Int64(v)) => *v,
+        _ => unreachable!(),
+    }
+}
+
+/// Reads a real column from a non-mapped select row.
+pub(crate) fn row_f64(row: &Row, column: &str) -> f64 {
+    match row.get(column) {
+        Some(Value::Float64(v)) => *v,
+        Some(Value::Int64(v)) => *v as f64,
+        _ => unreachable!(),
+    }
+}
+
+/// Reads a text column from a non-mapped select row.
+pub(crate) fn row_text(row: &Row, column: &str) -> String {
+    match row.get(column) {
+        Some(Value::Text(v)) => v.clone(),
+        _ => unreachable!(),
+    }
 }

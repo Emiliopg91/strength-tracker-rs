@@ -1,4 +1,8 @@
-use rusqlite_orm::{dao::Repository, errors::DatabaseError, types::order_by::OrderBy};
+use rusqlite_orm::{
+    dao::Repository,
+    errors::DatabaseError,
+    types::{order_by::OrderBy, where_clause::Where},
+};
 use strength_tracker_rs_macros::traced_command;
 use tauri::{AppHandle, State};
 use tauri_plugin_log::log::info;
@@ -98,9 +102,9 @@ pub async fn delete_body_metric(
 ) -> Result<(), String> {
     let res = run_blocking(app, move |database| {
         database.run_in_transaction(|tx| {
-            if let Some(entry) = BodyMetricRepository::select_by_id_in(tx, date)? {
-                entry.delete_by_id_in(tx)?;
-            }
+            BodyMetricRepository::delete()
+                .where_(Where::Eq(body_metric::entity::columns::DATE, date.into()))
+                .execute_in(tx)?;
 
             Ok(())
         })

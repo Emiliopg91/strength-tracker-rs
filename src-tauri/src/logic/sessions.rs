@@ -23,7 +23,9 @@ use crate::{
         sessions::{SessionDetails, SessionListItem, SessionLocation, SessionSetsUpdate},
     },
     fit::parser::FitParser,
-    logic::{exercises::update_prs, notifications::show_notification, report_error, run_blocking},
+    logic::{
+        exercises::update_prs, notifications::show_notification, report_error, row_int, run_blocking,
+    },
     utils::translations::{Languages, translate, translate_and_replace},
 };
 use chrono::{Datelike, Days, Local, Months, TimeZone, offset::LocalResult};
@@ -33,7 +35,7 @@ use rusqlite_orm::{
     dao::Repository,
     database::DatabasePool,
     errors::DatabaseError,
-    types::{order_by::OrderBy, row::Row, value::Value, where_clause::Where},
+    types::{order_by::OrderBy, value::Value, where_clause::Where},
 };
 use strength_tracker_rs_macros::traced_command;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -115,14 +117,6 @@ pub fn session_set_flags(
     Ok(flags)
 }
 
-/// Reads an integer column from a non-mapped select row.
-fn row_int(row: &Row, column: &str) -> i64 {
-    match row.get(column) {
-        Some(Value::Int64(v)) => *v,
-        _ => unreachable!(),
-    }
-}
-
 /// Returns full details for one session (series grouped by exercise, heart rate, GPS, speeds, device).
 #[traced_command]
 #[tauri::command]
@@ -171,6 +165,7 @@ pub async fn get_session_details(
                     ))
                     .fetch_in(conn)?
             };
+            session.sets.sort_by_key(|s| s.idx);
             session.laps.sort_by_key(|l| l.idx);
 
             Ok(SessionDetails::from((

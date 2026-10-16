@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use rusqlite_orm::{
     dao::Repository,
     errors::DatabaseError,
-    types::{order_by::OrderBy, value::Value, where_clause::Where},
+    types::{order_by::OrderBy, where_clause::Where},
 };
 use strength_tracker_rs_macros::traced_command;
 use tauri::{AppHandle, State};
@@ -21,7 +21,7 @@ use crate::{
         notifications::{NotificationDefinition, NotificationKind},
         sessions::SessionSet,
     },
-    logic::{notifications::show_notification, report_error, run_blocking},
+    logic::{notifications::show_notification, report_error, row_int, row_text, run_blocking},
     utils::translations::{Languages, translate},
 };
 
@@ -35,22 +35,21 @@ pub async fn get_exercises(
     info!("Getting exercises list...");
     let res = run_blocking(app, move |database| {
         database.run_in_connection(|conn| {
-            let prs = SetRepository::select_by_personal_records_in(conn, true, None)?;
+            let prs = SetRepository::select()
+                .where_(Where::And(vec![
+                    Where::Eq(set::entity::columns::PR, true.into()),
+                    Where::NotEq(set::entity::columns::EX_CAT, u16::MAX.into()),
+                ]))
+                .fetch_in(conn)?;
 
             Ok(prs
                 .iter()
-                .filter_map(|pr| {
-                    if pr.ex_cat != u16::MAX {
-                        Some(ExerciseListItem {
-                            category: pr.ex_cat,
-                            id: pr.ex_id,
-                            reps: pr.reps,
-                            weight: pr.weight,
-                            date: pr.session,
-                        })
-                    } else {
-                        None
-                    }
+                .map(|pr| ExerciseListItem {
+                    category: pr.ex_cat,
+                    id: pr.ex_id,
+                    reps: pr.reps,
+                    weight: pr.weight,
+                    date: pr.session,
                 })
                 .collect::<Vec<_>>())
         })
@@ -104,20 +103,29 @@ pub async fn get_exercise_details(
             res.weight = pr.weight;
             res.pr_date = pr.session;
 
-            let mut timestamps: Vec<Value> = Vec::new();
-            let mut last = None;
-            for s in &series {
-                if last != Some(s.session) {
-                    timestamps.push(s.session.into());
-                    last = Some(s.session);
-                }
-            }
-
             let workouts = SessionRepository::select()
-                .where_(Where::In(session::entity::columns::DATE, timestamps))
+                .columns(&[
+                    session::entity::columns::DATE,
+                    session::entity::columns::NAME,
+                ])
+                .where_(Where::InSub(
+                    session::entity::columns::DATE,
+                    SetRepository::select()
+                        .distinct(&[set::entity::columns::SESSION])
+                        .where_(Where::And(vec![
+                            Where::Eq(set::entity::columns::EX_CAT, category.into()),
+                            Where::Eq(set::entity::columns::EX_ID, id.into()),
+                        ]))
+                        .to_subquery(),
+                ))
                 .fetch_in(conn)?
                 .iter()
-                .map(|s| (s.date, s.name.clone()))
+                .map(|s| {
+                    (
+                        row_int(s, session::entity::columns::DATE.as_ref()) as u32,
+                        row_text(s, session::entity::columns::NAME.as_ref()),
+                    )
+                })
                 .collect::<HashMap<_, _>>();
 
             let mut last_session = None;
