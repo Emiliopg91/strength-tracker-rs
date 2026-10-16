@@ -17,7 +17,9 @@ import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
 import ClearIcon from "@mui/icons-material/Clear";
 import { ExerciseOption } from "@/context/AppContext";
-import { ExerciseField } from "@/components/Exercises/helpers/ExerciseField";
+import { ExerciseField } from "@/components/Fields/ExerciseField";
+import { RepetitionsField } from "@/components/Fields/RepetitionsField";
+import { WeightField } from "@/components/Fields/WeightField";
 
 type Props = {
     leaf: LeafStep;
@@ -44,11 +46,10 @@ export function WorkoutSetLeaf({
     swapPosition,
     onChange,
 }: Props) {
-    const { translate, getWeightUnit } = useContext(I18nSettingsContext);
+    const { translate } = useContext(I18nSettingsContext);
     const typeLabelId = useId();
     const limitLabelId = useId();
     const [timeInput, setTimeInput] = useState<string | null>(null);
-    const [weightInput, setWeightInput] = useState<string | null>(null);
     const isExercise = leaf.kind == StepType.Exercise;
     const errors = WorkoutUtils.leafErrors(leaf);
     const limit = isExercise
@@ -97,33 +98,14 @@ export function WorkoutSetLeaf({
         onChange(obj);
     };
 
-    // Invalid input is reverted on the spot. The DOM value is reset by hand because a
-    // number input reports "" for things like "-", which React would not overwrite
-    const onWeightChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const weight = parseFloat(e.target.value);
-        if (e.target.validity.badInput || weight < 0) {
-            setWeightInput(null);
-            e.target.value = leaf.weight?.toString() ?? "";
-            return;
-        }
-        setWeightInput(e.target.value);
+    const onWeightChange = (weight: number | null) => {
         onChange({
             ...leaf,
-            weight: isNaN(weight) ? null : Math.round(weight * 10) / 10,
+            weight: weight == null ? null : Math.round(weight * 10) / 10,
         });
     };
 
-    const onRepsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const reps = Number(e.target.value);
-        if (
-            e.target.validity.badInput ||
-            e.target.value == "" ||
-            !Number.isInteger(reps) ||
-            reps < 1
-        ) {
-            e.target.value = leaf.reps?.toString() ?? "";
-            return;
-        }
+    const onRepsChange = (reps: number | null) => {
         onChange({
             ...leaf,
             reps,
@@ -207,23 +189,12 @@ export function WorkoutSetLeaf({
             </FormControl>
 
             {isExercise && limit == LimitType.Reps && (
-                <TextField
-                    label={translate("repetitions")}
+                <RepetitionsField
+                    value={leaf.reps}
+                    min={1}
                     error={errors.reps}
-                    type="number"
-                    size="small"
-                    sx={{ width: 100 }}
-                    value={leaf.reps ?? ""}
-                    slotProps={{
-                        htmlInput: {
-                            className: "no-spinner",
-                            inputMode: "decimal",
-                            min: 1,
-                            max: 999,
-                            step: 1,
-                        },
-                    }}
                     onChange={onRepsChange}
+                    sx={{ width: 100 }}
                 />
             )}
             {limit == LimitType.Time && (
@@ -245,24 +216,12 @@ export function WorkoutSetLeaf({
             )}
 
             {isExercise && (
-                <TextField
-                    label={translate("weight") + " (" + getWeightUnit() + ")"}
+                <WeightField
+                    allowEmpty
                     error={errors.weight}
-                    type="number"
-                    size="small"
-                    sx={{ width: 100 }}
-                    value={weightInput ?? leaf.weight ?? ""}
-                    slotProps={{
-                        htmlInput: {
-                            className: "no-spinner",
-                            inputMode: "decimal",
-                            min: 0,
-                            max: 999,
-                            step: 0.1,
-                        },
-                    }}
+                    value={leaf.weight}
                     onChange={onWeightChange}
-                    onBlur={() => setWeightInput(null)}
+                    sx={{ width: 100 }}
                 />
             )}
         </>

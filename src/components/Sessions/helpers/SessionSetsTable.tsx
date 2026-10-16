@@ -1,10 +1,12 @@
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
 import { SessionSet } from "@/utils/backend/models";
 import { Fragment, useContext, useMemo, useState } from "react";
-import { FormControlLabel, Switch, TextField } from "@mui/material";
+import { FormControlLabel, Switch } from "@mui/material";
 import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
 import { AppContext, ExerciseOption } from "@/context/AppContext";
-import { ExerciseField } from "@/components/Exercises/helpers/ExerciseField";
+import { ExerciseField } from "@/components/Fields/ExerciseField";
+import { RepetitionsField } from "@/components/Fields/RepetitionsField";
+import { WeightField } from "@/components/Fields/WeightField";
 
 type Props = {
     series: SessionSet[];
@@ -21,8 +23,7 @@ export function SessionSetsTable({
     onUpdateSerieRepsWeight,
     onUpdateSerieExercise,
 }: Props) {
-    const { translate, getWeightUnit, formatDuration } =
-        useContext(I18nSettingsContext);
+    const { translate, formatDuration } = useContext(I18nSettingsContext);
     // Without catalog the exercise name is rendered as plain text instead of a selector
     const { exercisesCatalog } = useContext(AppContext);
 
@@ -32,36 +33,20 @@ export function SessionSetsTable({
         series.find((s) => s.rest) !== undefined,
     );
 
-    const updateSerieReps = (idx: number, newVal: string) => {
-        let reps = parseInt(newVal);
-        if (isNaN(reps)) {
-            reps = 0;
-        }
-        onUpdateSerieRepsWeight(idx, "reps", reps);
+    const updateSerieReps = (idx: number, reps: number | null) => {
+        onUpdateSerieRepsWeight(idx, "reps", reps ?? 0);
     };
 
-    const updateSerieRepsOld = (idx: number, newVal: string) => {
-        let reps = parseInt(newVal);
-        if (isNaN(reps)) {
-            reps = 0;
-        }
-        onUpdateSerieRepsWeight(idx, "reps", reps);
+    const updateSerieRepsOld = (idx: number, reps: number | null) => {
+        onUpdateSerieRepsWeight(idx, "reps", reps ?? 0);
     };
 
-    const updateSerieWeight = (idx: number, newVal: string) => {
-        let weight = parseFloat(newVal);
-        if (isNaN(weight)) {
-            weight = 0;
-        }
-        onUpdateSerieRepsWeight(idx, "weight", weight);
+    const updateSerieWeight = (idx: number, weight: number | null) => {
+        onUpdateSerieRepsWeight(idx, "weight", weight ?? 0);
     };
 
-    const updateSerieWeightOld = (idx: number, newVal: string) => {
-        let weight = parseFloat(newVal);
-        if (isNaN(weight)) {
-            weight = 0;
-        }
-        onUpdateSerieRepsWeight(idx, "weight", weight);
+    const updateSerieWeightOld = (idx: number, weight: number | null) => {
+        onUpdateSerieRepsWeight(idx, "weight", weight ?? 0);
     };
 
     const onExerciseChange = (idx: number, exerciseOption: ExerciseOption) => {
@@ -190,12 +175,8 @@ export function SessionSetsTable({
                                                     )}
                                                 </td>
                                                 <td>
-                                                    <TextField
-                                                        label={translate(
-                                                            "repetitions",
-                                                        )}
-                                                        type="number"
-                                                        size="small"
+                                                    <RepetitionsField
+                                                        allowEmpty
                                                         value={serie.reps}
                                                         sx={{
                                                             width: 100,
@@ -204,31 +185,15 @@ export function SessionSetsTable({
                                                         style={{
                                                             marginTop: "5px",
                                                         }}
-                                                        slotProps={{
-                                                            htmlInput: {
-                                                                className:
-                                                                    "no-spinner",
-                                                                min: 0,
-                                                            },
-                                                        }}
                                                         onChange={(e) => {
                                                             updateSerieReps(
                                                                 idx,
-                                                                e.target.value,
+                                                                e,
                                                             );
                                                         }}
                                                     />
-                                                    <TextField
-                                                        label={
-                                                            translate(
-                                                                "weight",
-                                                            ) +
-                                                            " (" +
-                                                            getWeightUnit() +
-                                                            ")"
-                                                        }
-                                                        type="number"
-                                                        size="small"
+                                                    <WeightField
+                                                        allowEmpty
                                                         sx={{
                                                             width: 100,
                                                             px: 1,
@@ -237,18 +202,11 @@ export function SessionSetsTable({
                                                         style={{
                                                             marginTop: "5px",
                                                         }}
-                                                        value={serie.weight?.toString()}
-                                                        slotProps={{
-                                                            htmlInput: {
-                                                                className:
-                                                                    "no-spinner",
-                                                                min: 0,
-                                                            },
-                                                        }}
+                                                        value={serie.weight}
                                                         onChange={(e) => {
                                                             updateSerieWeight(
                                                                 idx,
-                                                                e.target.value,
+                                                                e,
                                                             );
                                                         }}
                                                     />
@@ -341,49 +299,22 @@ export function SessionSetsTable({
                                             .filter(Boolean)
                                             .join(" ")}
                                     >
-                                        <TextField
-                                            label={translate("repetitions")}
-                                            type="number"
-                                            size="small"
+                                        <RepetitionsField
+                                            allowEmpty
                                             value={serie.reps}
                                             sx={{ width: 100 }}
                                             style={{ marginTop: "5px" }}
-                                            slotProps={{
-                                                htmlInput: {
-                                                    className: "no-spinner",
-                                                    min: 0,
-                                                },
-                                            }}
                                             onChange={(e) => {
-                                                updateSerieRepsOld(
-                                                    idxS,
-                                                    e.target.value,
-                                                );
+                                                updateSerieRepsOld(idxS, e);
                                             }}
                                         />
-                                        <TextField
-                                            label={
-                                                translate("weight") +
-                                                " (" +
-                                                getWeightUnit() +
-                                                ")"
-                                            }
-                                            type="number"
-                                            size="small"
+                                        <WeightField
+                                            allowEmpty
                                             sx={{ width: 100, px: 1 }}
                                             style={{ marginTop: "5px" }}
-                                            value={serie.weight?.toString()}
-                                            slotProps={{
-                                                htmlInput: {
-                                                    className: "no-spinner",
-                                                    min: 0,
-                                                },
-                                            }}
+                                            value={serie.weight}
                                             onChange={(e) => {
-                                                updateSerieWeightOld(
-                                                    idxS,
-                                                    e.target.value,
-                                                );
+                                                updateSerieWeightOld(idxS, e);
                                             }}
                                         />
                                         {serie.pr && (
