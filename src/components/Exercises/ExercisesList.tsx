@@ -10,7 +10,7 @@ import { useFilterList } from "@/hooks/useFilterList";
 
 export function ExercisesList() {
     const { sessionsVersion } = useContext(AppContext);
-    const { translate } = useContext(I18nSettingsContext);
+    const { translate, formatDate } = useContext(I18nSettingsContext);
     const [exercises] = useBackendList<ExerciseListItem>(
         () =>
             BackendClient.getExercises().then((data) =>
@@ -35,7 +35,11 @@ export function ExercisesList() {
     };
 
     const [filter, filteredExercises] = useFilterList(exercises, (exercise) => {
-        return [translate("exercise_" + exercise.category + "_" + exercise.id)];
+        return [
+            translate("exercise_" + exercise.category + "_" + exercise.id),
+            translate("exercise_" + exercise.category),
+            formatDate(exercise.date),
+        ];
     });
 
     return (

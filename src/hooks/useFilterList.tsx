@@ -36,16 +36,19 @@ export function useFilterList<T>(
     const input = (
         <TextField
             value={filter}
-            label={
+            helperText={
                 filtered.length === 1
                     ? translate("1_entry")
                     : translate("x_entries", [String(filtered.length)])
             }
             placeholder={translate("filter")}
-            slotProps={{ inputLabel: { shrink: true } }}
             size="small"
             onChange={(e) => setFilter(e.target.value)}
-            sx={{ my: 1 }}
+            sx={{ mt: 0.5 }}
+            slotProps={{
+                formHelperText: { sx: { fontSize: "0.85rem", margin: "auto" } },
+            }}
+            variant="standard"
         />
     );
 
