@@ -62,7 +62,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/sessions.rs:681
+	// From src-tauri/src/logic/sessions.rs:715
 	public static getHeatmapData(): Promise<[number, number][][]> {
 	  return BackendClient.inner_invoke("get_heatmap_data"); 
 	}
@@ -74,7 +74,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/sessions.rs:137
+	// From src-tauri/src/logic/sessions.rs:129
 	public static getSessionDetails(timestamp: number): Promise<SessionDetails> {
 	  return BackendClient.inner_invoke("get_session_details", { timestamp }); 
 	}
@@ -128,7 +128,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/sessions.rs:207
+	// From src-tauri/src/logic/sessions.rs:203
 	public static saveSessionChanges(details: SessionSetsUpdate): Promise<void> {
 	  return BackendClient.inner_invoke("save_session_changes", { details }); 
 	}

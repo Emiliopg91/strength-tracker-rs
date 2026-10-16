@@ -9,6 +9,7 @@ use super::exercise::Exercise;
 #[primary_key(session, idx)]
 #[index("session", (session))]
 #[index("personal_records", (pr))]
+#[index("session_pr", (session, pr))]
 #[index("exercise", (ex_cat, ex_id))]
 #[unique("exercise_personal_record", (ex_cat, ex_id), (pr=true))]
 pub struct Set {

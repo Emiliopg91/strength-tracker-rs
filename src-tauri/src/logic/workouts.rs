@@ -252,6 +252,10 @@ pub async fn save_workout(
                         })
                         .into(),
                     )
+                    .where_(Where::Eq(
+                        workout::entity::columns::NAME,
+                        workout.name.clone().into(),
+                    ))
                     .execute_in(tx)?;
 
                 WorkoutStepRepository::delete()
