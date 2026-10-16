@@ -580,3 +580,9 @@ duplicate:
 filter:
   en: Filter...
   es: Filtrar...
+1_entry:
+  en: "1 entrada"
+  es: "1 entrada"
+x_entries:
+  en: "{} entries"
+  es: "{} entradas"

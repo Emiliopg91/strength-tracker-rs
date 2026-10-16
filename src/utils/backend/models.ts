@@ -74,6 +74,7 @@ export interface SessionDetails {
   name: string;
   notes: string;
   sets: SessionSet[];
+  speeds: (number | null)[];
   sport: number;
   sub_sport: number;
   timestamp: number;
@@ -101,7 +102,7 @@ export interface SessionListItem {
   training_load: number;
 }
 
-// From src-tauri/src/dto/sessions.rs:198
+// From src-tauri/src/dto/sessions.rs:204
 export interface SessionLocation {
   location: string;
   session: number;
@@ -119,7 +120,7 @@ export interface SessionSet {
   weight: number;
 }
 
-// From src-tauri/src/dto/sessions.rs:191
+// From src-tauri/src/dto/sessions.rs:197
 export interface SessionSetsUpdate {
   notes: string | null;
   sets: SessionSet[];

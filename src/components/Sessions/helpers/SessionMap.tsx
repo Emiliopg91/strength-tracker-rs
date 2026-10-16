@@ -12,114 +12,122 @@ import SatelliteAltIcon from "@mui/icons-material/SatelliteAlt";
 import L from "leaflet";
 
 const urls = [
-  "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
 ];
 
 type Props = {
-  timestamp: number;
-  validPoints: [number, number][];
-  gpsSegments: {
-    coordinates: [[number, number], [number, number]];
-    color: string;
-  }[];
-  startPoint: [number, number];
-  finishPoint: [number, number];
-  laps: SessionLap[];
+    timestamp: number;
+    validPoints: [number, number][];
+    gpsSegments: {
+        coordinates: [[number, number], [number, number]];
+        color: string;
+    }[];
+    startPoint: [number, number];
+    finishPoint: [number, number];
+    laps: SessionLap[];
 };
 
 export function SessionMap({
-  timestamp,
-  validPoints,
-  gpsSegments,
-  startPoint,
-  finishPoint,
-  laps,
+    timestamp,
+    validPoints,
+    gpsSegments,
+    startPoint,
+    finishPoint,
+    laps,
 }: Props) {
-  const withLoading = useLoadingTask();
-  const { translate } = useContext(I18nSettingsContext);
-  const [url, setUrl] = useState(1);
-  const exportControlRef = useRef<HTMLDivElement>(null);
-  const typeControlRef = useRef<HTMLDivElement>(null);
+    const withLoading = useLoadingTask();
+    const { translate } = useContext(I18nSettingsContext);
+    const [url, setUrl] = useState(1);
+    const exportControlRef = useRef<HTMLDivElement>(null);
+    const typeControlRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    for (const control of [exportControlRef, typeControlRef]) {
-      if (control.current) {
-        L.DomEvent.disableClickPropagation(control.current);
-      }
-    }
-  }, []);
+    useEffect(() => {
+        for (const control of [exportControlRef, typeControlRef]) {
+            if (control.current) {
+                L.DomEvent.disableClickPropagation(control.current);
+            }
+        }
+    }, []);
 
-  const toggleMapType = () => {
-    setUrl((current) => (current === 0 ? 1 : 0));
-  };
+    const toggleMapType = () => {
+        setUrl((current) => (current === 0 ? 1 : 0));
+    };
 
-  const exportTrack = () => {
-    withLoading(BackendClient.exportGpx(timestamp));
-  };
+    const exportTrack = () => {
+        withLoading(BackendClient.exportGpx(timestamp));
+    };
 
-  return (
-    <MapContainer
-      bounds={validPoints}
-      boundsOptions={{ padding: [20, 20] }}
-      attributionControl={false}
-      className="session-map"
-    >
-      <TileLayer url={urls[url]} attribution={""} />
-
-      {gpsSegments.map((val, idx) => (
-        <Polyline
-          key={"segment-" + idx}
-          positions={val.coordinates}
-          color={val.color}
-          weight={4}
-        />
-      ))}
-
-      <Marker position={startPoint} icon={SessionUtils.START_ICON}></Marker>
-
-      <Marker position={finishPoint} icon={SessionUtils.END_ICON}></Marker>
-
-      {laps
-        .filter((lap) => lap.start_latitude && lap.start_longitude)
-        .map((lap) =>
-          SessionUtils.makeLapMarker(lap.idx + 1, [
-            lap.start_latitude!,
-            lap.start_longitude!,
-          ]),
-        )}
-
-      <div className="leaflet-top leaflet-right">
-        <div
-          ref={exportControlRef}
-          className="leaflet-control session-map-control"
+    return (
+        <MapContainer
+            bounds={validPoints}
+            boundsOptions={{ padding: [20, 20] }}
+            attributionControl={false}
+            className="session-map"
         >
-          <Tooltip title={translate("export_gpx")}>
-            <IconButton size="small" onClick={exportTrack}>
-              <FileDownloadIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-        </div>
-      </div>
+            <TileLayer url={urls[url]} attribution={""} />
 
-      <div className="leaflet-bottom leaflet-right">
-        <div
-          ref={typeControlRef}
-          className="leaflet-control session-map-control"
-        >
-          <Tooltip
-            title={translate(url === 0 ? "satellite_map" : "street_map")}
-          >
-            <IconButton size="small" onClick={toggleMapType}>
-              {url === 0 ? (
-                <SatelliteAltIcon fontSize="small" />
-              ) : (
-                <MapIcon fontSize="small" />
-              )}
-            </IconButton>
-          </Tooltip>
-        </div>
-      </div>
-    </MapContainer>
-  );
+            {gpsSegments.map((val, idx) => (
+                <Polyline
+                    key={"segment-" + idx}
+                    positions={val.coordinates}
+                    color={val.color}
+                    weight={4}
+                />
+            ))}
+
+            <Marker
+                position={startPoint}
+                icon={SessionUtils.START_ICON}
+            ></Marker>
+
+            <Marker
+                position={finishPoint}
+                icon={SessionUtils.END_ICON}
+            ></Marker>
+
+            {laps
+                .filter((lap) => lap.start_latitude && lap.start_longitude)
+                .map((lap) =>
+                    SessionUtils.makeLapMarker(lap.idx + 1, [
+                        lap.start_latitude!,
+                        lap.start_longitude!,
+                    ]),
+                )}
+
+            <div className="leaflet-top leaflet-right">
+                <div
+                    ref={exportControlRef}
+                    className="leaflet-control session-map-control"
+                >
+                    <Tooltip title={translate("export_gpx")}>
+                        <IconButton size="small" onClick={exportTrack}>
+                            <FileDownloadIcon fontSize="small" />
+                        </IconButton>
+                    </Tooltip>
+                </div>
+            </div>
+
+            <div className="leaflet-bottom leaflet-right">
+                <div
+                    ref={typeControlRef}
+                    className="leaflet-control session-map-control"
+                >
+                    <Tooltip
+                        title={translate(
+                            url === 0 ? "satellite_map" : "street_map",
+                        )}
+                    >
+                        <IconButton size="small" onClick={toggleMapType}>
+                            {url === 0 ? (
+                                <SatelliteAltIcon fontSize="small" />
+                            ) : (
+                                <MapIcon fontSize="small" />
+                            )}
+                        </IconButton>
+                    </Tooltip>
+                </div>
+            </div>
+        </MapContainer>
+    );
 }

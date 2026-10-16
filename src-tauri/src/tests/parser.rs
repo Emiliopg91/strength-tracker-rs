@@ -236,6 +236,7 @@ fn parses_strength_sessions() {
             "{}",
             expected.fixture
         );
+        assert!(additional_data.speeds.is_none(), "{}", expected.fixture);
         assert!(additional_data.altitudes.is_none(), "{}", expected.fixture);
         assert_eq!(additional_data.distance, Some(0.0));
     }
@@ -299,6 +300,11 @@ fn parses_walk_sessions() {
         let additional_data = session.additional_data.unwrap();
         assert_eq!(additional_data.distance, Some(*distance), "{ctx}");
         assert_eq!(
+            additional_data.get_speeds().map(|v| v.len()),
+            Some(expected.records),
+            "{ctx}"
+        );
+        assert_eq!(
             additional_data.get_altitudes().map(|v| v.len()),
             Some(expected.records),
             "{ctx}"
@@ -350,6 +356,9 @@ fn parses_indoor_biking_session() {
     // Distance and speed come from the speed sensor, but there is no GPS nor barometer data
     let additional_data = session.additional_data.unwrap();
     assert_eq!(additional_data.distance, Some(19731.78), "{ctx}");
+    let speeds = additional_data.get_speeds().unwrap();
+    assert_eq!(speeds.len(), expected.records, "{ctx}");
+    assert_eq!(speeds.iter().flatten().count(), 3739, "{ctx}");
     assert!(additional_data.coordinates.is_none(), "{ctx}");
     assert!(additional_data.altitudes.is_none(), "{ctx}");
 }

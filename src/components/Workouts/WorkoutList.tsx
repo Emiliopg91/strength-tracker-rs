@@ -12,163 +12,186 @@ import { WorkoutStepsModal } from "./WorkoutStepsModal";
 import { Button } from "@mui/material";
 import { WorkoutUtils } from "@/utils/WorkoutUtils";
 import { BackendListener } from "@/utils/backend/listener";
+import { useFilterList } from "@/hooks/useFilterList";
 
 export function WorkoutsList() {
-  const { sessionsVersion } = useContext(AppContext);
-  const { translate, toKg } = useContext(I18nSettingsContext);
+    const { sessionsVersion } = useContext(AppContext);
+    const { translate, toKg, formatTimeDate } = useContext(I18nSettingsContext);
 
-  const [workouts, setWorkouts, refreshList] = useBackendList<WorkoutListItem>(
-    () =>
-      BackendClient.getWorkoutList().then((data) =>
-        data.sort((a, b) => {
-          if (a.name.length > 0 && b.name.length > 0) {
-            return a.name.localeCompare(b.name);
-          } else {
-            if (a.name.length == 0) {
-              return 1;
+    const [workouts, setWorkouts, refreshList] =
+        useBackendList<WorkoutListItem>(
+            () =>
+                BackendClient.getWorkoutList().then((data) =>
+                    data.sort((a, b) => {
+                        if (a.name.length > 0 && b.name.length > 0) {
+                            return a.name.localeCompare(b.name);
+                        } else {
+                            if (a.name.length == 0) {
+                                return 1;
+                            } else {
+                                return -1;
+                            }
+                        }
+                    }),
+                ),
+            [sessionsVersion],
+        );
+    const [workoutDetails, setWorkoutDetails] = useState<
+        WorkoutDetails | undefined
+    >(undefined);
+    const [workoutEdit, setWorkoutEdit] = useState<WorkoutDetails | undefined>(
+        undefined,
+    );
+    const [isEdit, setIsEdit] = useState(false);
+
+    const openEdit = (workout: WorkoutDetails | undefined, edit: boolean) => {
+        setIsEdit(edit);
+        if (edit) {
+            setWorkoutEdit(workout);
+        } else {
+            if (workout === undefined) {
+                const workout: WorkoutDetails = {
+                    name: "",
+                    avg_time: 0,
+                    avg_volume: 0,
+                    enabled: true,
+                    latest_session: 0,
+                    session_count: 0,
+                    sessions: [],
+                    notes: null,
+                    steps: WorkoutUtils.toWorkoutSteps(
+                        [structuredClone(WorkoutUtils.DEFAULT_GROUP)],
+                        "",
+                        toKg,
+                    ),
+                };
+                setWorkoutEdit(workout);
             } else {
-              return -1;
+                workout.name = workout.name + " - 2";
+                setWorkoutEdit(workout);
             }
-          }
-        }),
-      ),
-    [sessionsVersion],
-  );
-  const [workoutDetails, setWorkoutDetails] = useState<
-    WorkoutDetails | undefined
-  >(undefined);
-  const [workoutEdit, setWorkoutEdit] = useState<WorkoutDetails | undefined>(
-    undefined,
-  );
-  const [isEdit, setIsEdit] = useState(false);
+        }
+        setWorkoutDetails(undefined);
+    };
 
-  const openEdit = (workout: WorkoutDetails | undefined, edit: boolean) => {
-    setIsEdit(edit);
-    if (edit) {
-      setWorkoutEdit(workout);
-    } else {
-      if (workout === undefined) {
-        const workout: WorkoutDetails = {
-          name: "",
-          avg_time: 0,
-          avg_volume: 0,
-          enabled: true,
-          latest_session: 0,
-          session_count: 0,
-          sessions: [],
-          notes: null,
-          steps: WorkoutUtils.toWorkoutSteps(
-            [structuredClone(WorkoutUtils.DEFAULT_GROUP)],
-            "",
-            toKg,
-          ),
-        };
-        setWorkoutEdit(workout);
-      } else {
-        workout.name = workout.name + " - 2";
-        setWorkoutEdit(workout);
-      }
-    }
-    setWorkoutDetails(undefined);
-  };
+    useBackendEvent(BackendListener.onAddedWorkoutSteps, (names) => {
+        setWorkouts((prev) =>
+            prev.map((w) =>
+                names.includes(w.name) ? { ...w, has_steps: true } : w,
+            ),
+        );
+    });
 
-  useBackendEvent(BackendListener.onAddedWorkoutSteps, (names) => {
-    setWorkouts((prev) =>
-      prev.map((w) => (names.includes(w.name) ? { ...w, has_steps: true } : w)),
+    const getWorkoutDetails = (name: string) => {
+        BackendClient.getWorkoutDetails(name).then((details) => {
+            setWorkoutDetails(details);
+        });
+    };
+
+    const openEditByName = (name: string) => {
+        BackendClient.getWorkoutDetails(name).then((workout) =>
+            openEdit(workout, true),
+        );
+    };
+
+    const openDuplicateByName = (name: string) => {
+        BackendClient.getWorkoutDetails(name).then((workout) => {
+            openEdit(workout, false);
+        });
+    };
+
+    const setWorkoutState = (name: string, status: boolean) => {
+        const res = workouts.map((w) => {
+            if (w.name == name) {
+                return { ...w, enabled: status };
+            } else {
+                return { ...w };
+            }
+        });
+        setWorkouts(res);
+    };
+
+    const [filter, filteredWorkouts] = useFilterList(workouts, (workout) => {
+        if (workout.latest_session !== null) {
+            return [workout.name, formatTimeDate(workout.latest_session)];
+        } else {
+            return [workout.name];
+        }
+    });
+
+    return (
+        <>
+            {filter}
+            <div id="list-layer">
+                <table>
+                    <thead>
+                        <tr>
+                            <th className="text-center">
+                                {translate("workout")}
+                            </th>
+                            <th className="text-center">
+                                {translate("latest_session")}
+                            </th>
+                            <th className="text-center">
+                                {translate("session_count")}
+                            </th>
+                            <th className="text-center">
+                                {translate("average_duration")}
+                            </th>
+                            <th className="text-center">
+                                {translate("avg_workload")}
+                            </th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {filteredWorkouts.map((workout) => (
+                            <WorkoutRow
+                                key={workout.name}
+                                workout={workout}
+                                onSelect={getWorkoutDetails}
+                                onOpenEdit={openEditByName}
+                                onOpenDuplicate={openDuplicateByName}
+                            />
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+
+            <div>
+                {workoutDetails && (
+                    <WorkoutModal
+                        workout={workoutDetails}
+                        showEnable={true}
+                        onClose={() => setWorkoutDetails(undefined)}
+                        onUpdate={setWorkoutState}
+                        onOpenEdit={(workout) => openEdit(workout, true)}
+                    />
+                )}
+            </div>
+
+            <div>
+                {workoutEdit && (
+                    <WorkoutStepsModal
+                        workout={workoutEdit}
+                        isEdit={isEdit}
+                        onClose={() => {
+                            setWorkoutEdit(undefined);
+                            refreshList();
+                        }}
+                    />
+                )}
+            </div>
+
+            <div className="list-action-bar">
+                <Button
+                    className="full-width-button"
+                    onClick={() => openEdit(undefined, false)}
+                    variant="contained"
+                >
+                    {translate("create_workout")}
+                </Button>
+            </div>
+        </>
     );
-  });
-
-  const getWorkoutDetails = (name: string) => {
-    BackendClient.getWorkoutDetails(name).then((details) => {
-      setWorkoutDetails(details);
-    });
-  };
-
-  const openEditByName = (name: string) => {
-    BackendClient.getWorkoutDetails(name).then((workout) =>
-      openEdit(workout, true),
-    );
-  };
-
-  const openDuplicateByName = (name: string) => {
-    BackendClient.getWorkoutDetails(name).then((workout) => {
-      openEdit(workout, false);
-    });
-  };
-
-  const setWorkoutState = (name: string, status: boolean) => {
-    const res = workouts.map((w) => {
-      if (w.name == name) {
-        return { ...w, enabled: status };
-      } else {
-        return { ...w };
-      }
-    });
-    setWorkouts(res);
-  };
-
-  return (
-    <>
-      <div id="list-layer">
-        <table>
-          <thead>
-            <tr>
-              <th className="text-center">{translate("workout")}</th>
-              <th className="text-center">{translate("latest_session")}</th>
-              <th className="text-center">{translate("session_count")}</th>
-              <th className="text-center">{translate("average_duration")}</th>
-              <th className="text-center">{translate("avg_workload")}</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {workouts.map((workout, idx) => (
-              <WorkoutRow
-                key={idx}
-                workout={workout}
-                onSelect={getWorkoutDetails}
-                onOpenEdit={openEditByName}
-                onOpenDuplicate={openDuplicateByName}
-              />
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <div>
-        {workoutDetails && (
-          <WorkoutModal
-            workout={workoutDetails}
-            showEnable={true}
-            onClose={() => setWorkoutDetails(undefined)}
-            onUpdate={setWorkoutState}
-            onOpenEdit={(workout) => openEdit(workout, true)}
-          />
-        )}
-      </div>
-
-      <div>
-        {workoutEdit && (
-          <WorkoutStepsModal
-            workout={workoutEdit}
-            isEdit={isEdit}
-            onClose={() => {
-              setWorkoutEdit(undefined);
-              refreshList();
-            }}
-          />
-        )}
-      </div>
-
-      <div className="list-action-bar">
-        <Button
-          className="full-width-button"
-          onClick={() => openEdit(undefined, false)}
-          variant="contained"
-        >
-          {translate("create_workout")}
-        </Button>
-      </div>
-    </>
-  );
 }

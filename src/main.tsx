@@ -18,24 +18,24 @@ import { LoadingProvider } from "./context/LoadingProvider";
 import { DeviceProvider } from "./context/DeviceProvider";
 
 delete (L.Icon.Default.prototype as unknown as { _getIconUrl?: unknown })
-  ._getIconUrl;
+    ._getIconUrl;
 L.Icon.Default.mergeOptions({
-  iconRetinaUrl: markerIcon2x,
-  iconUrl: markerIcon,
-  shadowUrl: markerShadow,
+    iconRetinaUrl: markerIcon2x,
+    iconUrl: markerIcon,
+    shadowUrl: markerShadow,
 });
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  <ThemeProvider theme={theme}>
-    <CssBaseline />
-    <LoadingProvider>
-      <I18nSettingsProvider>
-        <AppProvider>
-          <DeviceProvider>
-            <App />
-          </DeviceProvider>
-        </AppProvider>
-      </I18nSettingsProvider>
-    </LoadingProvider>
-  </ThemeProvider>,
+    <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <LoadingProvider>
+            <I18nSettingsProvider>
+                <AppProvider>
+                    <DeviceProvider>
+                        <App />
+                    </DeviceProvider>
+                </AppProvider>
+            </I18nSettingsProvider>
+        </LoadingProvider>
+    </ThemeProvider>,
 );
