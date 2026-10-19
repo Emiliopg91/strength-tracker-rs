@@ -4,5 +4,6 @@ pub mod devices;
 pub mod exercises;
 pub mod export;
 pub mod notifications;
+pub mod report;
 pub mod sessions;
 pub mod workouts;

@@ -59,6 +59,9 @@ tokio = { version = "^1", features = [
     "signal",
 ] }
 tokio-stream = "^0"
+# Must match the versions wry depends on, to reach the WebKitGTK webview
+gtk = "0.18"
+webkit2gtk = "2.0"
 # Not used directly: enables tray-icon's KSNI backend through feature unification so
 # left-click events reach the app on Linux. Must match the version tauri depends on.
 tray-icon = { version = "0.25", default-features = false, features = ["ksni"] }

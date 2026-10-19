@@ -35,7 +35,7 @@ export function ImportSessionsMenu({ onImported }: Props) {
     };
 
     return (
-        <div className="list-action-bar">
+        <>
             {availableDevices.length == 0 && (
                 <Button
                     id="import-file-toggle"
@@ -97,6 +97,6 @@ export function ImportSessionsMenu({ onImported }: Props) {
                     </Menu>
                 </>
             )}
-        </div>
+        </>
     );
 }

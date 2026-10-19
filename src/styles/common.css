@@ -79,6 +79,11 @@
   margin-top: auto;
 }
 
+.equal-width-children > * {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
 .list-action-bar-row {
   display: flex;
   flex-direction: row;

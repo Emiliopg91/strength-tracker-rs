@@ -60,6 +60,13 @@ export enum Languages {
 	English = "English",
 }
 
+// From src-tauri/src/dto/report.rs:8
+export interface ReportData {
+  body_metrics: BodyMetricListItem[];
+  exercises: ExerciseDetails[];
+  sessions: SessionDetails[];
+}
+
 // From src-tauri/src/dto/sessions.rs:97
 export interface SessionDetails {
   active_calories: number;

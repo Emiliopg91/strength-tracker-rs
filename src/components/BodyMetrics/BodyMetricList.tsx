@@ -29,13 +29,10 @@ export function BodyMetricList() {
     >([]);
 
     const goToCompare = () => {
-        const sorted = [...toCompare].sort((a, b) => a - b);
-        const sessions = [];
-        for (let i = 0; i < sorted.length; i++) {
-            sessions.push(
-                bodyMetrics.find((entry) => entry.date == sorted[i])!,
-            );
-        }
+        const sorted = toCompare.toSorted((a, b) => a - b);
+        const sessions = sorted.map((date) =>
+            bodyMetrics.find((entry) => entry.date == date)!,
+        );
         setComparingSessions(sessions);
     };
 

@@ -60,6 +60,7 @@ pub fn show_main_window(app: &AppHandle) -> tauri::Result<()> {
         w.show()?;
         w.unminimize()?;
         w.set_focus()?;
+
         return Ok(());
     }
 
@@ -74,6 +75,7 @@ pub fn show_main_window(app: &AppHandle) -> tauri::Result<()> {
 
     let w = WebviewWindowBuilder::from_config(app, &config)?.build()?;
     w.set_focus()?;
+
     Ok(())
 }
 

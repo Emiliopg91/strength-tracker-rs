@@ -132,7 +132,7 @@ export class SessionUtils {
                         speeds.push(details.speeds[i]!);
                     }
                 }
-                const sortedSpeeds = [...speeds].sort((a, b) => a - b);
+                const sortedSpeeds = speeds.toSorted((a, b) => a - b);
                 const total = sortedSpeeds.length;
 
                 const lowerBound = (value: number) => {
@@ -477,5 +477,35 @@ export class SessionUtils {
                 Math.max(max, SessionUtils.estimate1rm(s.weight, s.reps)),
             0,
         );
+    }
+
+    public static groupByExercises(series: SessionSet[]): {
+        exercises: string[];
+        groupedSeries: Record<string, [number, SessionSet][]>;
+    } {
+        const exercises: string[] = [];
+        const groupedSeries: Record<string, [number, SessionSet][]> = {};
+
+        let idx = 0;
+        for (let i = 0; i < series.length; i++) {
+            if (!series[i].rest) {
+                const ex_key = series[i].ex_cat + "-" + series[i].ex_id;
+                if (!exercises.includes(ex_key)) {
+                    exercises.push(ex_key);
+                }
+
+                if (groupedSeries[ex_key] === undefined) {
+                    groupedSeries[ex_key] = [];
+                }
+
+                groupedSeries[ex_key].push([idx, series[i]]);
+            }
+            idx++;
+        }
+
+        return {
+            exercises,
+            groupedSeries,
+        };
     }
 }

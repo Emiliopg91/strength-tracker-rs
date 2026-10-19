@@ -1,5 +1,5 @@
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
-import { useContext, useMemo } from "react";
+import { useContext } from "react";
 import {
     Area,
     AreaChart,
@@ -59,26 +59,22 @@ export function SessionHeartRateChart({
     const { translate, formatDuration, formatPercent } =
         useContext(I18nSettingsContext);
 
-    const hrGradientStops = useMemo(
-        () =>
-            hrBreathData.flatMap((point, i) => {
-                const start = (i / hrBreathData.length) * 100;
-                const end = ((i + 1) / hrBreathData.length) * 100;
-                return [
-                    <stop
-                        key={`${i}-start`}
-                        offset={`${start}%`}
-                        stopColor={point.color}
-                    />,
-                    <stop
-                        key={`${i}-end`}
-                        offset={`${end}%`}
-                        stopColor={point.color}
-                    />,
-                ];
-            }),
-        [hrBreathData],
-    );
+    const hrGradientStops = hrBreathData.flatMap((point, i) => {
+        const start = (i / hrBreathData.length) * 100;
+        const end = ((i + 1) / hrBreathData.length) * 100;
+        return [
+            <stop
+                key={`${i}-start`}
+                offset={`${start}%`}
+                stopColor={point.color}
+            />,
+            <stop
+                key={`${i}-end`}
+                offset={`${end}%`}
+                stopColor={point.color}
+            />,
+        ];
+    });
 
     return (
         <div className="session-hr-chart">

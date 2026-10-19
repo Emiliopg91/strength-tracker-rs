@@ -24,7 +24,8 @@ use crate::{
     },
     fit::parser::FitParser,
     logic::{
-        exercises::update_prs, notifications::show_notification, report_error, row_int, run_blocking,
+        exercises::update_prs, notifications::show_notification, report_error, row_int,
+        run_blocking,
     },
     utils::translations::{Languages, translate, translate_and_replace},
 };
@@ -52,33 +53,7 @@ pub async fn get_sessions(
 ) -> Result<Vec<SessionListItem>, String> {
     info!("Getting sessions list...");
     let res = run_blocking(app, move |database| {
-        database.run_in_connection(|conn| {
-            let mut select_builder =
-                SessionRepository::select().order_by(OrderBy::Desc(session::entity::columns::DATE));
-
-            if let Some(date_limit) = limit {
-                select_builder = select_builder.where_(Where::Gte(
-                    session::entity::columns::DATE,
-                    date_limit.into(),
-                ))
-            }
-
-            let sessions = select_builder.fetch_in(conn)?;
-
-            let set_flags = session_set_flags(conn, limit)?;
-
-            Ok(sessions
-                .into_iter()
-                .map(|s| {
-                    let mut r = SessionListItem::from(&s);
-                    if let Some(has_record) = set_flags.get(&s.date) {
-                        r.has_sets = true;
-                        r.has_record = *has_record;
-                    }
-                    r
-                })
-                .collect::<Vec<_>>())
-        })
+        database.run_in_connection(|conn| Ok(fetch_sessions(conn, limit, None, None, None)?))
     })
     .await;
 
@@ -96,16 +71,77 @@ pub async fn get_sessions(
     }
 }
 
-/// Maps every session that has sets (from `min_date` on, if given) to whether any of them is a personal record.
+/// Lists sessions newest first (from `min_date` on, if given), flagged with whether they have sets and records.
+pub fn fetch_sessions(
+    conn: &rusqlite_orm::rusqlite::Connection,
+    from: Option<i32>,
+    to: Option<i32>,
+    sport: Option<u8>,
+    sub_sport: Option<u8>,
+) -> rusqlite_orm::errors::Result<Vec<SessionListItem>> {
+    let mut select_builder =
+        SessionRepository::select().order_by(OrderBy::Desc(session::entity::columns::DATE));
+
+    let mut conditions = Vec::new();
+    if let Some(min_date) = from {
+        conditions.push(Where::Gte(session::entity::columns::DATE, min_date.into()))
+    }
+
+    if let Some(max_date) = to {
+        conditions.push(Where::Lte(session::entity::columns::DATE, max_date.into()))
+    }
+
+    if let Some(sport) = sport {
+        conditions.push(Where::Eq(session::entity::columns::SPORT, sport.into()))
+    }
+
+    if let Some(sub_sport) = sub_sport {
+        conditions.push(Where::Eq(
+            session::entity::columns::SUB_SPORT,
+            sub_sport.into(),
+        ))
+    }
+
+    if !conditions.is_empty() {
+        select_builder = select_builder.where_(Where::And(conditions))
+    }
+
+    let sessions = select_builder.fetch_in(conn)?;
+
+    let set_flags = session_set_flags(conn, from, to)?;
+
+    Ok(sessions
+        .into_iter()
+        .map(|s| {
+            let mut r = SessionListItem::from(&s);
+            if let Some(has_record) = set_flags.get(&s.date) {
+                r.has_sets = true;
+                r.has_record = *has_record;
+            }
+            r
+        })
+        .collect::<Vec<_>>())
+}
+
+/// Maps every session that has sets (within `[min_date, max_date]`, each bound optional) to whether any of them is a personal record.
 pub fn session_set_flags(
     conn: &rusqlite_orm::rusqlite::Connection,
     min_date: Option<i32>,
+    max_date: Option<i32>,
 ) -> rusqlite_orm::errors::Result<HashMap<u32, bool>> {
     let mut select_builder = SetRepository::select()
         .distinct(&[set::entity::columns::SESSION, set::entity::columns::PR]);
+
+    // `where_` replaces the previous condition, so bounds must be combined in a single `And`
+    let mut conditions = Vec::new();
     if let Some(min_date) = min_date {
-        select_builder =
-            select_builder.where_(Where::Gte(set::entity::columns::SESSION, min_date.into()));
+        conditions.push(Where::Gte(set::entity::columns::SESSION, min_date.into()));
+    }
+    if let Some(max_date) = max_date {
+        conditions.push(Where::Lte(set::entity::columns::SESSION, max_date.into()));
+    }
+    if !conditions.is_empty() {
+        select_builder = select_builder.where_(Where::And(conditions));
     }
 
     let mut flags: HashMap<u32, bool> = HashMap::new();
@@ -134,47 +170,7 @@ pub async fn get_session_details(
     );
 
     let res = run_blocking(app, move |database| {
-        database.run_in_connection(|conn| {
-            let mut session = SessionRepository::select_by_id_in(conn, timestamp)?.unwrap();
-
-            session.fetch_sets_relationship_in(conn)?;
-            if session.device.is_some() {
-                session.fetch_device_obj_relationship_in(conn)?;
-            }
-            session.fetch_additional_data_relationship_in(conn)?;
-            session.fetch_laps_relationship_in(conn)?;
-
-            let condition_set: HashSet<(_, _)> =
-                session.sets.iter().map(|r| (r.ex_cat, r.ex_id)).collect();
-
-            let in_conditions = condition_set
-                .into_iter()
-                .map(|(cat, id)| vec![cat.into(), id.into()])
-                .collect::<Vec<Vec<Value>>>();
-
-            let exercises = if in_conditions.is_empty() {
-                Vec::new()
-            } else {
-                ExerciseRepository::select()
-                    .where_(Where::InMultiple(
-                        vec![
-                            exercise::entity::columns::CATEGORY,
-                            exercise::entity::columns::ID,
-                        ],
-                        in_conditions,
-                    ))
-                    .fetch_in(conn)?
-            };
-            session.sets.sort_by_key(|s| s.idx);
-            session.laps.sort_by_key(|l| l.idx);
-
-            Ok(SessionDetails::from((
-                &session,
-                exercises.as_slice(),
-                session.sets.as_slice(),
-                session.laps.as_slice(),
-            )))
-        })
+        database.run_in_connection(|conn| Ok(fetch_session_details(conn, timestamp, true, true)?))
     })
     .await;
 
@@ -190,6 +186,60 @@ pub async fn get_session_details(
             "Error getting session details",
         )),
     }
+}
+
+/// Loads one session with its sets (sorted), device, additional data and laps (sorted).
+pub fn fetch_session_details(
+    conn: &rusqlite_orm::rusqlite::Connection,
+    timestamp: u32,
+    with_add_data: bool,
+    with_laps: bool,
+) -> rusqlite_orm::errors::Result<SessionDetails> {
+    let mut session = SessionRepository::select_by_id_in(conn, timestamp)?.unwrap();
+
+    session.fetch_sets_relationship_in(conn)?;
+
+    if session.device.is_some() {
+        session.fetch_device_obj_relationship_in(conn)?;
+    }
+
+    if with_add_data {
+        session.fetch_additional_data_relationship_in(conn)?;
+    }
+
+    if with_laps {
+        session.fetch_laps_relationship_in(conn)?;
+    }
+
+    let condition_set: HashSet<(_, _)> = session.sets.iter().map(|r| (r.ex_cat, r.ex_id)).collect();
+
+    let in_conditions = condition_set
+        .into_iter()
+        .map(|(cat, id)| vec![cat.into(), id.into()])
+        .collect::<Vec<Vec<Value>>>();
+
+    let exercises = if in_conditions.is_empty() {
+        Vec::new()
+    } else {
+        ExerciseRepository::select()
+            .where_(Where::InMultiple(
+                vec![
+                    exercise::entity::columns::CATEGORY,
+                    exercise::entity::columns::ID,
+                ],
+                in_conditions,
+            ))
+            .fetch_in(conn)?
+    };
+    session.sets.sort_by_key(|s| s.idx);
+    session.laps.sort_by_key(|l| l.idx);
+
+    Ok(SessionDetails::from((
+        &session,
+        exercises.as_slice(),
+        session.sets.as_slice(),
+        session.laps.as_slice(),
+    )))
 }
 
 /// Applies user edits (session notes and reps/weight/exercise of its series) and recomputes personal records.
@@ -433,7 +483,10 @@ where
 
                 if let Some(workout) = &session.workout_obj {
                     let updated = WorkoutRepository::update()
-                        .set(workout::entity::columns::NOTES, workout.notes.clone().into())
+                        .set(
+                            workout::entity::columns::NOTES,
+                            workout.notes.clone().into(),
+                        )
                         .where_(Where::Eq(
                             workout::entity::columns::NAME,
                             workout.name.clone().into(),
@@ -549,7 +602,10 @@ pub fn update_session_notes(
     let notes = notes.filter(|n| !n.trim().is_empty()).map(str::to_string);
 
     let updated = AdditionalDataRepository::update()
-        .set(additional_data::entity::columns::NOTES, notes.clone().into())
+        .set(
+            additional_data::entity::columns::NOTES,
+            notes.clone().into(),
+        )
         .where_(Where::Eq(
             additional_data::entity::columns::SESSION,
             session.into(),

@@ -3,6 +3,7 @@
 import js from "@eslint/js";
 import reactPlugin from "eslint-plugin-react";
 import reactJsxRuntime from "eslint-plugin-react/configs/jsx-runtime.js";
+import reactHooks from "eslint-plugin-react-hooks";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
@@ -12,6 +13,7 @@ export default tseslint.config(
 
   reactPlugin.configs.flat.recommended,
   reactJsxRuntime,
+  reactHooks.configs.flat.recommended,
 
   {
     settings: {

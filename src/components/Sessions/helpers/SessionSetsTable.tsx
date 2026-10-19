@@ -1,12 +1,13 @@
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
 import { SessionSet } from "@/utils/backend/models";
-import { Fragment, useContext, useMemo, useState } from "react";
+import { Fragment, useContext, useState } from "react";
 import { FormControlLabel, Switch } from "@mui/material";
 import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
 import { AppContext, ExerciseOption } from "@/context/AppContext";
 import { ExerciseField } from "@/components/Fields/ExerciseField";
 import { RepetitionsField } from "@/components/Fields/RepetitionsField";
 import { WeightField } from "@/components/Fields/WeightField";
+import { SessionUtils } from "@/utils/SessionUtils";
 
 type Props = {
     series: SessionSet[];
@@ -60,30 +61,6 @@ export function SessionSetsTable({
         onUpdateSerieExercise(idx, exerciseOption.ex_cat, exerciseOption.ex_id);
     };
 
-    const [exercises, groupedSeries] = useMemo(() => {
-        const exercises: string[] = [];
-        const groupedSeries: Record<string, [number, SessionSet][]> = {};
-
-        let idx = 0;
-        for (let i = 0; i < series.length; i++) {
-            if (!series[i].rest) {
-                const ex_key = series[i].ex_cat + "-" + series[i].ex_id;
-                if (!exercises.includes(ex_key)) {
-                    exercises.push(ex_key);
-                }
-
-                if (groupedSeries[ex_key] === undefined) {
-                    groupedSeries[ex_key] = [];
-                }
-
-                groupedSeries[ex_key].push([idx, series[i]]);
-            }
-            idx++;
-        }
-
-        return [exercises, groupedSeries];
-    }, [series]);
-
     const groupedBySerie = () => {
         let serieIdx = 1;
         let firstOfSerie = true;
@@ -101,7 +78,7 @@ export function SessionSetsTable({
                         const thisSerie = serieIdx;
                         firstOfSerie = serie.rest;
                         if (serie.rest) {
-                            serieIdx++;
+                            serieIdx += 1;
                         }
 
                         return (
@@ -233,6 +210,8 @@ export function SessionSetsTable({
     };
 
     const groupedByExercises = () => {
+        const { exercises, groupedSeries } =
+            SessionUtils.groupByExercises(series);
         return (
             <>
                 <thead>

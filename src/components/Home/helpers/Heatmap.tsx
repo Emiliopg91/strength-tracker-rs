@@ -1,12 +1,5 @@
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
-import {
-    memo,
-    useCallback,
-    useContext,
-    useEffect,
-    useRef,
-    useState,
-} from "react";
+import { useContext, useState } from "react";
 import {
     ResponsiveContainer,
     Scatter,
@@ -96,38 +89,28 @@ interface HeatmapProps {
     data: [number, number][][] | undefined;
 }
 
-export const Heatmap = memo(function Heatmap({ data }: HeatmapProps) {
+export function Heatmap({ data }: HeatmapProps) {
     const { translate, formatDate, formatNumber } =
         useContext(I18nSettingsContext);
 
     const [size, setSize] = useState({ width: 0, height: 0 });
-    const containerRef = useRef<HTMLDivElement>(null);
-
-    const measure = useCallback(() => {
-        const el = containerRef.current;
-        if (!el) {
-            return;
-        }
-        const rect = el.getBoundingClientRect();
-        setSize({ width: rect.width, height: rect.height });
-    }, []);
-
-    const setContainerRef = useCallback(
-        (el: HTMLDivElement | null) => {
-            containerRef.current = el;
-            if (el) {
-                measure();
-            }
-        },
-        [measure],
-    );
-
-    useEffect(() => {
+    // Measures on attach and on window resize; the returned cleanup runs on detach
+    const setContainerRef = (el: HTMLDivElement) => {
+        const measure = () => {
+            const { width, height } = el.getBoundingClientRect();
+            // Keep the previous object when unchanged, so re-attaching the ref can't loop
+            setSize((previous) =>
+                previous.width === width && previous.height === height
+                    ? previous
+                    : { width, height },
+            );
+        };
+        measure();
         window.addEventListener("resize", measure);
         return () => {
             window.removeEventListener("resize", measure);
         };
-    }, [measure]);
+    };
 
     if (!data) {
         return null;
@@ -308,4 +291,4 @@ export const Heatmap = memo(function Heatmap({ data }: HeatmapProps) {
             </ResponsiveContainer>
         </div>
     );
-});
+}

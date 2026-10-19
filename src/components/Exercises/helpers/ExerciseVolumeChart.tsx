@@ -1,7 +1,7 @@
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
 import { SessionSet } from "@/utils/backend/models";
 import { SessionUtils } from "@/utils/SessionUtils";
-import { useContext, useEffect, useState } from "react";
+import { useContext } from "react";
 import {
     CartesianGrid,
     Legend,
@@ -55,49 +55,34 @@ function ExerciseVolumeTooltip({
 
 export function ExerciseVolumeChart({ series }: Props) {
     const { translate } = useContext(I18nSettingsContext);
-    const [chartData, setChartData] = useState<
-        { date: number; volume: number; reps: number; e1rm: number }[]
-    >([]);
-    const [maxVol, setMaxVol] = useState(0);
-    const [minDate, setMinDate] = useState(99999);
-    const [maxDate, setMaxDate] = useState(0);
+    const chartData: {
+        date: number;
+        volume: number;
+        reps: number;
+        e1rm: number;
+    }[] = [];
 
-    useEffect(() => {
-        const data: {
-            date: number;
-            volume: number;
-            reps: number;
-            e1rm: number;
-        }[] = [];
+    Object.keys(series).forEach((k) => {
+        const date = new Date(parseInt(k.split("\n")[1]));
 
-        Object.keys(series).forEach((k) => {
-            const date = new Date(parseInt(k.split("\n")[1]));
-
-            let count = 0;
-            let weight = 0;
-            series[k].forEach((s) => {
-                count += s.reps;
-                weight += s.reps * s.weight;
-            });
-            data.push({
-                date: date.getTime(),
-                volume: weight,
-                reps: count,
-                e1rm: SessionUtils.maxE1rm(series[k]),
-            });
+        let count = 0;
+        let weight = 0;
+        series[k].forEach((s) => {
+            count += s.reps;
+            weight += s.reps * s.weight;
         });
-        data.sort((a, b) => a.date - b.date);
-        setChartData(data);
-        const dates = [...data].map(({ date }) => {
-            return date;
+        chartData.push({
+            date: date.getTime(),
+            volume: weight,
+            reps: count,
+            e1rm: SessionUtils.maxE1rm(series[k]),
         });
-        setMinDate(Math.min(...dates));
-        setMaxDate(Math.max(...dates));
-        const volumes = data.map(({ volume }) => {
-            return volume;
-        });
-        setMaxVol(Math.max(...volumes));
-    }, [series]);
+    });
+    chartData.sort((a, b) => a.date - b.date);
+    const dates = chartData.map(({ date }) => date);
+    const minDate = Math.min(...dates);
+    const maxDate = Math.max(...dates);
+    const maxVol = Math.max(...chartData.map(({ volume }) => volume));
 
     return (
         <div className="chart-container">

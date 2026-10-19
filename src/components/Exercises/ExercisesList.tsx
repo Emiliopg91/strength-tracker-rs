@@ -14,7 +14,7 @@ export function ExercisesList() {
     const [exercises] = useBackendList<ExerciseListItem>(
         () =>
             BackendClient.getExercises().then((data) =>
-                [...data].sort((a, b) => {
+                data.toSorted((a, b) => {
                     return translate(
                         "exercise_" + a.category + "_" + a.id,
                     ).localeCompare(

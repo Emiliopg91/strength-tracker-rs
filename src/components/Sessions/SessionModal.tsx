@@ -2,7 +2,7 @@ import { useLoadingTask } from "@/hooks/useLoadingTask";
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
 import { BackendClient } from "@/utils/backend/client";
 import { SessionSetsUpdate } from "@/utils/backend/models";
-import { useContext, useMemo, useState } from "react";
+import { useContext, useState } from "react";
 import {
     Button,
     Dialog,
@@ -32,18 +32,15 @@ export function SessionModal({ session, onClose, onUpdate }: Props) {
     const [localSession, setLocalSession] = useState({ ...session });
     const [notes, setNotes] = useState(session.notes);
 
-    const changed = useMemo(
-        () =>
-            notes != originalSession.notes ||
-            localSession.sets.some(
-                (serie, idx) =>
-                    serie.reps != originalSession.sets[idx].reps ||
-                    serie.weight != originalSession.sets[idx].weight ||
-                    serie.ex_cat != originalSession.sets[idx].ex_cat ||
-                    serie.ex_id != originalSession.sets[idx].ex_id,
-            ),
-        [localSession.sets, notes, originalSession],
-    );
+    const changed =
+        notes != originalSession.notes ||
+        localSession.sets.some(
+            (serie, idx) =>
+                serie.reps != originalSession.sets[idx].reps ||
+                serie.weight != originalSession.sets[idx].weight ||
+                serie.ex_cat != originalSession.sets[idx].ex_cat ||
+                serie.ex_id != originalSession.sets[idx].ex_id,
+        );
 
     const updateSerieExercise = (
         idx: number,

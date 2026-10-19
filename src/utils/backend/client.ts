@@ -2,19 +2,19 @@
 
 import { invoke, InvokeArgs } from "@tauri-apps/api/core";
 
-import { AppEnvironment, BodyMetricListItem, CloudProvider, DeviceListItem, ExerciseDetails, ExerciseListItem, SessionDetails, SessionListItem, SessionSetsUpdate, Settings, Workout, WorkoutDetails, WorkoutListItem } from "./models";
+import { AppEnvironment, BodyMetricListItem, CloudProvider, DeviceListItem, ExerciseDetails, ExerciseListItem, ReportData, SessionDetails, SessionListItem, SessionSetsUpdate, Settings, Workout, WorkoutDetails, WorkoutListItem } from "./models";
 
 export class BackendClient {
 
     private static DONT_LOG_COMMANDS: string[] = [];
 
-	// From src-tauri/src/logic/body_metrics.rs:63
+	// From src-tauri/src/logic/body_metrics.rs:74
 	public static addBodyMeasures(measures: BodyMetricListItem): Promise<void> {
 	  return BackendClient.inner_invoke("add_body_measures", { measures }); 
 	}
 	
 
-	// From src-tauri/src/logic/body_metrics.rs:98
+	// From src-tauri/src/logic/body_metrics.rs:109
 	public static deleteBodyMetric(date: number): Promise<void> {
 	  return BackendClient.inner_invoke("delete_body_metric", { date }); 
 	}
@@ -38,7 +38,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/app.rs:91
+	// From src-tauri/src/logic/app.rs:93
 	public static getEnvironment(): Promise<AppEnvironment> {
 	  return BackendClient.inner_invoke("get_environment"); 
 	}
@@ -56,13 +56,13 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/exercises.rs:169
+	// From src-tauri/src/logic/exercises.rs:185
 	public static getExercisesCatalog(): Promise<Record<number, number[]>> {
 	  return BackendClient.inner_invoke("get_exercises_catalog"); 
 	}
 	
 
-	// From src-tauri/src/logic/sessions.rs:710
+	// From src-tauri/src/logic/sessions.rs:766
 	public static getHeatmapData(): Promise<[number, number][][]> {
 	  return BackendClient.inner_invoke("get_heatmap_data"); 
 	}
@@ -74,13 +74,19 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/sessions.rs:123
+	// From src-tauri/src/logic/report.rs:134
+	public static getReportData(from: number, to: number): Promise<ReportData> {
+	  return BackendClient.inner_invoke("get_report_data", { from, to }); 
+	}
+	
+
+	// From src-tauri/src/logic/sessions.rs:159
 	public static getSessionDetails(timestamp: number): Promise<SessionDetails> {
 	  return BackendClient.inner_invoke("get_session_details", { timestamp }); 
 	}
 	
 
-	// From src-tauri/src/logic/sessions.rs:48
+	// From src-tauri/src/logic/sessions.rs:49
 	public static getSessions(limit: number | null): Promise<SessionListItem[]> {
 	  return BackendClient.inner_invoke("get_sessions", { limit }); 
 	}
@@ -92,7 +98,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/app.rs:194
+	// From src-tauri/src/logic/app.rs:196
 	public static getTranslations(): Promise<Record<string, string>> {
 	  return BackendClient.inner_invoke("get_translations"); 
 	}
@@ -116,9 +122,15 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/sessions.rs:283
+	// From src-tauri/src/logic/sessions.rs:333
 	public static importFromFiles(): Promise<number> {
 	  return BackendClient.inner_invoke("import_from_files"); 
+	}
+	
+
+	// From src-tauri/src/logic/report.rs:25
+	public static loadReport(from: number, to: number): Promise<void> {
+	  return BackendClient.inner_invoke("load_report", { from, to }); 
 	}
 	
 
@@ -128,7 +140,13 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/sessions.rs:198
+	// From src-tauri/src/logic/report.rs:49
+	public static reportReady(): Promise<void> {
+	  return BackendClient.inner_invoke("report_ready"); 
+	}
+	
+
+	// From src-tauri/src/logic/sessions.rs:248
 	public static saveSessionChanges(details: SessionSetsUpdate): Promise<void> {
 	  return BackendClient.inner_invoke("save_session_changes", { details }); 
 	}
@@ -152,7 +170,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/app.rs:102
+	// From src-tauri/src/logic/app.rs:104
 	public static updateSettingsValue(name: string, value: string): Promise<void> {
 	  return BackendClient.inner_invoke("update_settings_value", { name, value }); 
 	}

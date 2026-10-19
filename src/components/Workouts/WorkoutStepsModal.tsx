@@ -8,7 +8,7 @@ import {
     TextField,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
-import { useContext, useEffect, useState } from "react";
+import { useContext, useState } from "react";
 import { WorkoutStepData, WorkoutUtils } from "@/utils/WorkoutUtils";
 import { WorkoutSetGroup } from "./helpers/WorkoutSetGroup";
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
@@ -26,10 +26,6 @@ export function WorkoutStepsModal({ workout, isEdit, onClose }: Props) {
     const withLoading = useLoadingTask();
     const { translate, fromKg, toKg } = useContext(I18nSettingsContext);
     const { exercisesCatalog } = useContext(AppContext);
-
-    useEffect(() => {
-        setName(workout.name);
-    }, []);
 
     const [name, setName] = useState(workout?.name);
     const [notes, setNotes] = useState(workout?.notes);

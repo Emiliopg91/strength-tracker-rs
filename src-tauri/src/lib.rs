@@ -40,6 +40,7 @@ use crate::{
         devices::{get_registered_devices, import_from_device, send_to_device},
         exercises::{get_exercise_details, get_exercises, get_exercises_catalog},
         export::{export_database, export_gpx, upload_to_cloud},
+        report::{get_report_data, load_report, report_ready},
         sessions::{
             _import_from_files, get_heatmap_data, get_session_details, get_sessions,
             import_from_files, save_session_changes,
@@ -359,6 +360,7 @@ pub fn run(log_level: LevelFilter) {
             get_registered_devices,
             //App
             notify_frontend_ready,
+            get_report_data,
             get_environment,
             get_settings,
             update_settings_value,
@@ -371,6 +373,9 @@ pub fn run(log_level: LevelFilter) {
             export_database,
             upload_to_cloud,
             export_gpx,
+            //Report
+            report_ready,
+            load_report
         ])
         .build(tauri::generate_context!())
         .unwrap_or_else(|e| {

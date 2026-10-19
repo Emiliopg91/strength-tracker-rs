@@ -99,7 +99,7 @@ fn session_set_flags_report_sets_and_records_per_session() {
     .unwrap();
 
     let all = db
-        .run_in_connection(|conn| Ok(session_set_flags(conn, None)?))
+        .run_in_connection(|conn| Ok(session_set_flags(conn, None, None)?))
         .unwrap();
     assert_eq!(all.len(), 2);
     assert_eq!(all.get(&2_000), Some(&false));
@@ -107,8 +107,20 @@ fn session_set_flags_report_sets_and_records_per_session() {
     assert!(!all.contains_key(&1_000));
 
     let recent = db
-        .run_in_connection(|conn| Ok(session_set_flags(conn, Some(2_500))?))
+        .run_in_connection(|conn| Ok(session_set_flags(conn, Some(2_500), None)?))
         .unwrap();
     assert_eq!(recent.len(), 1);
     assert_eq!(recent.get(&3_000), Some(&true));
+
+    let bounded = db
+        .run_in_connection(|conn| Ok(session_set_flags(conn, Some(2_500), Some(3_500))?))
+        .unwrap();
+    assert_eq!(bounded.len(), 1);
+    assert_eq!(bounded.get(&3_000), Some(&true));
+
+    let upto = db
+        .run_in_connection(|conn| Ok(session_set_flags(conn, None, Some(2_500))?))
+        .unwrap();
+    assert_eq!(upto.len(), 1);
+    assert_eq!(upto.get(&2_000), Some(&false));
 }

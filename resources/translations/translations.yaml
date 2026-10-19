@@ -52,6 +52,9 @@ error_workout_save:
 error_workout_send:
   en: Error sending workout to device
   es: Error enviando el entrenamiento al dispositivo
+error_report_data:
+  en: Error gathering report data
+  es: Error obteniendo los datos del informe
 ok_workout_save:
   en: Workout saved succesfully
   es: Entrenamiento guardado correctamente
@@ -424,6 +427,9 @@ records:
 select_files_import:
   en: Select files to import
   es: Seleccione archivos a importar
+select_file_save_pdf:
+  en: Save as PDF
+  es: Guardar como PDF
 sessions_comparaison:
   en: Sessions comparaison
   es: Comparación de sesiones
@@ -526,3 +532,21 @@ filter:
 x_entries:
   en: "{} entries"
   es: "{} entradas"
+progression_report:
+  en: Progression report
+  es: Informe de progreso
+body_composition:
+  en: Body composition
+  es: Composición corporal
+summary:
+  en: Summary
+  es: Resumen
+content_table:
+  en: Content table
+  es: Tabla de contenidos
+body_metric_entries:
+  en: Body metrics
+  es: Métricas corporales
+generate_report:
+  en: Generate report
+  es: Generar informe

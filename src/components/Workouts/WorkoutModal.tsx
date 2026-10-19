@@ -46,9 +46,13 @@ export function WorkoutModal({
     const [workout, setWorkout] = useState(initialWorkout);
     const [enabled, setEnabled] = useState(initialWorkout.enabled);
 
-    useEffect(() => {
+    // Reset to the new prop during render instead of in an effect
+    const [prevInitialWorkout, setPrevInitialWorkout] =
+        useState(initialWorkout);
+    if (prevInitialWorkout !== initialWorkout) {
+        setPrevInitialWorkout(initialWorkout);
         setWorkout(initialWorkout);
-    }, [initialWorkout]);
+    }
 
     useEffect(() => {
         return BackendListener.onAddedWorkoutSteps((names) => {

@@ -28,23 +28,12 @@ pub async fn get_body_measures(
     info!("Getting body measures list...");
 
     let res = run_blocking(app, move |database| {
-        database.run_in_connection(|conn| {
-            let regs = BodyMetricRepository::select()
-                .order_by(OrderBy::Desc(body_metric::entity::columns::DATE))
-                .fetch_in(conn)?;
-
-            Ok(regs)
-        })
+        database.run_in_connection(|conn| Ok(fetch_body_measures(conn, None)?))
     })
     .await;
 
     match res {
-        Ok(regs) => {
-            let res = regs
-                .iter()
-                .map(BodyMetricListItem::from)
-                .collect::<Vec<BodyMetricListItem>>();
-
+        Ok(res) => {
             info!("Retrieved {} measures", res.len());
             Ok(res)
         }
@@ -55,6 +44,28 @@ pub async fn get_body_measures(
             "Error getting measures list",
         )),
     }
+}
+
+/// Lists all body measurements, newest first.
+pub fn fetch_body_measures(
+    conn: &rusqlite_orm::rusqlite::Connection,
+    from_to: Option<(u32, u32)>,
+) -> rusqlite_orm::errors::Result<Vec<BodyMetricListItem>> {
+    let mut query =
+        BodyMetricRepository::select().order_by(OrderBy::Desc(body_metric::entity::columns::DATE));
+
+    if let Some((from, to)) = from_to {
+        query = query.where_(Where::And(vec![
+            Where::Gte(body_metric::entity::columns::DATE, from.into()),
+            Where::Lte(body_metric::entity::columns::DATE, to.into()),
+        ]))
+    }
+
+    Ok(query
+        .fetch_in(conn)?
+        .iter()
+        .map(BodyMetricListItem::from)
+        .collect())
 }
 
 /// Inserts a new body measurement entry.

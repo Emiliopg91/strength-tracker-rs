@@ -10,7 +10,7 @@ import {
     WorkoutLoad,
 } from "@/utils/SessionUtils";
 import { usePickerAdapter } from "@mui/x-date-pickers/hooks";
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useEffectEvent, useState } from "react";
 import "@/styles/Home/Home.css";
 import "@/styles/Sessions/SessionModal.css";
 import {
@@ -26,6 +26,7 @@ import { WorkloadChart } from "./helpers/WorkloadChart";
 import { ImportSessionsMenu } from "./helpers/ImportSessionsMenu";
 import { WorkoutStepsModal } from "../Workouts/WorkoutStepsModal";
 import { WorkoutActionsMenu } from "../Workouts/helpers/WorkoutActionsMenu";
+import { Button } from "@mui/material";
 
 interface PeriodStats {
     sessions: number;
@@ -177,6 +178,16 @@ export function Home() {
         });
     };
 
+    const generateReport = () => {
+        const today =
+            new Date(new Date().setHours(0, 0, 0, 0)).getTime() / 1000;
+
+        BackendClient.loadReport(
+            today - 59 * 24 * 60 * 60,
+            today + 24 * 60 * 60 - 1,
+        );
+    };
+
     const getSessionDetails = (timestamp: number) => {
         withLoading(BackendClient.getSessionDetails(timestamp)).then(
             (details) => {
@@ -186,6 +197,7 @@ export function Home() {
             },
         );
     };
+
     const getWorkoutDetails = (name: string) => {
         withLoading(BackendClient.getWorkoutDetails(name)).then(
             setWorkoutDetails,
@@ -208,8 +220,10 @@ export function Home() {
         );
     });
 
+    const onRefreshTrigger = useEffectEvent(refresh);
+
     useEffect(() => {
-        refresh();
+        onRefreshTrigger();
     }, [sessionsVersion, adapter, day]);
 
     const openEdit = (workout: string) => {
@@ -531,7 +545,15 @@ export function Home() {
                 )}
             </div>
 
-            <ImportSessionsMenu onImported={refresh} />
+            <div
+                style={{ display: "flex", gap: 5 }}
+                className="list-action-bar equal-width-children"
+            >
+                <ImportSessionsMenu onImported={refresh} />
+                <Button variant="contained" onClick={generateReport}>
+                    {translate("generate_report")}
+                </Button>
+            </div>
         </>
     );
 }

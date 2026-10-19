@@ -1,10 +1,4 @@
-import {
-    DependencyList,
-    useCallback,
-    useEffect,
-    useRef,
-    useState,
-} from "react";
+import { DependencyList, useEffect, useEffectEvent, useState } from "react";
 
 import { useLoadingTask } from "./useLoadingTask";
 
@@ -16,15 +10,16 @@ export function useBackendList<T>(
     const withLoading = useLoadingTask();
     const [items, setItems] = useState<T[]>([]);
 
-    const fetcherRef = useRef(fetcher);
-    fetcherRef.current = fetcher;
+    const refresh = () => {
+        withLoading(fetcher()).then(setItems);
+    };
 
-    const refresh = useCallback(() => {
-        withLoading(fetcherRef.current()).then(setItems);
-    }, [withLoading]);
+    const onDepsChange = useEffectEvent(refresh);
 
     useEffect(() => {
-        refresh();
+        onDepsChange();
+        // deps are forwarded from the caller, like useMemo/useEffect themselves
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, deps);
 
     return [items, setItems, refresh] as const;

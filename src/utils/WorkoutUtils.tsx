@@ -29,7 +29,7 @@ export class WorkoutUtils {
     ): WorkoutStepData[] {
         const elements: WorkoutStepData[] = [];
 
-        let localSteps = [...steps].sort((a, b) => a.idx - b.idx);
+        let localSteps = steps.toSorted((a, b) => a.idx - b.idx);
 
         while (localSteps.length > 0) {
             const elem = localSteps[localSteps.length - 1];

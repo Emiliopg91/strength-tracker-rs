@@ -82,7 +82,7 @@ export function SessionsList() {
 
     const goToCompare = async () => {
         const details = [];
-        for (const d of [...toCompare].sort((a, b) => a - b)) {
+        for (const d of toCompare.toSorted((a, b) => a - b)) {
             const frontDetails = SessionUtils.detailsFromBackend(
                 await BackendClient.getSessionDetails(d),
                 fromKg,

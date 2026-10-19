@@ -1,6 +1,6 @@
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
 import { WorkoutLoad } from "@/utils/SessionUtils";
-import { memo, useContext } from "react";
+import { useContext } from "react";
 import {
     Area,
     CartesianGrid,
@@ -46,10 +46,7 @@ function WorkloadTooltip({ active, payload, label }: TooltipContentProps) {
     );
 }
 
-export const WorkloadChart = memo(function WorkloadChart({
-    workload,
-    minDate,
-}: Props) {
+export function WorkloadChart({ workload, minDate }: Props) {
     const { translate } = useContext(I18nSettingsContext);
 
     return (
@@ -126,4 +123,4 @@ export const WorkloadChart = memo(function WorkloadChart({
             </ResponsiveContainer>
         </div>
     );
-});
+}

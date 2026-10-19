@@ -1,6 +1,6 @@
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
 import { WorkoutSession } from "@/utils/backend/models";
-import { useContext, useEffect, useState } from "react";
+import { useContext } from "react";
 import {
     CartesianGrid,
     Legend,
@@ -40,39 +40,20 @@ function WorkoutVolumeTooltip({ active, payload, label }: TooltipContentProps) {
 
 export function WorkoutVolumeChart({ sessions }: Props) {
     const { translate } = useContext(I18nSettingsContext);
-    const [chartData, setChartData] = useState<
-        { date: number; volume: number }[]
-    >([]);
-    const [minVol, setMinVol] = useState(99999);
-    const [maxVol, setMaxVol] = useState(0);
-    const [minDate, setMinDate] = useState(99999);
-    const [maxDate, setMaxDate] = useState(0);
-
-    useEffect(() => {
-        const data = [...sessions].reverse().map((ws) => {
-            const day = new Date(ws.date * 1000);
-            const date = new Date(
-                day.getFullYear(),
-                day.getMonth(),
-                day.getDate(),
-            );
-            return {
-                date: date.getTime(),
-                volume: ws.volume,
-            };
-        });
-        setChartData(data);
-        const dates = [...data].map(({ date }) => {
-            return date;
-        });
-        setMinDate(Math.min(...dates));
-        setMaxDate(Math.max(...dates));
-        const volumes = [...data].map(({ volume }) => {
-            return volume;
-        });
-        setMinVol(Math.min(...volumes));
-        setMaxVol(Math.max(...volumes));
-    }, [sessions]);
+    const chartData = sessions.toReversed().map((ws) => {
+        const day = new Date(ws.date * 1000);
+        const date = new Date(day.getFullYear(), day.getMonth(), day.getDate());
+        return {
+            date: date.getTime(),
+            volume: ws.volume,
+        };
+    });
+    const dates = chartData.map(({ date }) => date);
+    const minDate = Math.min(...dates);
+    const maxDate = Math.max(...dates);
+    const volumes = chartData.map(({ volume }) => volume);
+    const minVol = Math.min(...volumes);
+    const maxVol = Math.max(...volumes);
 
     return (
         <div className="chart-container">

@@ -1,0 +1,68 @@
+/* Paper size and margins are set through GTK's PageSetup in print_to_pdf: WebKitGTK
+   applies @page margins on top of those and rescales the content to compensate */
+@page {
+  margin: 0;
+}
+
+/* The default 8px body margin pushes the cover past the printable height */
+body {
+  margin: 0;
+}
+
+/* Forces a new page when printing. WebKit ignores page breaks on <br>, so use a block element */
+.page-break {
+  break-after: page;
+  page-break-after: always;
+}
+
+/* Keeps its content on a single page when printing, moving it to the next one if it does not fit */
+.no-page-break {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+/* Fills the first page. WebKitGTK lays out each A4 page (15mm margins) as ~278mm of CSS
+   height, so stay a bit short of it to keep rounding from spilling into a blank page */
+.report-cover {
+  height: 270mm;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+
+.section-container {
+  margin-left: 30px;
+}
+
+.report-table {
+  width: 100%;
+
+  table {
+    width: 100%;
+    border: 1px solid #000;
+    border-collapse: collapse;
+
+    thead {
+      tr {
+        th {
+          background-color: lightgray;
+          text-align: center;
+          border: 1px solid #000;
+          border-collapse: collapse;
+        }
+      }
+    }
+
+    tbody {
+      tr {
+        td {
+          text-align: center;
+          border: 1px solid #000;
+          border-collapse: collapse;
+        }
+      }
+    }
+  }
+}

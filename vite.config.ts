@@ -16,10 +16,26 @@ const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
 export default defineConfig(async () => ({
-    plugins: [react()],
+    plugins: [
+        react({
+            babel: {
+                plugins: ["babel-plugin-react-compiler"],
+            },
+        }),
+    ],
     resolve: {
         alias: {
             "@": path.resolve(__dirname, "./src"),
+        },
+    },
+
+    // Second entry point, loaded by the hidden "print" window
+    build: {
+        rollupOptions: {
+            input: {
+                main: path.resolve(__dirname, "index.html"),
+                report: path.resolve(__dirname, "report.html"),
+            },
         },
     },
 

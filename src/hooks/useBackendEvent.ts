@@ -1,14 +1,13 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useEffectEvent } from "react";
 
 // Subscribes once to a BackendListener event, always invoking the latest handler
 export function useBackendEvent<T>(
     subscribe: (callback: (payload: T) => void) => () => void,
     handler: (payload: T) => void,
 ) {
-    const handlerRef = useRef(handler);
-    handlerRef.current = handler;
+    const onEvent = useEffectEvent(handler);
 
     useEffect(() => {
-        return subscribe((payload) => handlerRef.current(payload));
+        return subscribe((payload) => onEvent(payload));
     }, [subscribe]);
 }

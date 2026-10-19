@@ -19,6 +19,16 @@
         "visible": false,
         "resizable": false,
         "dragDropEnabled": true
+      },
+      {
+        "label": "report",
+        "title": "Strength Tracker",
+        "url": "report.html",
+        "create": false,
+        "visible": false,
+        "width": 680,
+        "height": 1009,
+        "resizable": false
       }
     ],
     "security": {

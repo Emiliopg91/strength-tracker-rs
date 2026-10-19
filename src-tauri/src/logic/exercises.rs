@@ -84,69 +84,7 @@ pub async fn get_exercise_details(
         category, id
     );
     let res = run_blocking(app, move |database| {
-        database.run_in_connection(|conn| {
-            let exercise = ExerciseRepository::select_by_id_in(conn, category, id)?.unwrap();
-            let mut res = ExerciseDetails::from(&exercise);
-
-            let series = SetRepository::select_by_exercise_in(
-                conn,
-                category,
-                id,
-                Some(&[
-                    OrderBy::Desc(set::entity::columns::SESSION),
-                    OrderBy::Asc(set::entity::columns::IDX),
-                ]),
-            )?;
-
-            let pr = series.iter().find(|s| s.pr).unwrap();
-            res.reps = pr.reps;
-            res.weight = pr.weight;
-            res.pr_date = pr.session;
-
-            let workouts = SessionRepository::select()
-                .columns(&[
-                    session::entity::columns::DATE,
-                    session::entity::columns::NAME,
-                ])
-                .where_(Where::InSub(
-                    session::entity::columns::DATE,
-                    SetRepository::select()
-                        .distinct(&[set::entity::columns::SESSION])
-                        .where_(Where::And(vec![
-                            Where::Eq(set::entity::columns::EX_CAT, category.into()),
-                            Where::Eq(set::entity::columns::EX_ID, id.into()),
-                        ]))
-                        .to_subquery(),
-                ))
-                .fetch_in(conn)?
-                .iter()
-                .map(|s| {
-                    (
-                        row_int(s, session::entity::columns::DATE.as_ref()) as u32,
-                        row_text(s, session::entity::columns::NAME.as_ref()),
-                    )
-                })
-                .collect::<HashMap<_, _>>();
-
-            let mut last_session = None;
-            let mut ex_str = String::new();
-            for serie in series {
-                if last_session != Some(serie.session) {
-                    ex_str = format!(
-                        "{}\n{}",
-                        workouts.get(&serie.session).unwrap(),
-                        serie.session
-                    );
-                    res.workouts.push(ex_str.clone());
-                    last_session = Some(serie.session);
-                }
-
-                let entry = res.series.entry(ex_str.clone()).or_default();
-                entry.push(SessionSet::from(&serie));
-            }
-
-            Ok(res)
-        })
+        database.run_in_connection(|conn| Ok(fetch_exercise_details(conn, category, id, None)?))
     })
     .await;
 
@@ -162,6 +100,84 @@ pub async fn get_exercise_details(
             "Error getting exercise details",
         )),
     }
+}
+
+/// Loads the personal record and full per-session set history for one exercise.
+pub fn fetch_exercise_details(
+    conn: &rusqlite_orm::rusqlite::Connection,
+    category: u16,
+    id: u16,
+    from_to: Option<(u32, u32)>,
+) -> rusqlite_orm::errors::Result<ExerciseDetails> {
+    let exercise = ExerciseRepository::select_by_id_in(conn, category, id)?.unwrap();
+    let mut res = ExerciseDetails::from(&exercise);
+
+    let series = SetRepository::select_by_exercise_in(
+        conn,
+        category,
+        id,
+        Some(&[
+            OrderBy::Desc(set::entity::columns::SESSION),
+            OrderBy::Asc(set::entity::columns::IDX),
+        ]),
+    )?;
+
+    let pr = series.iter().find(|s| s.pr).unwrap();
+    res.reps = pr.reps;
+    res.weight = pr.weight;
+    res.pr_date = pr.session;
+
+    let mut conditions = Vec::new();
+    conditions.push(Where::InSub(
+        session::entity::columns::DATE,
+        SetRepository::select()
+            .distinct(&[set::entity::columns::SESSION])
+            .where_(Where::And(vec![
+                Where::Eq(set::entity::columns::EX_CAT, category.into()),
+                Where::Eq(set::entity::columns::EX_ID, id.into()),
+            ]))
+            .to_subquery(),
+    ));
+
+    if let Some((from, to)) = from_to {
+        conditions.push(Where::Gte(session::entity::columns::DATE, from.into()));
+        conditions.push(Where::Lte(session::entity::columns::DATE, to.into()));
+    }
+
+    let workouts = SessionRepository::select()
+        .columns(&[
+            session::entity::columns::DATE,
+            session::entity::columns::NAME,
+        ])
+        .where_(Where::And(conditions))
+        .fetch_in(conn)?
+        .iter()
+        .map(|s| {
+            (
+                row_int(s, session::entity::columns::DATE.as_ref()) as u32,
+                row_text(s, session::entity::columns::NAME.as_ref()),
+            )
+        })
+        .collect::<HashMap<_, _>>();
+
+    let mut last_session = None;
+    let mut ex_str = String::new();
+    for serie in series {
+        // Sessions outside the range aren't in `workouts`: their sets are skipped
+        let Some(workout) = workouts.get(&serie.session) else {
+            continue;
+        };
+        if last_session != Some(serie.session) {
+            ex_str = format!("{}\n{}", workout, serie.session);
+            res.workouts.push(ex_str.clone());
+            last_session = Some(serie.session);
+        }
+
+        let entry = res.series.entry(ex_str.clone()).or_default();
+        entry.push(SessionSet::from(&serie));
+    }
+
+    Ok(res)
 }
 
 #[traced_command]

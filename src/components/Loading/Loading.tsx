@@ -15,9 +15,17 @@ export function Loading() {
     const loading = useContext(LoadingStateContext);
     const [delayElapsed, setDelayElapsed] = useState(false);
 
-    useEffect(() => {
+    // Reset the delay as soon as loading ends, during render instead of in an effect
+    const [prevLoading, setPrevLoading] = useState(loading);
+    if (prevLoading !== loading) {
+        setPrevLoading(loading);
         if (!loading) {
             setDelayElapsed(false);
+        }
+    }
+
+    useEffect(() => {
+        if (!loading) {
             return;
         }
         const timeout = setTimeout(() => setDelayElapsed(true), SHOW_DELAY_MS);

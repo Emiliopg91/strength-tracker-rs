@@ -1,5 +1,5 @@
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
-import { Fragment, useContext, useMemo } from "react";
+import { Fragment, useContext } from "react";
 import { Dialog, DialogContent, DialogTitle, IconButton } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import { SessionFrontDetails } from "@/utils/SessionUtils";
@@ -21,37 +21,37 @@ export function SessionsCompareModal({ sessions, onClose }: Props) {
     } = useContext(I18nSettingsContext);
     // Non-rest sets grouped by exercise ("cat-id"); exercises follow the order
     // of their first set across sessions
-    const { exercises, groupedSets } = useMemo(() => {
-        const exercises: string[] = [];
-        const groupedSets = sessions.map((s) => {
-            const groups: Record<string, SessionSet[]> = {};
-            s.sets
-                .filter((set) => !set.rest)
-                .sort((a, b) => a.idx - b.idx)
-                .forEach((set) => {
-                    const key = set.ex_cat + "-" + set.ex_id;
-                    (groups[key] ??= []).push(set);
-                });
-            return groups;
-        });
-
-        let pos = 0;
-        while (true) {
-            let any = false;
-            for (const groups of groupedSets) {
-                const keys = Object.keys(groups);
-                if (keys.length > pos) {
-                    if (!exercises.includes(keys[pos])) {
-                        exercises.push(keys[pos]);
-                    }
-                    any = true;
+    const exercises: string[] = [];
+    const groupedSets = sessions.map((s) => {
+        const groups: Record<string, SessionSet[]> = {};
+        s.sets
+            .filter((set) => !set.rest)
+            .sort((a, b) => a.idx - b.idx)
+            .forEach((set) => {
+                const key = set.ex_cat + "-" + set.ex_id;
+                if (!groups[key]) {
+                    groups[key] = [];
                 }
+                groups[key].push(set);
+            });
+        return groups;
+    });
+
+    let pos = 0;
+    while (true) {
+        let any = false;
+        for (const groups of groupedSets) {
+            const keys = Object.keys(groups);
+            if (keys.length > pos) {
+                if (!exercises.includes(keys[pos])) {
+                    exercises.push(keys[pos]);
+                }
+                any = true;
             }
-            if (!any) break;
-            pos++;
         }
-        return { exercises, groupedSets };
-    }, [sessions]);
+        if (!any) break;
+        pos++;
+    }
 
     return (
         <Dialog open={true} onClose={onClose}>
