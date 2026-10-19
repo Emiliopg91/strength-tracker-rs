@@ -105,7 +105,7 @@ async fn print_to_pdf(w: WebviewWindow) -> Result<(), String> {
             settings.set(gtk::PRINT_SETTINGS_OUTPUT_URI, Some(&uri));
 
             let page_setup = gtk::PageSetup::new();
-            page_setup.set_paper_size(&gtk::PaperSize::new(Some(&gtk::PAPER_NAME_A4)));
+            page_setup.set_paper_size(&gtk::PaperSize::new(Some(gtk::PAPER_NAME_A4)));
             page_setup.set_top_margin(15.0, gtk::Unit::Mm);
             page_setup.set_bottom_margin(15.0, gtk::Unit::Mm);
             page_setup.set_left_margin(15.0, gtk::Unit::Mm);

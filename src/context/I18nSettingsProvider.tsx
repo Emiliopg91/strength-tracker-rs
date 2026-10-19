@@ -199,19 +199,13 @@ export function I18nSettingsProvider({
     };
 
     useEffect(() => {
-        BackendClient.getSettings()
-            .then((settings) => {
-                setSettings(settings);
-            })
-            .finally(() => {
-                BackendClient.getTranslations()
-                    .then((translations) => {
-                        setTranslations(translations);
-                    })
-                    .finally(() => {
-                        setI18nReady(true);
-                    });
-            });
+        // Translations are resolved with the backend's language, so both are fetched at once
+        Promise.allSettled([
+            BackendClient.getSettings().then(setSettings),
+            BackendClient.getTranslations().then(setTranslations),
+        ]).then(() => {
+            setI18nReady(true);
+        });
     }, []);
 
     const value = {

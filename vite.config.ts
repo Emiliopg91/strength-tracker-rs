@@ -1,5 +1,5 @@
 /// <reference types="vitest/config" />
-import { defineConfig } from "vite";
+import { defineConfig, type Rollup } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
 import { BaseSequencer, type TestSpecification } from "vitest/node";
@@ -11,7 +11,6 @@ class PathSequencer extends BaseSequencer {
     }
 }
 
-// @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
@@ -36,6 +35,13 @@ export default defineConfig(async () => ({
                 main: path.resolve(__dirname, "index.html"),
                 report: path.resolve(__dirname, "report.html"),
             },
+            output: {
+                // Code shared by both entry points is split into its own chunk; name it "commons" instead of after a random module
+                chunkFileNames: (chunk: Rollup.PreRenderedChunk) =>
+                    chunk.isDynamicEntry
+                        ? "assets/[name]-[hash].js"
+                        : "assets/commons-[hash].js",
+            },
         },
     },
 
@@ -59,6 +65,10 @@ export default defineConfig(async () => ({
         port: 1420,
         strictPort: true,
         host: host || false,
+        // Pre-transform both entry points (and their imports) while cargo builds, as the React Compiler makes the first load slow
+        warmup: {
+            clientFiles: ["./src/main.tsx", "./src/report.tsx"],
+        },
         hmr: host
             ? {
                   protocol: "ws",

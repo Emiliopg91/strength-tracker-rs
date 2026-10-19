@@ -25,8 +25,8 @@ export function AppProvider({
             setSessionsVersion((previous) => previous + 1);
         });
 
-        BackendClient.getEnvironment()
-            .then((env) => {
+        Promise.allSettled([
+            BackendClient.getEnvironment().then((env) => {
                 setEnvironment(env);
 
                 if (env == AppEnvironment.Release) {
@@ -34,18 +34,14 @@ export function AppProvider({
                         e.preventDefault();
                     });
                 }
-            })
-            .finally(() => {
-                // The exercises table is static, so it is fetched once
-                BackendClient.getExercisesCatalog()
-                    .then(setRawCatalog)
-                    .catch(() =>
-                        console.warn("Could not load exercises catalog"),
-                    )
-                    .finally(() => {
-                        setBackendReady(true);
-                    });
-            });
+            }),
+            // The exercises table is static, so it is fetched once
+            BackendClient.getExercisesCatalog()
+                .then(setRawCatalog)
+                .catch(() => console.warn("Could not load exercises catalog")),
+        ]).then(() => {
+            setBackendReady(true);
+        });
 
         return () => {
             unregisterSessionsAdded();

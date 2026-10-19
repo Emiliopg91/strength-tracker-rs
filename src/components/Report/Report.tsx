@@ -7,7 +7,6 @@ import { BackendClient } from "@/utils/backend/client";
 import { ReportData } from "@/utils/backend/models";
 import ContentTable from "./helpers/ContentTable";
 import SessionsSection from "./helpers/SessionsSection";
-import SummarySection from "./helpers/SummarySection";
 
 type Props = {
     beginDate: number;
@@ -44,7 +43,6 @@ export default function Report({ beginDate, endDate }: Props): JSX.Element {
         <>
             <Cover beginDate={beginDate} endDate={endDate} />
             <ContentTable data={data} />
-            <SummarySection data={data} />
             <BodySection bodyMetrics={data.body_metrics} />
             <SessionsSection sessions={data.sessions} />
             <ExercisesSection exercises={data.exercises} />
