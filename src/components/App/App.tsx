@@ -1,24 +1,65 @@
 import { AppContext } from "@/context/AppContext";
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
-import { JSX, useContext, useState } from "react";
+import {
+    JSX,
+    lazy,
+    startTransition,
+    Suspense,
+    useContext,
+    useEffect,
+    useState,
+} from "react";
 import { NavBar, NavBarItem } from "../NavBar/NavBar";
 import "@/styles/app.css";
 import { Tabs } from "@/models/tabs";
-import { SessionsList } from "../Sessions/SessionList";
-import { ExercisesList } from "../Exercises/ExercisesList";
-import { BodyMetricList } from "../BodyMetrics/BodyMetricList";
 import { Loading } from "../Loading/Loading";
-import { WorkoutsList } from "../Workouts/WorkoutList";
-import { Settings } from "../Settings/Settings";
 import SettingsIcon from "@mui/icons-material/Settings";
 import { Home } from "../Home/Home";
+
+// Only Home is bundled eagerly; the rest is fetched in background once Home is shown
+const loadSessionsList = () => import("../Sessions/SessionList");
+const loadExercisesList = () => import("../Exercises/ExercisesList");
+const loadBodyMetricList = () => import("../BodyMetrics/BodyMetricList");
+const loadWorkoutsList = () => import("../Workouts/WorkoutList");
+const loadSettings = () => import("../Settings/Settings");
+
+const SessionsList = lazy(() =>
+    loadSessionsList().then((m) => ({ default: m.SessionsList })),
+);
+const ExercisesList = lazy(() =>
+    loadExercisesList().then((m) => ({ default: m.ExercisesList })),
+);
+const BodyMetricList = lazy(() =>
+    loadBodyMetricList().then((m) => ({ default: m.BodyMetricList })),
+);
+const WorkoutsList = lazy(() =>
+    loadWorkoutsList().then((m) => ({ default: m.WorkoutsList })),
+);
+const Settings = lazy(() =>
+    loadSettings().then((m) => ({ default: m.Settings })),
+);
 
 export function App(): JSX.Element {
     const { appReady } = useContext(AppContext);
     const { translate } = useContext(I18nSettingsContext);
 
     const [settingsOpened, setSettingsOpened] = useState(false);
-    const [tab, setTab] = useState(Tabs.HOME);
+    const [tab, setTabState] = useState(Tabs.HOME);
+
+    useEffect(() => {
+        if (!appReady) return;
+        void loadSessionsList();
+        void loadExercisesList();
+        void loadBodyMetricList();
+        void loadWorkoutsList();
+        void loadSettings();
+    }, [appReady]);
+
+    // Transition keeps the current tab on screen while a lazy one resolves, instead of flashing the fallback
+    const setTab = (newTab: Tabs) => {
+        startTransition(() => setTabState(newTab));
+    };
+
     const showSettings = () => {
         setSettingsOpened(true);
     };
@@ -92,14 +133,16 @@ export function App(): JSX.Element {
                         />
 
                         <div id="list-layer">
-                            {tab == Tabs.HOME && <Home />}
-                            {tab == Tabs.SESSIONS && <SessionsList />}
-                            {tab == Tabs.EXERCISES && <ExercisesList />}
-                            {tab == Tabs.WORKOUTS && <WorkoutsList />}
-                            {tab == Tabs.BODY_METRICS && <BodyMetricList />}
-                            {settingsOpened && (
-                                <Settings onClose={closeSettings} />
-                            )}
+                            <Suspense fallback={null}>
+                                {tab == Tabs.HOME && <Home />}
+                                {tab == Tabs.SESSIONS && <SessionsList />}
+                                {tab == Tabs.EXERCISES && <ExercisesList />}
+                                {tab == Tabs.WORKOUTS && <WorkoutsList />}
+                                {tab == Tabs.BODY_METRICS && <BodyMetricList />}
+                                {settingsOpened && (
+                                    <Settings onClose={closeSettings} />
+                                )}
+                            </Suspense>
                         </div>
                     </>
                 )}

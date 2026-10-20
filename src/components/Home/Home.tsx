@@ -27,6 +27,7 @@ import { ImportSessionsMenu } from "./helpers/ImportSessionsMenu";
 import { WorkoutStepsModal } from "../Workouts/WorkoutStepsModal";
 import { WorkoutActionsMenu } from "../Workouts/helpers/WorkoutActionsMenu";
 import { Button } from "@mui/material";
+import { ReportModal } from "../Report/ReportModal";
 
 interface PeriodStats {
     sessions: number;
@@ -122,6 +123,7 @@ export function Home() {
     const [workoutEdit, setWorkoutEdit] = useState<WorkoutDetails | undefined>(
         undefined,
     );
+    const [reportModal, setReportModal] = useState(false);
 
     const refresh = () => {
         const today =
@@ -176,16 +178,6 @@ export function Home() {
                 setRest(newStats.today.load > 50 || overreaching);
             }
         });
-    };
-
-    const generateReport = () => {
-        const today =
-            new Date(new Date().setHours(0, 0, 0, 0)).getTime() / 1000;
-
-        BackendClient.loadReport(
-            today - 59 * 24 * 60 * 60,
-            today + 24 * 60 * 60 - 1,
-        );
     };
 
     const getSessionDetails = (timestamp: number) => {
@@ -545,12 +537,27 @@ export function Home() {
                 )}
             </div>
 
+            <div>
+                {reportModal && (
+                    <ReportModal
+                        onClose={() => {
+                            setReportModal(false);
+                        }}
+                    />
+                )}
+            </div>
+
             <div
                 style={{ display: "flex", gap: 5 }}
                 className="list-action-bar equal-width-children"
             >
                 <ImportSessionsMenu onImported={refresh} />
-                <Button variant="contained" onClick={generateReport}>
+                <Button
+                    variant="contained"
+                    onClick={() => {
+                        setReportModal(true);
+                    }}
+                >
                     {translate("generate_report")}
                 </Button>
             </div>

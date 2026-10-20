@@ -11,6 +11,15 @@ class PathSequencer extends BaseSequencer {
     }
 }
 
+// Vite injects its modulepreload polyfill into every HTML entry, so it always lands in the chunk shared by main and report
+function chunkFileNames(chunk: Rollup.PreRenderedChunk): string {
+    return chunk.moduleIds.some((id) =>
+        id.includes("vite/modulepreload-polyfill"),
+    )
+        ? "assets/commons-[hash].js"
+        : "assets/[name]-[hash].js";
+}
+
 const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
@@ -36,11 +45,7 @@ export default defineConfig(async () => ({
                 report: path.resolve(__dirname, "report.html"),
             },
             output: {
-                // Code shared by both entry points is split into its own chunk; name it "commons" instead of after a random module
-                chunkFileNames: (chunk: Rollup.PreRenderedChunk) =>
-                    chunk.isDynamicEntry
-                        ? "assets/[name]-[hash].js"
-                        : "assets/commons-[hash].js",
+                chunkFileNames,
             },
         },
     },

@@ -550,3 +550,12 @@ body_metric_entries:
 generate_report:
   en: Generate report
   es: Generar informe
+begin_date:
+  en: Begin date
+  es: Fecha inicio
+end_date:
+  en: End date
+  es: Fecha fin
+generate:
+  en: Generate
+  es: Generar
