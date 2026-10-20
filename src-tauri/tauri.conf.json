@@ -16,8 +16,10 @@
         "title": "Strength Tracker",
         "width": 800,
         "height": 780,
+        "minWidth": 800,
+        "minHeight": 780,
         "visible": false,
-        "resizable": false,
+        "resizable": true,
         "dragDropEnabled": true
       },
       {
