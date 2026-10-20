@@ -48,7 +48,7 @@ export function ReportModal({ onClose }: Props) {
     };
 
     return (
-        <Dialog open={true} onClose={onClose} fullWidth maxWidth="sm">
+        <Dialog open={true} onClose={onClose}>
             <DialogTitle>
                 {translate("generate_report")}
                 <IconButton onClick={onClose} className="modal-close-button">
@@ -65,46 +65,33 @@ export function ReportModal({ onClose }: Props) {
                         pt: 1,
                     }}
                 >
-                    <Box
-                        sx={{
-                            display: "flex",
-                            flexDirection: "row",
-                            gap: 2,
-                            pt: 1,
-                        }}
-                    >
-                        <DatePicker
-                            label={translate("begin_date")}
-                            value={from}
-                            maxDate={
-                                today.getTime() > to.getTime() ? to : today
+                    <DatePicker
+                        label={translate("begin_date")}
+                        value={from}
+                        maxDate={today.getTime() > to.getTime() ? to : today}
+                        onChange={(value) => {
+                            if (value != null) {
+                                setFrom(value);
                             }
-                            onChange={(value) => {
-                                if (value != null) {
-                                    setFrom(value);
-                                }
-                            }}
-                            format="dd/MM/yyyy"
-                            slotProps={{
-                                textField: { size: "small", fullWidth: true },
-                            }}
-                        />
-                        <DatePicker
-                            label={translate("end_date")}
-                            value={to}
-                            minDate={from}
-                            maxDate={today}
-                            onChange={(value) => {
-                                if (value != null) {
-                                    setTo(value);
-                                }
-                            }}
-                            format="dd/MM/yyyy"
-                            slotProps={{
-                                textField: { size: "small", fullWidth: true },
-                            }}
-                        />
-                    </Box>
+                        }}
+                        slotProps={{
+                            textField: { size: "small", fullWidth: true },
+                        }}
+                    />
+                    <DatePicker
+                        label={translate("end_date")}
+                        value={to}
+                        minDate={from}
+                        maxDate={today}
+                        onChange={(value) => {
+                            if (value != null) {
+                                setTo(value);
+                            }
+                        }}
+                        slotProps={{
+                            textField: { size: "small", fullWidth: true },
+                        }}
+                    />
                     <Button variant="contained" onClick={generateReport}>
                         {translate("generate")}
                     </Button>

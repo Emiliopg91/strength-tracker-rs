@@ -136,7 +136,6 @@ export function BodyMetricsAddModal({ latest, onClose }: Props) {
                                 setData((prev) => ({ ...prev, date: value }));
                             }
                         }}
-                        format="dd/MM/yyyy"
                         slotProps={{
                             textField: { size: "small", fullWidth: true },
                         }}

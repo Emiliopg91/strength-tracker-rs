@@ -177,7 +177,6 @@ export function I18nSettingsProvider({
 
     const translate = (key: string, replacements?: string[]) => {
         if (!translations[key]) {
-            console.warn("Missing translation", key);
             return key;
         }
 
