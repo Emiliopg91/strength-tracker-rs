@@ -9,6 +9,7 @@ import {
     DialogTitle,
     IconButton,
     Switch,
+    TextField,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import { ExerciseVolumeChart } from "./helpers/ExerciseVolumeChart";
@@ -16,7 +17,6 @@ import { SessionUtils } from "@/utils/SessionUtils";
 import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
 import { useLoadingTask } from "@/hooks/useLoadingTask";
 import { BackendClient } from "@/utils/backend/client";
-import { RepetitionsField } from "../Fields/RepetitionsField";
 
 type Props = {
     exercise: ExerciseDetails;
@@ -39,9 +39,18 @@ export function ExerciseModal({
     );
     const [minRange, setMinRange] = useState(exercise.min_range);
     const [maxRange, setMaxRange] = useState(exercise.max_range);
-    // Values being edited; the range above only changes once saved
-    const [minInput, setMinInput] = useState(exercise.min_range);
-    const [maxInput, setMaxInput] = useState(exercise.max_range);
+    // Value being edited as "MIN-MAX"; the range above only changes once saved
+    const [rangeInput, setRangeInput] = useState(
+        `${exercise.min_range}-${exercise.max_range}`,
+    );
+    const parsedRange = (() => {
+        const match = /^(\d+)-(\d+)$/.exec(rangeInput);
+        if (!match) {
+            return null;
+        }
+        const [min, max] = [parseInt(match[1]), parseInt(match[2])];
+        return min > 0 && min < max ? { min, max } : null;
+    })();
     const loadingTask = useLoadingTask();
 
     const fetchSuggestion = useMemo(
@@ -110,14 +119,21 @@ export function ExerciseModal({
         });
     };
 
-    const updateRepsRange = () => {
-        const [min, max] = [
-            Math.min(minInput, maxInput),
-            Math.max(minInput, maxInput),
-        ];
+    // Keystrokes that break the "MIN-MAX" pattern are dropped
+    const onRangeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value;
+        if (/^\d{0,3}(-\d{0,3})?$/.test(value)) {
+            setRangeInput(value);
+        }
+    };
 
-        setMinInput(min);
-        setMaxInput(max);
+    const updateRepsRange = () => {
+        if (!parsedRange) {
+            return;
+        }
+        const { min, max } = parsedRange;
+
+        setRangeInput(`${min}-${max}`);
 
         loadingTask(
             BackendClient.setExerciseRepsRange(
@@ -221,22 +237,22 @@ export function ExerciseModal({
                             <tr>
                                 <td>{translate("reps_range")}</td>
                                 <td>
-                                    <RepetitionsField
-                                        label=""
-                                        value={minInput}
-                                        min={1}
-                                        onChange={(n) => setMinInput(n!)}
-                                        sx={{ width: 50 }}
-                                    />{" "}
-                                    <RepetitionsField
-                                        label=""
-                                        value={maxInput}
-                                        min={1}
-                                        onChange={(n) => setMaxInput(n!)}
-                                        sx={{ width: 50 }}
+                                    <TextField
+                                        size="small"
+                                        error={parsedRange == null}
+                                        value={rangeInput}
+                                        placeholder="8-12"
+                                        sx={{ width: 100 }}
+                                        slotProps={{
+                                            htmlInput: {
+                                                inputMode: "numeric",
+                                            },
+                                        }}
+                                        onChange={onRangeChange}
                                     />
                                     <Button
                                         onClick={updateRepsRange}
+                                        disabled={parsedRange == null}
                                         variant="contained"
                                         sx={{ ml: 1, mt: 0.25 }}
                                     >
@@ -252,7 +268,7 @@ export function ExerciseModal({
                         <hr />
                         <ExerciseVolumeChart
                             series={exercise.series}
-                            unilateral={exercise.unilateral}
+                            exercise={exercise}
                         />
                         <br />
                     </>

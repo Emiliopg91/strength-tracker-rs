@@ -548,7 +548,7 @@ pub async fn import_from_device(app: AppHandle, serial: &str) -> Result<usize, S
 /// Downloads new activity files from the given device since its last sync and imports them.
 pub async fn _import_from_device(app: &AppHandle, serial: &str) -> Result<usize, String> {
     info!("Starting import from device with S/N {}", serial);
-    let mut latest_date = "2026-06-08-00-00-00".to_string();
+    let mut latest_date = "1970-01-01-00-00-00".to_string();
     let lang = app.state::<SettingsLock>().read().unwrap().language;
     let mut device = {
         let app = app.clone();

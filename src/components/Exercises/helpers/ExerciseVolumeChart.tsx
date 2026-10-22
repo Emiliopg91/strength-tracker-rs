@@ -1,5 +1,5 @@
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
-import { SessionSet } from "@/utils/backend/models";
+import { ExerciseDetails, SessionSet } from "@/utils/backend/models";
 import { SessionUtils } from "@/utils/SessionUtils";
 import { useContext } from "react";
 import {
@@ -15,7 +15,7 @@ import {
 } from "recharts";
 
 type Props = {
-    unilateral: boolean;
+    exercise: ExerciseDetails;
     series: Record<string, SessionSet[]>;
 };
 
@@ -54,7 +54,7 @@ function ExerciseVolumeTooltip({
     );
 }
 
-export function ExerciseVolumeChart({ series, unilateral }: Props) {
+export function ExerciseVolumeChart({ series, exercise }: Props) {
     const { translate } = useContext(I18nSettingsContext);
     const chartData: {
         date: number;
@@ -75,16 +75,16 @@ export function ExerciseVolumeChart({ series, unilateral }: Props) {
         chartData.push({
             date: date.getTime(),
             weight,
-            reps: count,
-            e1rm: SessionUtils.maxE1rm(series[k], unilateral),
+            reps: Math.floor(count / series[k].length),
+            e1rm: SessionUtils.maxE1rm(series[k], exercise.unilateral),
         });
     });
     chartData.sort((a, b) => a.date - b.date);
     const dates = chartData.map(({ date }) => date);
     const minDate = Math.min(...dates);
     const maxDate = Math.max(...dates);
+    const minWeight = Math.min(...chartData.map(({ weight }) => weight));
     const maxWeight = Math.max(...chartData.map(({ e1rm }) => e1rm));
-    const minReps = Math.min(...chartData.map(({ reps }) => reps));
     const maxReps = Math.max(...chartData.map(({ reps }) => reps));
 
     return (
@@ -107,13 +107,13 @@ export function ExerciseVolumeChart({ series, unilateral }: Props) {
                         yAxisId="left"
                         stroke="#fff"
                         width={0}
-                        domain={[0, maxWeight]}
+                        domain={[minWeight / 2, maxWeight]}
                         tick={false}
                     />{" "}
                     <YAxis
                         yAxisId="right"
                         stroke="#fff"
-                        domain={[minReps, maxReps]}
+                        domain={[exercise.min_range / 1.3, maxReps]}
                         width={0}
                         tick={false}
                     />{" "}

@@ -261,7 +261,7 @@ impl SessionAccumulator {
     }
 
     fn set_workout(&mut self, msg: mesgdef::Workout) {
-        self.workout = Some(msg.wkt_name);
+        self.workout = Some(msg.wkt_name.to_string());
     }
 
     fn set_session(&mut self, msg: mesgdef::Session) -> errors::Result<()> {

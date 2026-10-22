@@ -64,9 +64,9 @@ impl WorkoutAccumulator {
             return Err(ParseFitFileError::NotAWorkout());
         }
 
-        self.name = msg.wkt_name.clone();
+        self.name = msg.wkt_name.to_string();
         self.notes = if !msg.wkt_description.is_empty() {
-            Some(msg.wkt_description.clone())
+            Some(msg.wkt_description.to_string())
         } else {
             None
         };
@@ -93,7 +93,7 @@ impl WorkoutAccumulator {
                         _ => None,
                     };
                     let notes = if !msg.notes.is_empty() {
-                        Some(msg.notes.clone())
+                        Some(msg.notes.to_string())
                     } else {
                         None
                     };
@@ -117,7 +117,7 @@ impl WorkoutAccumulator {
                         _ => None,
                     };
                     let notes = if !msg.notes.is_empty() {
-                        Some(msg.notes.clone())
+                        Some(msg.notes.to_string())
                     } else {
                         None
                     };

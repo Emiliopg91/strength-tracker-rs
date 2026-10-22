@@ -58,7 +58,7 @@ fn step_message(step: &WorkoutStep, weight_unit: WeightUnit) -> Message {
                 WeightUnit::Kilograms => FitBaseUnit::KILOGRAM,
                 WeightUnit::Pounds => FitBaseUnit::POUND,
             };
-            msg.notes = truncate_utf8(step.notes.as_deref().unwrap_or_default(), 200);
+            msg.notes = truncate_utf8(step.notes.as_deref().unwrap_or_default(), 200).into();
 
             if let Some(weight) = step.weight {
                 msg.set_exercise_weight_scaled(weight as f64);
@@ -71,7 +71,7 @@ fn step_message(step: &WorkoutStep, weight_unit: WeightUnit) -> Message {
                 WeightUnit::Kilograms => FitBaseUnit::KILOGRAM,
                 WeightUnit::Pounds => FitBaseUnit::POUND,
             };
-            msg.notes = truncate_utf8(step.notes.as_deref().unwrap_or_default(), 200);
+            msg.notes = truncate_utf8(step.notes.as_deref().unwrap_or_default(), 200).into();
 
             match step.time {
                 Some(Some(time)) => {
@@ -107,8 +107,9 @@ impl ToFitMessages for Workout {
         workout.sub_sport = SubSport::STRENGTH_TRAINING;
         workout.num_valid_steps = self.steps.len() as u16;
         // Garmin caps wkt_name at 32 bytes; cut on a char boundary to keep valid UTF-8
-        workout.wkt_name = truncate_utf8(&self.name, 32);
-        workout.wkt_description = truncate_utf8(self.notes.as_deref().unwrap_or_default(), 200);
+        workout.wkt_name = truncate_utf8(&self.name, 32).into();
+        workout.wkt_description =
+            truncate_utf8(self.notes.as_deref().unwrap_or_default(), 200).into();
 
         let mut steps: Vec<&WorkoutStep> = self.steps.iter().collect();
         steps.sort_by_key(|s| s.idx);
@@ -131,7 +132,7 @@ impl ToFitMessages for Workout {
                 ex_title.exercise_category = ExerciseCategory(ex_cat);
                 ex_title.exercise_name = ex_id;
                 ex_title.wkt_step_name =
-                    vec![translate(&format!("exercise_{}_{}", ex_cat, ex_id), lang)];
+                    vec![translate(&format!("exercise_{}_{}", ex_cat, ex_id), lang).into()].into();
                 ex_title.message_index = MessageIndex(idx);
 
                 idx += 1;

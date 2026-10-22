@@ -18,7 +18,9 @@ export function ExerciseField({ selected, onChange, sx }: Props) {
             size="small"
             sx={sx}
             options={exercisesCatalog}
-            value={selected}
+            // null instead of undefined keeps it controlled, otherwise MUI
+            // ignores later values when the row gets reused for another step
+            value={selected ?? (null as unknown as ExerciseOption)}
             disableClearable
             groupBy={(opt) => translate("exercise_" + opt.ex_cat)}
             getOptionKey={(opt) => `${opt.ex_cat}-${opt.ex_id}`}

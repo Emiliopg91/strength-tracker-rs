@@ -48,7 +48,7 @@ where
         let mut id = FileId::new();
         id.r#type = self.obj.file_type();
         id.manufacturer = Manufacturer::DEVELOPMENT;
-        id.product_name = constants::APP_NAME.clone();
+        id.product_name = constants::APP_NAME.clone().into();
         id.time_created = DateTime::from_unix_timestamp(chrono::Utc::now().timestamp());
         id.into()
     }
