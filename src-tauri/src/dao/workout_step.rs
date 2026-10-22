@@ -10,7 +10,9 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize, Entity)]
 #[entity("workout_step")]
+#[primary_key(workout, idx)]
 #[index("workout",(workout))]
+#[index("exercise",(ex_cat, ex_id))]
 pub struct WorkoutStep {
     #[serde(skip)]
     pub workout: String,

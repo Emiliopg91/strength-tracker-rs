@@ -14,6 +14,7 @@ use crate::{
         session::{self, SessionRepository, entity},
         set::{self, SetRepository},
         workout::{self, Workout, WorkoutRepository},
+        workout_device::{self, WorkoutDeviceRepository},
         workout_step::{self, WorkoutStepRepository},
     },
     dto::{
@@ -21,7 +22,8 @@ use crate::{
         workouts::{WorkoutDetails, WorkoutListItem, WorkoutSession},
     },
     logic::{
-        notifications::show_notification, report_error, row_f64, row_int, row_text, run_blocking,
+        devices::push_pending_to_connected, notifications::show_notification, report_error,
+        row_f64, row_int, row_text, run_blocking,
     },
     utils::translations::translate,
 };
@@ -57,10 +59,10 @@ pub async fn get_workout_list(
                 workout_stats.insert(w.name.clone(), (0, 0, None, 0_u32));
             });
 
-            let enabled_workouts = workouts
+            let suggested_workouts = workouts
                 .iter()
                 .filter_map(|w| {
-                    if w.enabled {
+                    if w.suggest {
                         Some(w.name.clone())
                     } else {
                         None
@@ -96,7 +98,7 @@ pub async fn get_workout_list(
                 .into_iter()
                 .map(|wd| WorkoutListItem {
                     has_steps: with_steps.contains(&wd.0),
-                    enabled: enabled_workouts.contains(&wd.0),
+                    suggest: suggested_workouts.contains(&wd.0),
                     name: wd.0,
                     sessions: wd.1.0,
                     avg_time: wd.1.1.checked_div(wd.1.0).unwrap_or(0),
@@ -199,7 +201,7 @@ pub async fn get_workout_details(
                 avg_volume: volume / (sessions.len() as f32),
                 session_count: count,
                 sessions: session_list,
-                enabled: workout.enabled,
+                suggest: workout.suggest,
                 notes: workout.notes,
                 steps: workout.steps,
             };
@@ -230,7 +232,7 @@ pub async fn set_workout_status(app: AppHandle, workout: &str, status: bool) -> 
     run_blocking(app, move |database| {
         WorkoutRepository::update()
             .where_(Where::Eq(workout::entity::columns::NAME, workout.into()))
-            .set(workout::entity::columns::ENABLED, status.into())
+            .set(workout::entity::columns::SUGGEST, status.into())
             .execute(database)
             .map(|_| ())
             .map_err(|e| e.to_string())
@@ -247,7 +249,7 @@ pub async fn save_workout(
     workout: Workout,
 ) -> Result<(), String> {
     let name = workout.name.clone();
-    let res = run_blocking(app, move |database| {
+    let res = run_blocking(app.clone(), move |database| {
         database.run_in_transaction(|tx| {
             if edit && WorkoutRepository::select_by_id_in(tx, &workout.name)?.is_some() {
                 WorkoutRepository::update()
@@ -271,6 +273,15 @@ pub async fn save_workout(
                 WorkoutStepRepository::delete()
                     .where_(Where::Eq(
                         workout_step::entity::columns::WORKOUT,
+                        workout.name.clone().into(),
+                    ))
+                    .execute_in(tx)?;
+
+                // Re-send the edited workout to every device that already has it
+                WorkoutDeviceRepository::update()
+                    .set(workout_device::entity::columns::PENDING, true.into())
+                    .where_(Where::Eq(
+                        workout_device::entity::columns::WORKOUT,
                         workout.name.clone().into(),
                     ))
                     .execute_in(tx)?;
@@ -301,6 +312,9 @@ pub async fn save_workout(
                 body: translate("ok_workout_save", lang),
                 kind: NotificationKind::Temporal,
             });
+            if edit {
+                push_pending_to_connected(&app).await;
+            }
             Ok(())
         }
         Err(e) => Err(report_error(

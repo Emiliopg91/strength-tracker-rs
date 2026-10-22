@@ -179,6 +179,20 @@ async fn mtp_dev_check_and_sync(app: AppHandle, devices: &mut Vec<DeviceListItem
     }
 }
 
+/// Uploads the pending workouts of every currently connected device.
+pub async fn push_pending_to_connected(app: &AppHandle) {
+    // Bound in its own statement so the MTP lock is released before pushing
+    let connected = MTP_CLIENT_INST.lock().await.get_connected_devices().await;
+    match connected {
+        Ok(devices) => {
+            for device in devices {
+                push_pending_workouts(app, &device.serial_number).await;
+            }
+        }
+        Err(e) => error!("Error listing connected devices: {e}"),
+    }
+}
+
 /// Uploads to `device` the workouts queued while it was disconnected, removing each queue entry once sent.
 async fn push_pending_workouts(app: &AppHandle, serial: &str) {
     let serial = serial.to_string();
@@ -187,10 +201,13 @@ async fn push_pending_workouts(app: &AppHandle, serial: &str) {
         db.run_in_connection(|conn| {
             Ok(WorkoutDeviceRepository::select()
                 .columns(&[workout_device::entity::columns::WORKOUT])
-                .where_(Where::Eq(
-                    workout_device::entity::columns::DEVICE,
-                    serial_q.clone().into(),
-                ))
+                .where_(Where::And(vec![
+                    Where::Eq(
+                        workout_device::entity::columns::DEVICE,
+                        serial_q.clone().into(),
+                    ),
+                    Where::Eq(workout_device::entity::columns::PENDING, true.into()),
+                ]))
                 .fetch_in(conn)?
                 .iter()
                 .filter_map(
@@ -226,22 +243,15 @@ async fn push_pending_workouts(app: &AppHandle, serial: &str) {
             error!("Error pushing pending workout '{workout}' to {serial}: {e}");
             continue;
         }
-        info!("Pending workout '{workout}' sent to device {serial}");
-        show_notification(NotificationDefinition {
-            title: workout.to_string(),
-            body: translate("ok_workout_send", lang),
-            kind: NotificationKind::Temporal,
-        });
 
         let device = serial.clone();
+        let wkt = workout.clone();
         if let Err(e) = run_blocking(app.clone(), move |db| {
             db.run_in_transaction(|tx| {
-                Ok(WorkoutDeviceRepository::delete()
+                Ok(WorkoutDeviceRepository::update()
+                    .set(workout_device::entity::columns::PENDING, false.into())
                     .where_(Where::And(vec![
-                        Where::Eq(
-                            workout_device::entity::columns::WORKOUT,
-                            workout.clone().into(),
-                        ),
+                        Where::Eq(workout_device::entity::columns::WORKOUT, wkt.clone().into()),
                         Where::Eq(
                             workout_device::entity::columns::DEVICE,
                             device.clone().into(),
@@ -254,6 +264,13 @@ async fn push_pending_workouts(app: &AppHandle, serial: &str) {
         {
             error!("Error clearing pending upload entry for {serial}: {e}");
         }
+
+        info!("Workout '{workout}' sent to device {serial}");
+        show_notification(NotificationDefinition {
+            title: workout.to_string(),
+            body: translate("ok_workout_send", lang),
+            kind: NotificationKind::Temporal,
+        });
     }
 }
 
@@ -407,19 +424,43 @@ pub async fn send_to_device(
         .map_err(|e| e.to_string())?;
 
     let res: Result<bool, String> = if connected {
-        send_workout_to_device(app, lang, weight_unit, workout, serial)
-            .await
-            .map(|_| true)
+        match send_workout_to_device(app.clone(), lang, weight_unit, workout, serial).await {
+            Ok(_) => {
+                // Register the pair so later changes (e.g. progressions) get re-sent to this device
+                let mut entry = WorkoutDevice {
+                    device: serial.to_string(),
+                    workout: workout.to_string(),
+                    pending: false,
+                };
+
+                if let Err(e) = run_blocking(app, move |database| {
+                    database.run_in_transaction(|tx| {
+                        Ok(WorkoutDeviceRepository::insert()
+                            .or_ignore()
+                            .item(&mut entry)
+                            .execute_in(tx)?)
+                    })
+                })
+                .await
+                {
+                    error!("Error registering workout '{workout}' for device {serial}: {e}");
+                }
+
+                Ok(true)
+            }
+            Err(e) => Err(e),
+        }
     } else {
         let mut entry = WorkoutDevice {
             device: serial.to_string(),
             workout: workout.to_string(),
+            pending: true,
         };
 
         run_blocking(app, move |database| {
             database.run_in_transaction(|tx| {
                 Ok(WorkoutDeviceRepository::insert()
-                    .or_ignore()
+                    .or_replace()
                     .item(&mut entry)
                     .execute_in(tx)?)
             })

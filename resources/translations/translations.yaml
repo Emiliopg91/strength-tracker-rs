@@ -127,7 +127,7 @@ update_session:
 latest_session:
   en: Latest session
   es: Última sesión
-enabled:
+suggestions_enabled:
   en: Show in suggestions
   es: Mostrar en sugerencias
 session_count:
@@ -559,3 +559,30 @@ end_date:
 generate:
   en: Generate
   es: Generar
+error_updating_exercise:
+  en: Error updating exercise
+  es: Error actualizando ejercicio
+unilateral:
+  en: Unilateral
+  es: Unilateral
+exercises_requires_progression:
+  en: It is recommended to progress to {}x{} {}
+  es: Se recomienda progresar a {}x{} {}
+progression_suggestion:
+  en: Suggest progression
+  es: Sugerir progresión
+error_applying_progression:
+  en: Error applying progression suggestion
+  es: Error aplicando sugerencia de progresión
+apply_suggestion:
+  en: Apply suggestion
+  es: Aplicar sugerencia
+reps_range:
+  en: Repetitions range
+  es: Rango de repeticiones
+apply:
+  en: Apply
+  es: Aplicar
+progression_suggested:
+  en: Progression suggested
+  es: Progresión sugerida

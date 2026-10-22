@@ -7,4 +7,5 @@ use rusqlite_orm::Entity;
 pub struct WorkoutDevice {
     pub workout: String,
     pub device: String,
+    pub pending: bool,
 }

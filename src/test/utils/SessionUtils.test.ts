@@ -474,7 +474,7 @@ describe("SessionUtils.calculateWorkoutLoad", () => {
 
 describe("SessionUtils.maxE1rm", () => {
     it("returns 0 for no sets", () => {
-        expect(SessionUtils.maxE1rm([])).toBe(0);
+        expect(SessionUtils.maxE1rm([], false)).toBe(0);
     });
 
     it("returns the highest estimate across sets", () => {
@@ -484,13 +484,13 @@ describe("SessionUtils.maxE1rm", () => {
             makeSet({ weight: 60, reps: 12 }),
         ];
 
-        expect(SessionUtils.maxE1rm(sets)).toBe(
+        expect(SessionUtils.maxE1rm(sets, false)).toBe(
             Math.max(
-                SessionUtils.estimate1rm(100, 1),
-                SessionUtils.estimate1rm(90, 5),
-                SessionUtils.estimate1rm(60, 12),
+                SessionUtils.estimate1rm(100, 1, false),
+                SessionUtils.estimate1rm(90, 5, false),
+                SessionUtils.estimate1rm(60, 12, false),
             ),
         );
-        expect(SessionUtils.maxE1rm(sets)).toBe(101);
+        expect(SessionUtils.maxE1rm(sets, false)).toBe(101);
     });
 });

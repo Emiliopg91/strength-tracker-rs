@@ -22,7 +22,7 @@ export function WorkoutRow({
     return (
         <tr
             className={
-                "clickable-row" + (workout.enabled ? "" : " workout-disabled")
+                "clickable-row" + (workout.suggest ? "" : " workout-disabled")
             }
             onClick={() => onSelect(workout.name)}
         >

@@ -458,7 +458,15 @@ export class SessionUtils {
 
     private static MAX_ESTIMATION_REPS = 20;
 
-    public static estimate1rm(weight: number, reps: number): number {
+    public static estimate1rm(
+        weight: number,
+        reps: number,
+        unilateral: boolean,
+    ): number {
+        if (unilateral) {
+            reps = Math.floor(reps / 2);
+        }
+
         if (reps <= 1) {
             return Math.trunc(weight);
         }
@@ -471,10 +479,13 @@ export class SessionUtils {
         return Math.trunc((100 * weight) / (101.3 - 2.67123 * r));
     }
 
-    public static maxE1rm(sets: SessionSet[]): number {
+    public static maxE1rm(sets: SessionSet[], unilateral: boolean): number {
         return sets.reduce(
             (max, s) =>
-                Math.max(max, SessionUtils.estimate1rm(s.weight, s.reps)),
+                Math.max(
+                    max,
+                    SessionUtils.estimate1rm(s.weight, s.reps, unilateral),
+                ),
             0,
         );
     }

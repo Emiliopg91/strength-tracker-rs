@@ -38,7 +38,11 @@ use crate::{
         },
         body_metrics::{add_body_measures, delete_body_metric, get_body_measures},
         devices::{get_registered_devices, import_from_device, send_to_device},
-        exercises::{get_exercise_details, get_exercises, get_exercises_catalog},
+        exercises::{
+            apply_progression_suggestion, get_exercise_details, get_exercises,
+            get_exercises_catalog, get_progression_suggestion, set_exercise_progression,
+            set_exercise_reps_range, set_exercise_unilateral,
+        },
         export::{export_database, export_gpx, upload_to_cloud},
         report::{get_report_data, load_report, report_ready},
         sessions::{
@@ -349,6 +353,11 @@ pub fn run(log_level: LevelFilter) {
             get_exercises,
             get_exercise_details,
             get_exercises_catalog,
+            set_exercise_unilateral,
+            set_exercise_progression,
+            get_progression_suggestion,
+            apply_progression_suggestion,
+            set_exercise_reps_range,
             //Workouts
             get_workout_list,
             get_workout_details,

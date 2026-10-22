@@ -153,6 +153,7 @@ export function SessionSetsTable({
                                                 </td>
                                                 <td>
                                                     <RepetitionsField
+                                                        label="repetitions"
                                                         allowEmpty
                                                         value={serie.reps}
                                                         sx={{
@@ -279,6 +280,7 @@ export function SessionSetsTable({
                                             .join(" ")}
                                     >
                                         <RepetitionsField
+                                            label="repetitions"
                                             allowEmpty
                                             value={serie.reps}
                                             sx={{ width: 100 }}

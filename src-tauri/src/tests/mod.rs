@@ -5,6 +5,7 @@ mod export;
 mod home;
 mod notes;
 mod parser;
+mod progressions;
 mod prs;
 mod schema;
 mod settings;

@@ -54,7 +54,7 @@ export function WorkoutsList() {
                     name: "",
                     avg_time: 0,
                     avg_volume: 0,
-                    enabled: true,
+                    suggest: true,
                     latest_session: 0,
                     session_count: 0,
                     sessions: [],

@@ -145,7 +145,7 @@ export function Home() {
                 );
 
                 withLoading(BackendClient.getWorkoutList()).then((workouts) => {
-                    const filtered = workouts.filter((w) => w.enabled);
+                    const filtered = workouts.filter((w) => w.suggest);
 
                     if (!overreaching && filtered.length > 0) {
                         // Never-done workouts take priority, otherwise the least recent one

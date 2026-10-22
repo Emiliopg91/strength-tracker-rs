@@ -7,7 +7,7 @@ use crate::dao::workout_step::{self, WorkoutStep};
 #[primary_key(name)]
 pub struct Workout {
     pub name: String,
-    pub enabled: bool,
+    pub suggest: bool,
     pub notes: Option<String>,
 
     #[relationship((name, workout_step::entity::columns::WORKOUT))]

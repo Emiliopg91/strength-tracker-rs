@@ -15,6 +15,7 @@ import {
 } from "recharts";
 
 type Props = {
+    unilateral: boolean;
     series: Record<string, SessionSet[]>;
 };
 
@@ -53,7 +54,7 @@ function ExerciseVolumeTooltip({
     );
 }
 
-export function ExerciseVolumeChart({ series }: Props) {
+export function ExerciseVolumeChart({ series, unilateral }: Props) {
     const { translate } = useContext(I18nSettingsContext);
     const chartData: {
         date: number;
@@ -75,7 +76,7 @@ export function ExerciseVolumeChart({ series }: Props) {
             date: date.getTime(),
             volume: weight,
             reps: count,
-            e1rm: SessionUtils.maxE1rm(series[k]),
+            e1rm: SessionUtils.maxE1rm(series[k], unilateral),
         });
     });
     chartData.sort((a, b) => a.date - b.date);

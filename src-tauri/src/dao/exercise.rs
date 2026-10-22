@@ -9,6 +9,10 @@ use crate::dao::exercise_category::{self, ExerciseCategory};
 pub struct Exercise {
     pub category: u16,
     pub id: u16,
+    pub unilateral: bool,
+    pub progression: bool,
+    pub min_range: u16,
+    pub max_range: u16,
 
     #[relationship((category, exercise_category::entity::columns::ID))]
     pub exercise_category: Option<ExerciseCategory>,

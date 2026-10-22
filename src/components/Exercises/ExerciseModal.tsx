@@ -1,20 +1,136 @@
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
-import { ExerciseDetails } from "@/utils/backend/models";
-import { useContext } from "react";
-import { Dialog, DialogContent, DialogTitle, IconButton } from "@mui/material";
+import { ExerciseDetails, ProgressionSuggestion } from "@/utils/backend/models";
+import { useContext, useEffect, useMemo, useState } from "react";
+import { debounce } from "lodash-es";
+import {
+    Button,
+    Dialog,
+    DialogContent,
+    DialogTitle,
+    IconButton,
+    Switch,
+} from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import { ExerciseVolumeChart } from "./helpers/ExerciseVolumeChart";
 import { SessionUtils } from "@/utils/SessionUtils";
 import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
+import { useLoadingTask } from "@/hooks/useLoadingTask";
+import { BackendClient } from "@/utils/backend/client";
+import { RepetitionsField } from "../Fields/RepetitionsField";
 
 type Props = {
     exercise: ExerciseDetails;
+    onProgressionApplied: () => void;
     onClose: () => void;
 };
 
-export function ExerciseModal({ exercise, onClose }: Props) {
+export function ExerciseModal({
+    exercise,
+    onClose,
+    onProgressionApplied,
+}: Props) {
     const { translate, fromKg, getWeightUnit, formatTimeDate, formatNumber } =
         useContext(I18nSettingsContext);
+
+    const [unilateral, setUnilateral] = useState(exercise.unilateral);
+    const [progression, setProgression] = useState(exercise.progression);
+    const [suggestion, setSuggestion] = useState<ProgressionSuggestion | null>(
+        null,
+    );
+    const [minRange, setMinRange] = useState(exercise.min_range);
+    const [maxRange, setMaxRange] = useState(exercise.max_range);
+    // Values being edited; the range above only changes once saved
+    const [minInput, setMinInput] = useState(exercise.min_range);
+    const [maxInput, setMaxInput] = useState(exercise.max_range);
+    const loadingTask = useLoadingTask();
+
+    const fetchSuggestion = useMemo(
+        () =>
+            debounce((category: number, id: number) => {
+                BackendClient.getProgressionSuggestion(category, id).then(
+                    setSuggestion,
+                );
+            }, 200),
+        [],
+    );
+
+    useEffect(() => () => fetchSuggestion.cancel(), [fetchSuggestion]);
+
+    useEffect(() => {
+        if (!progression) {
+            fetchSuggestion.cancel();
+            return;
+        }
+
+        fetchSuggestion(exercise.category, exercise.id);
+    }, [
+        fetchSuggestion,
+        exercise.category,
+        exercise.id,
+        progression,
+        unilateral,
+        minRange,
+        maxRange,
+    ]);
+
+    const toggleUnilateral = () => {
+        loadingTask(
+            BackendClient.setExerciseUnilateral(
+                exercise.category,
+                exercise.id,
+                !unilateral,
+            ),
+        ).then(() => {
+            setUnilateral((prev) => !prev);
+        });
+    };
+
+    const applySuggestion = () => {
+        loadingTask(
+            BackendClient.applyProgressionSuggestion(
+                exercise.category,
+                exercise.id,
+                suggestion!,
+            ),
+        ).then(() => {
+            setSuggestion(null);
+            onProgressionApplied();
+        });
+    };
+
+    const toggleProgression = () => {
+        loadingTask(
+            BackendClient.setExerciseProgression(
+                exercise.category,
+                exercise.id,
+                !progression,
+            ),
+        ).then(() => {
+            setProgression((prev) => !prev);
+        });
+    };
+
+    const updateRepsRange = () => {
+        const [min, max] = [
+            Math.min(minInput, maxInput),
+            Math.max(minInput, maxInput),
+        ];
+
+        setMinInput(min);
+        setMaxInput(max);
+
+        loadingTask(
+            BackendClient.setExerciseRepsRange(
+                exercise.category,
+                exercise.id,
+                min,
+                max,
+            ),
+        ).then(() => {
+            setMinRange(min);
+            setMaxRange(max);
+        });
+    };
 
     return (
         <Dialog open={true} onClose={onClose} fullWidth maxWidth="sm">
@@ -47,6 +163,7 @@ export function ExerciseModal({ exercise, onClose }: Props) {
                                         SessionUtils.estimate1rm(
                                             exercise.weight,
                                             exercise.reps,
+                                            unilateral,
                                         ),
                                     ),
                                     0,
@@ -69,16 +186,115 @@ export function ExerciseModal({ exercise, onClose }: Props) {
                             <td>{translate("record_date")}:</td>
                             <td>{formatTimeDate(exercise.pr_date)}</td>
                         </tr>
+                        <tr>
+                            <td>{translate("unilateral")}:</td>
+                            <td>
+                                <Switch
+                                    checked={unilateral}
+                                    onChange={toggleUnilateral}
+                                    slotProps={{
+                                        input: {
+                                            "aria-label":
+                                                translate("unilateral"),
+                                        },
+                                    }}
+                                />
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>{translate("progression_suggestion")}</td>
+                            <td>
+                                <Switch
+                                    checked={progression}
+                                    onChange={toggleProgression}
+                                    slotProps={{
+                                        input: {
+                                            "aria-label": translate(
+                                                "progression_suggestion",
+                                            ),
+                                        },
+                                    }}
+                                />
+                            </td>
+                        </tr>
+                        {progression && (
+                            <tr>
+                                <td>{translate("reps_range")}</td>
+                                <td>
+                                    <RepetitionsField
+                                        label=""
+                                        value={minInput}
+                                        min={1}
+                                        onChange={(n) => setMinInput(n!)}
+                                        sx={{ width: 50 }}
+                                    />{" "}
+                                    <RepetitionsField
+                                        label=""
+                                        value={maxInput}
+                                        min={1}
+                                        onChange={(n) => setMaxInput(n!)}
+                                        sx={{ width: 50 }}
+                                    />
+                                    <Button
+                                        onClick={updateRepsRange}
+                                        variant="contained"
+                                        sx={{ ml: 1, mt: 0.25 }}
+                                    >
+                                        {translate("apply")}
+                                    </Button>
+                                </td>
+                            </tr>
+                        )}
                     </tbody>
                 </table>
                 {Object.keys(exercise.workouts).length > 1 && (
                     <>
                         <hr />
-                        <ExerciseVolumeChart series={exercise.series} />
+                        <ExerciseVolumeChart
+                            series={exercise.series}
+                            unilateral={exercise.unilateral}
+                        />
                         <br />
                     </>
                 )}
                 <hr />
+                {progression && suggestion && (
+                    <>
+                        <table className="full-width">
+                            <tbody>
+                                <tr>
+                                    <td style={{ paddingLeft: "15px" }}>
+                                        <>
+                                            {translate(
+                                                "exercises_requires_progression",
+                                                [
+                                                    suggestion.reps.toString(),
+                                                    formatNumber(
+                                                        fromKg(
+                                                            suggestion.weight,
+                                                        ),
+                                                        1,
+                                                    ),
+                                                    getWeightUnit(),
+                                                ],
+                                            )}
+                                        </>
+                                    </td>
+                                    <td>
+                                        <Button
+                                            variant="contained"
+                                            style={{ marginLeft: "20px" }}
+                                            onClick={applySuggestion}
+                                        >
+                                            {translate("apply_suggestion")}
+                                        </Button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <hr />
+                    </>
+                )}
                 <table className="full-width">
                     <colgroup>
                         <col className="col-350" />
@@ -98,6 +314,7 @@ export function ExerciseModal({ exercise, onClose }: Props) {
                         {exercise.workouts.map((workout) => {
                             const e1rm = SessionUtils.maxE1rm(
                                 exercise.series[workout],
+                                unilateral,
                             );
 
                             return exercise.series[workout].map(

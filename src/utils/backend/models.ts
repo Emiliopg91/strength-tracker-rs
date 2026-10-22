@@ -34,13 +34,17 @@ export enum DistanceUnit {
 	Miles = "Miles",
 }
 
-// From src-tauri/src/dto/exercises.rs:29
+// From src-tauri/src/dto/exercises.rs:33
 export interface ExerciseDetails {
   category: number;
   id: number;
+  max_range: number;
+  min_range: number;
   pr_date: number;
+  progression: boolean;
   reps: number;
   series: Record<string, SessionSet[]>;
+  unilateral: boolean;
   weight: number;
   workouts: string[];
 }
@@ -50,7 +54,9 @@ export interface ExerciseListItem {
   category: number;
   date: number;
   id: number;
+  progression: boolean;
   reps: number;
+  unilateral: boolean;
   weight: number;
 }
 
@@ -58,6 +64,12 @@ export interface ExerciseListItem {
 export enum Languages {
 	Spanish = "Spanish",
 	English = "English",
+}
+
+// From src-tauri/src/dto/exercises.rs:66
+export interface ProgressionSuggestion {
+  reps: number;
+  weight: number;
 }
 
 // From src-tauri/src/dto/report.rs:8
@@ -145,7 +157,7 @@ export interface Settings {
   weight_unit: WeightUnit;
 }
 
-// From src-tauri/src/dao/workout_step.rs:38
+// From src-tauri/src/dao/workout_step.rs:40
 export enum StepType {
 	Exercise = "Exercise",
 	Rest = "Rest",
@@ -160,34 +172,34 @@ export enum WeightUnit {
 
 // From src-tauri/src/dao/workout.rs:8
 export interface Workout {
-  enabled: boolean;
   name: string;
   notes: string | null;
   steps: WorkoutStep[];
+  suggest: boolean;
 }
 
 // From src-tauri/src/dto/workouts.rs:34
 export interface WorkoutDetails {
   avg_time: number;
   avg_volume: number;
-  enabled: boolean;
   latest_session: number | null;
   name: string;
   notes: string | null;
   session_count: number;
   sessions: WorkoutSession[];
   steps: WorkoutStep[];
+  suggest: boolean;
 }
 
 // From src-tauri/src/dto/workouts.rs:6
 export interface WorkoutListItem {
   avg_load: number;
   avg_time: number;
-  enabled: boolean;
   has_steps: boolean;
   latest_session: number | null;
   name: string;
   sessions: number;
+  suggest: boolean;
 }
 
 // From src-tauri/src/dto/workouts.rs:17
@@ -197,7 +209,7 @@ export interface WorkoutSession {
   volume: number;
 }
 
-// From src-tauri/src/dao/workout_step.rs:14
+// From src-tauri/src/dao/workout_step.rs:16
 export interface WorkoutStep {
   begin_idx: number | null;
   ex_cat: number | null;

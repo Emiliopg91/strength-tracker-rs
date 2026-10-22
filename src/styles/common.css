@@ -73,6 +73,10 @@
   color: gold;
 }
 
+.warn-icon {
+  color: orange;
+}
+
 .list-action-bar {
   padding: 5px;
   width: 100%;
@@ -153,4 +157,8 @@
 
 .col-400 {
   width: 400px;
+}
+
+.col-430 {
+  width: 430px;
 }

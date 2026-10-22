@@ -7,11 +7,14 @@ import { AppContext } from "@/context/AppContext";
 import { useBackendList } from "@/hooks/useBackendList";
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
 import { useFilterList } from "@/hooks/useFilterList";
+import { useLoadingTask } from "@/hooks/useLoadingTask";
+import "@/styles/Exercises/ExercisesList.css";
 
 export function ExercisesList() {
+    const loadingTask = useLoadingTask();
     const { sessionsVersion } = useContext(AppContext);
     const { translate, formatDate } = useContext(I18nSettingsContext);
-    const [exercises] = useBackendList<ExerciseListItem>(
+    const [exercises, setExercises] = useBackendList<ExerciseListItem>(
         () =>
             BackendClient.getExercises().then((data) =>
                 data.toSorted((a, b) => {
@@ -29,9 +32,21 @@ export function ExercisesList() {
     >(undefined);
 
     const getExerciseDetails = (category: number, id: number) => {
-        BackendClient.getExerciseDetails(category, id).then((details) => {
-            setExerciseDetails(details);
-        });
+        loadingTask(BackendClient.getExerciseDetails(category, id)).then(
+            (details) => {
+                setExerciseDetails(details);
+            },
+        );
+    };
+
+    const appliedProgression = (exercise: ExerciseDetails) => {
+        setExercises((prevs) =>
+            prevs.map((cur) =>
+                cur.category == exercise.category && cur.id == exercise.id
+                    ? { ...cur, progression: false }
+                    : cur,
+            ),
+        );
     };
 
     const [filter, filteredExercises] = useFilterList(exercises, (exercise) => {
@@ -47,7 +62,7 @@ export function ExercisesList() {
             {filter}
             <table>
                 <colgroup>
-                    <col className="col-400" />
+                    <col className="col-430" />
                     <col className="col-100" />
                     <col className="col-60" />
                     <col className="col-100" />
@@ -75,6 +90,9 @@ export function ExercisesList() {
                 {exerciseDetails && (
                     <ExerciseModal
                         exercise={exerciseDetails}
+                        onProgressionApplied={() => {
+                            appliedProgression(exerciseDetails);
+                        }}
                         onClose={() => setExerciseDetails(undefined)}
                     />
                 )}

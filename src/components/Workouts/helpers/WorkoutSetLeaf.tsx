@@ -190,6 +190,7 @@ export function WorkoutSetLeaf({
 
             {isExercise && limit == LimitType.Reps && (
                 <RepetitionsField
+                    label="repetitions"
                     value={leaf.reps}
                     min={1}
                     error={errors.reps}

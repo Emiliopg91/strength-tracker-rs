@@ -63,7 +63,7 @@ fn session_roundtrip_with_relationships() {
         WorkoutRepository::insert()
             .item(&mut crate::dao::workout::Workout {
                 name: "Leg day".to_string(),
-                enabled: true,
+                suggest: true,
                 notes: Some("".to_string()),
                 steps: Vec::new(),
             })
@@ -92,7 +92,7 @@ fn session_roundtrip_with_relationships() {
     let data = stored.additional_data.unwrap();
     assert_eq!(data.notes.as_deref(), Some("Felt strong"));
     assert_eq!(data.distance, Some(1_000.0));
-    assert!(stored.workout_obj.unwrap().enabled);
+    assert!(stored.workout_obj.unwrap().suggest);
 }
 
 #[test]

@@ -44,7 +44,7 @@ export function WorkoutModal({
         formatPercent,
     } = useContext(I18nSettingsContext);
     const [workout, setWorkout] = useState(initialWorkout);
-    const [enabled, setEnabled] = useState(initialWorkout.enabled);
+    const [enabled, setEnabled] = useState(initialWorkout.suggest);
 
     // Reset to the new prop during render instead of in an effect
     const [prevInitialWorkout, setPrevInitialWorkout] =
@@ -168,17 +168,18 @@ export function WorkoutModal({
                                 )}
                                 {showEnable && (
                                     <tr>
-                                        <td>{translate("enabled")}:</td>
+                                        <td>
+                                            {translate("suggestions_enabled")}:
+                                        </td>
                                         <td>
                                             <Switch
                                                 checked={enabled}
                                                 onChange={toggleEnabled}
                                                 slotProps={{
                                                     input: {
-                                                        "aria-label":
-                                                            translate(
-                                                                "enabled",
-                                                            ),
+                                                        "aria-label": translate(
+                                                            "suggestions_enabled",
+                                                        ),
                                                     },
                                                 }}
                                             />

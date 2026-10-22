@@ -38,6 +38,14 @@
               align-items: center;
               justify-content: center;
             }
+
+            &.text-left {
+              text-align: left;
+
+              > div {
+                justify-content: flex-start;
+              }
+            }
           }
         }
       }

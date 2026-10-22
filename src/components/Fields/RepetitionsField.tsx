@@ -3,8 +3,10 @@ import { SxProps, TextField, Theme } from "@mui/material";
 import React, { JSX, useContext, useState } from "react";
 
 type Props = {
+    label: string;
     value: number | undefined | null;
     min?: number;
+    max?: number | undefined;
     // Clearing the field reports null instead of reverting
     allowEmpty?: boolean;
     error?: boolean;
@@ -14,8 +16,10 @@ type Props = {
 };
 
 export function RepetitionsField({
+    label,
     value,
     min = 0,
+    max = undefined,
     allowEmpty = false,
     error,
     sx,
@@ -53,7 +57,7 @@ export function RepetitionsField({
 
     return (
         <TextField
-            label={translate("repetitions")}
+            label={translate(label)}
             error={error}
             type="number"
             size="small"
@@ -65,7 +69,7 @@ export function RepetitionsField({
                     className: "no-spinner",
                     inputMode: "numeric",
                     min,
-                    max: 999,
+                    max: max !== undefined ? max : 999,
                     step: 1,
                 },
             }}

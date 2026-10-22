@@ -67,7 +67,7 @@ export function WorkoutStepsModal({ workout, isEdit, onClose }: Props) {
     const saveWorkout = () => {
         if (canSave) {
             const newWorkout: Workout = {
-                enabled: workout.enabled,
+                suggest: workout.suggest,
                 name,
                 steps: WorkoutUtils.toWorkoutSteps(steps, name, toKg),
                 notes,
