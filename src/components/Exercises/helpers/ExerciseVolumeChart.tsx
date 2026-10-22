@@ -32,7 +32,7 @@ function ExerciseVolumeTooltip({
     }
     const data = payload[0].payload as {
         date: number;
-        volume: number;
+        weight: number;
         reps: number;
         e1rm: number;
     };
@@ -45,7 +45,7 @@ function ExerciseVolumeTooltip({
                 {translate("rm")}: {formatNumber(fromKg(data.e1rm), 1)}
             </div>
             <div>
-                {translate("volume")}: {formatNumber(fromKg(data.volume), 1)}
+                {translate("weight")}: {formatNumber(fromKg(data.weight), 1)}
             </div>
             <div>
                 {translate("repetitions")}: {formatNumber(data.reps, 0)}
@@ -58,7 +58,7 @@ export function ExerciseVolumeChart({ series, unilateral }: Props) {
     const { translate } = useContext(I18nSettingsContext);
     const chartData: {
         date: number;
-        volume: number;
+        weight: number;
         reps: number;
         e1rm: number;
     }[] = [];
@@ -70,11 +70,11 @@ export function ExerciseVolumeChart({ series, unilateral }: Props) {
         let weight = 0;
         series[k].forEach((s) => {
             count += s.reps;
-            weight += s.reps * s.weight;
+            weight = Math.max(weight, s.weight);
         });
         chartData.push({
             date: date.getTime(),
-            volume: weight,
+            weight,
             reps: count,
             e1rm: SessionUtils.maxE1rm(series[k], unilateral),
         });
@@ -83,7 +83,9 @@ export function ExerciseVolumeChart({ series, unilateral }: Props) {
     const dates = chartData.map(({ date }) => date);
     const minDate = Math.min(...dates);
     const maxDate = Math.max(...dates);
-    const maxVol = Math.max(...chartData.map(({ volume }) => volume));
+    const maxWeight = Math.max(...chartData.map(({ e1rm }) => e1rm));
+    const minReps = Math.min(...chartData.map(({ reps }) => reps));
+    const maxReps = Math.max(...chartData.map(({ reps }) => reps));
 
     return (
         <div className="chart-container">
@@ -105,17 +107,18 @@ export function ExerciseVolumeChart({ series, unilateral }: Props) {
                         yAxisId="left"
                         stroke="#fff"
                         width={0}
-                        domain={[0, maxVol]}
+                        domain={[0, maxWeight]}
                         tick={false}
                     />{" "}
                     <YAxis
                         yAxisId="right"
                         stroke="#fff"
+                        domain={[minReps, maxReps]}
                         width={0}
                         tick={false}
                     />{" "}
                     <Line
-                        yAxisId="right"
+                        yAxisId="left"
                         type="monotone"
                         name={translate("rm")}
                         dataKey="e1rm"
@@ -127,8 +130,8 @@ export function ExerciseVolumeChart({ series, unilateral }: Props) {
                     <Line
                         yAxisId="left"
                         type="monotone"
-                        name={translate("volume")}
-                        dataKey="volume"
+                        name={translate("weight")}
+                        dataKey="weight"
                         stroke="#0f0"
                         dot={{ fill: "#0f0" }}
                         activeDot={{ stroke: "#f0f0f000" }}
