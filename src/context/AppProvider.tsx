@@ -1,10 +1,11 @@
 import { BackendClient } from "@/utils/backend/client";
 import { BackendListener } from "@/utils/backend/listener";
 import { AppEnvironment } from "@/utils/backend/models";
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useEffectEvent, useState } from "react";
 import { JSX } from "react/jsx-runtime";
 import { AppContext, ExerciseOption } from "./AppContext";
 import { I18nSettingsContext } from "./I18nSettingsContext";
+import { useLoadingTask } from "@/hooks/useLoadingTask";
 
 export function AppProvider({
     children,
@@ -19,14 +20,11 @@ export function AppProvider({
     const [backendNotified, setBackendNotified] = useState(false);
     const [sessionsVersion, setSessionsVersion] = useState(0);
     const [rawCatalog, setRawCatalog] = useState<Record<number, number[]>>({});
+    const withLoading = useLoadingTask();
 
-    useEffect(() => {
-        const unregisterSessionsAdded = BackendListener.onSessionsAdded(() => {
-            setSessionsVersion((previous) => previous + 1);
-        });
-
+    const loadBackendData = useEffectEvent(() => {
         Promise.allSettled([
-            BackendClient.getEnvironment().then((env) => {
+            withLoading(BackendClient.getEnvironment()).then((env) => {
                 setEnvironment(env);
 
                 if (env == AppEnvironment.Release) {
@@ -36,12 +34,26 @@ export function AppProvider({
                 }
             }),
             // The exercises table is static, so it is fetched once
-            BackendClient.getExercisesCatalog()
+            withLoading(BackendClient.getExercisesCatalog())
                 .then(setRawCatalog)
                 .catch(() => console.warn("Could not load exercises catalog")),
         ]).then(() => {
             setBackendReady(true);
         });
+    });
+
+    const notifyFrontendReady = useEffectEvent(() => {
+        withLoading(BackendClient.notifyFrontendReady()).then(() => {
+            setBackendNotified(true);
+        });
+    });
+
+    useEffect(() => {
+        const unregisterSessionsAdded = BackendListener.onSessionsAdded(() => {
+            setSessionsVersion((previous) => previous + 1);
+        });
+
+        loadBackendData();
 
         return () => {
             unregisterSessionsAdded();
@@ -51,9 +63,7 @@ export function AppProvider({
     // The backend is notified once both this provider and the i18n one have loaded
     useEffect(() => {
         if (notifyBackend && backendReady && i18nReady) {
-            BackendClient.notifyFrontendReady().then(() => {
-                setBackendNotified(true);
-            });
+            notifyFrontendReady();
         }
     }, [notifyBackend, backendReady, i18nReady]);
 

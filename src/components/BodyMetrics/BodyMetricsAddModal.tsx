@@ -1,5 +1,6 @@
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
 import { BackendClient } from "@/utils/backend/client";
+import { useLoadingTask } from "@/hooks/useLoadingTask";
 import { BodyMetricListItem } from "@/utils/backend/models";
 import { useContext, useState } from "react";
 import {
@@ -35,6 +36,7 @@ type NumericField = Exclude<keyof BodyMetricsListItemForm, "date">;
 export function BodyMetricsAddModal({ latest, onClose }: Props) {
     const { translate, toKg, fromKg, getWeightUnit } =
         useContext(I18nSettingsContext);
+    const withLoading = useLoadingTask();
     const [data, setData] = useState<BodyMetricsListItemForm>(
         latest
             ? {
@@ -76,13 +78,15 @@ export function BodyMetricsAddModal({ latest, onClose }: Props) {
     };
 
     const onSave = () => {
-        BackendClient.addBodyMeasures({
-            date: Math.floor(data.date.getTime() / 1000),
-            weight: toKg(parseFloat(data.weight)),
-            fat_ratio: parseFloat(data.fat_ratio),
-            lean_mass: toKg(parseFloat(data.lean_mass)),
-            water_ratio: parseFloat(data.water_ratio),
-        }).then(() => {
+        withLoading(
+            BackendClient.addBodyMeasures({
+                date: Math.floor(data.date.getTime() / 1000),
+                weight: toKg(parseFloat(data.weight)),
+                fat_ratio: parseFloat(data.fat_ratio),
+                lean_mass: toKg(parseFloat(data.lean_mass)),
+                water_ratio: parseFloat(data.water_ratio),
+            }),
+        ).then(() => {
             onClose();
         });
     };

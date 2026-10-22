@@ -1,6 +1,6 @@
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
 import { WorkoutDetails } from "@/utils/backend/models";
-import { useContext, useEffect, useState } from "react";
+import { useContext, useState } from "react";
 import {
     Box,
     Dialog,
@@ -12,6 +12,7 @@ import {
 import CloseIcon from "@mui/icons-material/Close";
 import { BackendClient } from "@/utils/backend/client";
 import { useLoadingTask } from "@/hooks/useLoadingTask";
+import { useBackendEvent } from "@/hooks/useBackendEvent";
 import { WorkoutVolumeChart } from "./helpers/WorkoutVolumeChart";
 import { WorkoutActionsMenu } from "./helpers/WorkoutActionsMenu";
 import { BackendListener } from "@/utils/backend/listener";
@@ -54,15 +55,13 @@ export function WorkoutModal({
         setWorkout(initialWorkout);
     }
 
-    useEffect(() => {
-        return BackendListener.onAddedWorkoutSteps((names) => {
-            if (names.includes(initialWorkout.name)) {
-                BackendClient.getWorkoutDetails(initialWorkout.name).then(
-                    setWorkout,
-                );
-            }
-        });
-    }, [initialWorkout.name]);
+    useBackendEvent(BackendListener.onAddedWorkoutSteps, (names) => {
+        if (names.includes(initialWorkout.name)) {
+            withLoading(
+                BackendClient.getWorkoutDetails(initialWorkout.name),
+            ).then(setWorkout);
+        }
+    });
 
     const toggleEnabled = () => {
         withLoading(

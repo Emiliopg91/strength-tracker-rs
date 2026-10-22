@@ -5,7 +5,8 @@ import {
     Settings,
     WeightUnit,
 } from "@/utils/backend/models";
-import { useEffect, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
+import { useLoadingTask } from "@/hooks/useLoadingTask";
 import { JSX } from "react/jsx-runtime";
 import {
     DEFAULT_SETTINGS,
@@ -38,6 +39,7 @@ export function I18nSettingsProvider({
     children: JSX.Element;
 }): JSX.Element {
     const [i18nReady, setI18nReady] = useState(false);
+    const withLoading = useLoadingTask();
     const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
     const [translations, setTranslations] = useState<Record<string, string>>(
         {},
@@ -192,19 +194,23 @@ export function I18nSettingsProvider({
     };
 
     const refreshTranslations = () => {
-        BackendClient.getTranslations().then((translations) => {
+        withLoading(BackendClient.getTranslations()).then((translations) => {
             setTranslations(Object.freeze(translations));
         });
     };
 
-    useEffect(() => {
+    const loadSettings = useEffectEvent(() => {
         // Translations are resolved with the backend's language, so both are fetched at once
         Promise.allSettled([
-            BackendClient.getSettings().then(setSettings),
-            BackendClient.getTranslations().then(setTranslations),
+            withLoading(BackendClient.getSettings()).then(setSettings),
+            withLoading(BackendClient.getTranslations()).then(setTranslations),
         ]).then(() => {
             setI18nReady(true);
         });
+    });
+
+    useEffect(() => {
+        loadSettings();
     }, []);
 
     const value = {

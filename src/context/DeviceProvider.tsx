@@ -1,9 +1,10 @@
 import { BackendClient } from "@/utils/backend/client";
 import { BackendListener } from "@/utils/backend/listener";
 import { DeviceListItem } from "@/utils/backend/models";
-import { useEffect, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 import { JSX } from "react/jsx-runtime";
 import { DeviceContext } from "./DeviceContext";
+import { useLoadingTask } from "@/hooks/useLoadingTask";
 
 export function DeviceProvider({
     children,
@@ -16,6 +17,13 @@ export function DeviceProvider({
     const [registeredDevices, setRegisteredDevices] = useState<
         DeviceListItem[]
     >([]);
+    const withLoading = useLoadingTask();
+
+    const loadRegisteredDevices = useEffectEvent(() => {
+        withLoading(BackendClient.getRegisteredDevices()).then((devices) => {
+            setRegisteredDevices(devices);
+        });
+    });
 
     useEffect(() => {
         const unregisterConnection = BackendListener.onDeviceConnected(
@@ -40,9 +48,7 @@ export function DeviceProvider({
             },
         );
 
-        BackendClient.getRegisteredDevices().then((devices) => {
-            setRegisteredDevices(devices);
-        });
+        loadRegisteredDevices();
 
         return () => {
             unregisterConnection();

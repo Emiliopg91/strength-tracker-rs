@@ -80,16 +80,19 @@ export function SessionsList() {
         }
     };
 
-    const goToCompare = async () => {
-        const details = [];
-        for (const d of toCompare.toSorted((a, b) => a - b)) {
-            const frontDetails = SessionUtils.detailsFromBackend(
-                await BackendClient.getSessionDetails(d),
-                fromKg,
-            );
-            details.push(frontDetails);
-        }
-        setComparingSessions([details[0], details[1]]);
+    const goToCompare = () => {
+        withLoading(
+            Promise.all(
+                toCompare
+                    .toSorted((a, b) => a - b)
+                    .map((d) => BackendClient.getSessionDetails(d)),
+            ),
+        ).then(([first, second]) => {
+            setComparingSessions([
+                SessionUtils.detailsFromBackend(first, fromKg),
+                SessionUtils.detailsFromBackend(second, fromKg),
+            ]);
+        });
     };
 
     const [filter, filteredSessions] = useFilterList(sessions, (session) => {

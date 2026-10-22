@@ -6,6 +6,7 @@ import { useContext, useState } from "react";
 import { AppContext } from "@/context/AppContext";
 import { useBackendEvent } from "@/hooks/useBackendEvent";
 import { useBackendList } from "@/hooks/useBackendList";
+import { useLoadingTask } from "@/hooks/useLoadingTask";
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
 import "@/styles/Workouts/WorkoutLists.css";
 import { WorkoutStepsModal } from "./WorkoutStepsModal";
@@ -17,6 +18,7 @@ import { useFilterList } from "@/hooks/useFilterList";
 export function WorkoutsList() {
     const { sessionsVersion } = useContext(AppContext);
     const { translate, toKg, formatTimeDate } = useContext(I18nSettingsContext);
+    const withLoading = useLoadingTask();
 
     const [workouts, setWorkouts, refreshList] =
         useBackendList<WorkoutListItem>(
@@ -83,19 +85,19 @@ export function WorkoutsList() {
     });
 
     const getWorkoutDetails = (name: string) => {
-        BackendClient.getWorkoutDetails(name).then((details) => {
+        withLoading(BackendClient.getWorkoutDetails(name)).then((details) => {
             setWorkoutDetails(details);
         });
     };
 
     const openEditByName = (name: string) => {
-        BackendClient.getWorkoutDetails(name).then((workout) =>
+        withLoading(BackendClient.getWorkoutDetails(name)).then((workout) =>
             openEdit(workout, true),
         );
     };
 
     const openDuplicateByName = (name: string) => {
-        BackendClient.getWorkoutDetails(name).then((workout) => {
+        withLoading(BackendClient.getWorkoutDetails(name)).then((workout) => {
             openEdit(workout, false);
         });
     };

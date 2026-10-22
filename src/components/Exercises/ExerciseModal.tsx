@@ -1,7 +1,6 @@
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
 import { ExerciseDetails, ProgressionSuggestion } from "@/utils/backend/models";
-import { useContext, useEffect, useMemo, useState } from "react";
-import { debounce } from "lodash-es";
+import { useContext, useEffect, useEffectEvent, useState } from "react";
 import {
     Button,
     Dialog,
@@ -53,27 +52,24 @@ export function ExerciseModal({
     })();
     const loadingTask = useLoadingTask();
 
-    const fetchSuggestion = useMemo(
-        () =>
-            debounce((category: number, id: number) => {
-                BackendClient.getProgressionSuggestion(category, id).then(
-                    setSuggestion,
-                );
-            }, 200),
-        [],
-    );
+    const fetchSuggestion = useEffectEvent(() => {
+        loadingTask(
+            BackendClient.getProgressionSuggestion(
+                exercise.category,
+                exercise.id,
+            ),
+        ).then(setSuggestion);
+    });
 
-    useEffect(() => () => fetchSuggestion.cancel(), [fetchSuggestion]);
-
+    // Debounced so a burst of setting changes only fetches once
     useEffect(() => {
         if (!progression) {
-            fetchSuggestion.cancel();
             return;
         }
 
-        fetchSuggestion(exercise.category, exercise.id);
+        const timer = setTimeout(() => fetchSuggestion(), 200);
+        return () => clearTimeout(timer);
     }, [
-        fetchSuggestion,
         exercise.category,
         exercise.id,
         progression,
