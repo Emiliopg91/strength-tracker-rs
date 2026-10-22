@@ -29,6 +29,13 @@ export default function ExercisesSection({ exercises }: Props): JSX.Element {
                                             exercise.category +
                                             "_" +
                                             exercise.id,
+                                    )}{" "}
+                                    {exercise.unilateral && (
+                                        <>
+                                            {" (" +
+                                                translate("unilateral") +
+                                                ")"}
+                                        </>
                                     )}
                                 </h4>
                                 <div className="section-container">

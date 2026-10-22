@@ -13,6 +13,7 @@ export default function ContentTable({ data }: Props): JSX.Element {
         <PageContent>
             <h2>{translate("content_table")}</h2>
             <ol>
+                <li>{translate("notes_section")}</li>
                 {data.body_metrics.length > 0 && (
                     <li>{translate("summary")}</li>
                 )}

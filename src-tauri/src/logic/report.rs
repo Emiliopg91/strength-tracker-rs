@@ -35,10 +35,11 @@ pub async fn load_report(app: AppHandle, from: u32, to: u32) -> Result<(), Strin
     config.url = tauri::WebviewUrl::App(format!("{}?from={from}&to={to}", config.url).into());
 
     // Stays hidden: printing starts once the page calls `report_ready`
-    WebviewWindowBuilder::from_config(&app, &config)
+    let w = WebviewWindowBuilder::from_config(&app, &config)
         .map_err(|e| e.to_string())?
         .build()
         .map_err(|e| e.to_string())?;
+    w.show();
 
     Ok(())
 }

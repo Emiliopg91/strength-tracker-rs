@@ -586,3 +586,12 @@ apply:
 progression_suggested:
   en: Progression suggested
   es: Progresión sugerida
+unilateral_note_title:
+  en: Note on unilateral exercises
+  es: Nota sobre ejercicios unilaterales
+unilateral_note_body:
+  en: For unilateral exercises, the number of reps recorded per set is the sum of the reps performed with both sides of the body. For example, 24 reps equal 12 with each arm or leg, if the work was split evenly.
+  es: En los ejercicios unilaterales, el número de repeticiones registrado por serie corresponde a la suma de las repeticiones realizadas con ambos lados del cuerpo. Por ejemplo, 24 repeticiones equivalen a 12 con cada brazo o pierna, si el trabajo se ha repartido por igual.
+notes_section:
+  en: Notes
+  es: Notas

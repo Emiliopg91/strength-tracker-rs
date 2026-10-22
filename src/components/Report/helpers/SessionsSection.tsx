@@ -1,15 +1,19 @@
 import { JSX, useContext } from "react";
 import PageContent from "./PageContent";
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
-import { SessionDetails } from "@/utils/backend/models";
+import { ExerciseDetails, SessionDetails } from "@/utils/backend/models";
 import NoPageBreak from "./NoPageBreak";
 import { SessionUtils } from "@/utils/SessionUtils";
 
 type Props = {
     sessions: SessionDetails[];
+    exercises: ExerciseDetails[];
 };
 
-export default function SessionsSection({ sessions }: Props): JSX.Element {
+export default function SessionsSection({
+    sessions,
+    exercises: exercises_details,
+}: Props): JSX.Element {
     const { translate, formatTimeDate, formatDuration, fromKg, getWeightUnit } =
         useContext(I18nSettingsContext);
 
@@ -65,41 +69,76 @@ export default function SessionsSection({ sessions }: Props): JSX.Element {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {exercises.map((exercise) => (
-                                                <>
-                                                    {groupedSeries[
-                                                        exercise
-                                                    ].map(([, set], idx) => (
-                                                        <tr key={exercise}>
-                                                            {idx === 0 && (
-                                                                <td
-                                                                    rowSpan={
-                                                                        groupedSeries[
-                                                                            exercise
-                                                                        ].length
+                                            {exercises.map((exercise) => {
+                                                let name = translate(
+                                                    "exercise_" +
+                                                        exercise.replace(
+                                                            "-",
+                                                            "_",
+                                                        ),
+                                                );
+                                                if (
+                                                    exercises_details.find(
+                                                        (e) =>
+                                                            e.category +
+                                                                "-" +
+                                                                e.id ==
+                                                            exercise,
+                                                    )?.unilateral
+                                                ) {
+                                                    name =
+                                                        name +
+                                                        " (" +
+                                                        translate(
+                                                            "unilateral",
+                                                        ) +
+                                                        ")";
+                                                }
+
+                                                return (
+                                                    <>
+                                                        {groupedSeries[
+                                                            exercise
+                                                        ].map(
+                                                            ([, set], idx) => (
+                                                                <tr
+                                                                    key={
+                                                                        exercise
                                                                     }
                                                                 >
-                                                                    {translate(
-                                                                        "exercise_" +
-                                                                            exercise.replace(
-                                                                                "-",
-                                                                                "_",
-                                                                            ),
+                                                                    {idx ===
+                                                                        0 && (
+                                                                        <td
+                                                                            rowSpan={
+                                                                                groupedSeries[
+                                                                                    exercise
+                                                                                ]
+                                                                                    .length
+                                                                            }
+                                                                        >
+                                                                            {
+                                                                                name
+                                                                            }
+                                                                        </td>
                                                                     )}
-                                                                </td>
-                                                            )}
-                                                            <td>{set.reps}</td>
-                                                            <td>
-                                                                {fromKg(
-                                                                    set.weight,
-                                                                ) +
-                                                                    " " +
-                                                                    getWeightUnit()}
-                                                            </td>
-                                                        </tr>
-                                                    ))}
-                                                </>
-                                            ))}
+                                                                    <td>
+                                                                        {
+                                                                            set.reps
+                                                                        }
+                                                                    </td>
+                                                                    <td>
+                                                                        {fromKg(
+                                                                            set.weight,
+                                                                        ) +
+                                                                            " " +
+                                                                            getWeightUnit()}
+                                                                    </td>
+                                                                </tr>
+                                                            ),
+                                                        )}
+                                                    </>
+                                                );
+                                            })}
                                         </tbody>
                                     </table>
                                 </div>

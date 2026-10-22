@@ -86,7 +86,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/report.rs:134
+	// From src-tauri/src/logic/report.rs:135
 	public static getReportData(from: number, to: number): Promise<ReportData> {
 	  return BackendClient.inner_invoke("get_report_data", { from, to }); 
 	}
@@ -152,7 +152,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/report.rs:49
+	// From src-tauri/src/logic/report.rs:50
 	public static reportReady(): Promise<void> {
 	  return BackendClient.inner_invoke("report_ready"); 
 	}
