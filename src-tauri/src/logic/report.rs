@@ -39,7 +39,6 @@ pub async fn load_report(app: AppHandle, from: u32, to: u32) -> Result<(), Strin
         .map_err(|e| e.to_string())?
         .build()
         .map_err(|e| e.to_string())?;
-    w.show();
 
     Ok(())
 }
