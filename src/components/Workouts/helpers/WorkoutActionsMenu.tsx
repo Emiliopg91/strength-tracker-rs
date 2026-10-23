@@ -48,6 +48,10 @@ export function WorkoutActionsMenu({
         withLoading(BackendClient.sendToDevice(workoutName, serial));
     };
 
+    const saveAsPdf = () => {
+        withLoading(BackendClient.loadWorkoutPage(workoutName));
+    };
+
     return (
         <>
             <Tooltip title={translate("actions")}>
@@ -114,6 +118,14 @@ export function WorkoutActionsMenu({
                         </Popper>
                     </MenuItem>
                 )}
+                <MenuItem
+                    onClick={() => {
+                        closeMenus();
+                        saveAsPdf();
+                    }}
+                >
+                    <ListItemText>{translate("save_as_pdf")}</ListItemText>
+                </MenuItem>
                 {onOpenDuplicate && (
                     <MenuItem
                         onClick={() => {

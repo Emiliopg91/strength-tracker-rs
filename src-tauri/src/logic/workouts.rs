@@ -1,12 +1,16 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    path::PathBuf,
+    process::Command,
+};
 
 use rusqlite_orm::{
     dao::Repository,
     types::{order_by::OrderBy, value::Value, where_clause::Where},
 };
 use strength_tracker_rs_macros::traced_command;
-use tauri::{AppHandle, State};
-use tauri_plugin_log::log::info;
+use tauri::{AppHandle, Manager, State, WebviewWindow, WebviewWindowBuilder};
+use tauri_plugin_log::log::{error, info};
 
 use crate::{
     SettingsLock,
@@ -355,4 +359,111 @@ pub async fn save_workout(
             "Error saving workout",
         )),
     }
+}
+
+#[traced_command]
+#[tauri::command]
+pub async fn load_workout_page(app: AppHandle, workout: &str) -> Result<(), String> {
+    let mut config = app
+        .config()
+        .app
+        .windows
+        .iter()
+        .find(|w| w.label == "workout")
+        .expect("no hay ventana 'workout' en tauri.conf.json")
+        .clone();
+
+    config.url = tauri::WebviewUrl::App(format!("{}?workout={workout}", config.url).into());
+
+    WebviewWindowBuilder::from_config(&app, &config)
+        .map_err(|e| e.to_string())?
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+/// Called by the report window once everything is rendered and painted: prints it to PDF.
+#[traced_command]
+#[tauri::command]
+pub async fn workout_print_ready(window: WebviewWindow, workout: &str) -> Result<(), String> {
+    info!("Report ready, printing");
+    let res = print_to_pdf(window.clone(), workout).await;
+    // On success the window is closed once the print operation ends
+    if res.is_err() {
+        let _ = window.close();
+    }
+    res
+}
+
+async fn print_to_pdf(w: WebviewWindow, workout: &str) -> Result<(), String> {
+    use webkit2gtk::{PrintOperation, PrintOperationExt};
+
+    let lang = w.state::<SettingsLock>().read().unwrap().language;
+    let default_file = w
+        .path()
+        .download_dir()
+        .map_err(|e| e.to_string())?
+        .join(format!("{}.pdf", workout));
+
+    let output = tokio::process::Command::new("zenity")
+        .args([
+            "--file-selection",
+            "--save",
+            &format!("--filename={}", default_file.display()),
+            "--file-filter=PDF (*.pdf) | *.pdf",
+            &format!("--title={}", translate("select_file_save_pdf", lang)),
+        ])
+        .output()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // Cancelled by the user
+    if !output.status.success() {
+        let _ = w.close();
+        return Ok(());
+    }
+    let mut file = PathBuf::from(
+        String::from_utf8(output.stdout)
+            .map_err(|e| e.to_string())?
+            .trim_end_matches('\n'),
+    );
+    if file
+        .extension()
+        .is_none_or(|ext| !ext.eq_ignore_ascii_case("pdf"))
+    {
+        file.as_mut_os_string().push(".pdf");
+    }
+
+    let uri = format!("file://{}", file.display());
+    w.clone()
+        .with_webview(move |pw| {
+            let settings = gtk::PrintSettings::new();
+            // GTK registers its file backend under a localized name
+            settings.set_printer(&gtk::glib::dgettext(Some("gtk30"), "Print to File"));
+            settings.set(gtk::PRINT_SETTINGS_OUTPUT_FILE_FORMAT, Some("pdf"));
+            settings.set(gtk::PRINT_SETTINGS_OUTPUT_URI, Some(&uri));
+
+            let page_setup = gtk::PageSetup::new();
+            page_setup.set_paper_size(&gtk::PaperSize::new(Some(gtk::PAPER_NAME_A4)));
+            page_setup.set_top_margin(15.0, gtk::Unit::Mm);
+            page_setup.set_bottom_margin(15.0, gtk::Unit::Mm);
+            page_setup.set_left_margin(15.0, gtk::Unit::Mm);
+            page_setup.set_right_margin(15.0, gtk::Unit::Mm);
+
+            let op = PrintOperation::new(&pw.inner());
+            op.set_print_settings(&settings);
+            op.set_page_setup(&page_setup);
+            op.connect_failed(move |_, e| {
+                error!("PDF print failed: {e}");
+            });
+            // Emitted after `failed` too, so the hidden window is always released here
+            op.connect_finished(move |_| {
+                info!("PDF printed to {uri}");
+                let _ = Command::new("xdg-open").arg(&uri).status();
+                let _ = w.close();
+            });
+            op.print();
+        })
+        .map_err(|e| e.to_string())
 }

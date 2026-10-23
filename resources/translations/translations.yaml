@@ -601,3 +601,6 @@ unilateral_note_body:
 notes_section:
   en: Notes
   es: Notas
+save_as_pdf:
+  en: Save as PDF
+  es: Guardar como PDF

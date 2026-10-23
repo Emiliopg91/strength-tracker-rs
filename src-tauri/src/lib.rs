@@ -49,7 +49,10 @@ use crate::{
             _import_from_files, get_heatmap_data, get_session_details, get_sessions,
             import_from_files, save_session_changes,
         },
-        workouts::{get_workout_details, get_workout_list, save_workout, set_workout_status},
+        workouts::{
+            get_workout_details, get_workout_list, load_workout_page, save_workout,
+            set_workout_status, workout_print_ready,
+        },
     },
     udev::UdevManager,
     utils::{constants, single_instance::SingleInstance, translations::translate},
@@ -363,6 +366,8 @@ pub fn run(log_level: LevelFilter) {
             get_workout_details,
             set_workout_status,
             save_workout,
+            load_workout_page,
+            workout_print_ready,
             //Devices
             import_from_device,
             send_to_device,

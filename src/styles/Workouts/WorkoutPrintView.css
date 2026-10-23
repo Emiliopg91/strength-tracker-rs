@@ -1,0 +1,62 @@
+.workout-print {
+  --col-name-width: 300px;
+  --col-reps-width: 120px;
+  --col-weight-width: 100px;
+  --col-time-width: 100px;
+  --col-notes-width: 150px;
+
+  font-size: small;
+
+  #workout-notes {
+    margin-left: 20px;
+    margin-bottom: 20px;
+  }
+
+  fieldset {
+    margin-bottom: 10px;
+    padding: 0px;
+  }
+
+  /* Fixed layout only honors the column widths if the table has an explicit width,
+     otherwise it falls back to auto layout and treats them as hints */
+  table {
+    table-layout: fixed;
+    width: calc(
+      var(--col-name-width) + var(--col-reps-width) + var(--col-weight-width) +
+        var(--col-time-width) + var(--col-notes-width)
+    );
+    border-collapse: collapse;
+    border-style: hidden;
+  }
+
+  th,
+  td {
+    border: 1px solid #999;
+    padding: 4px 8px;
+    overflow-wrap: anywhere;
+  }
+
+  .col-name {
+    width: var(--col-name-width);
+  }
+
+  .col-reps {
+    width: var(--col-reps-width);
+  }
+
+  .col-weight {
+    width: var(--col-weight-width);
+  }
+
+  .col-time {
+    width: var(--col-time-width);
+  }
+
+  .col-notes {
+    width: var(--col-notes-width);
+  }
+
+  .centered {
+    text-align: center;
+  }
+}
