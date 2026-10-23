@@ -43,7 +43,9 @@ async fn open_device(serial: &str) -> Result<MtpDevice> {
         })
         .ok_or_else(|| MtpError::MissingDevice(serial.to_string()))?;
 
-    let device = MtpDevice::open_by_location(device_info.location_id)
+    let device = MtpDevice::builder()
+        .use_object_prop_list(false)
+        .open_by_location(device_info.location_id)
         .await
         .map_err(|e| MtpError::OpenDevice(device_info.location_id, e))?;
     info!(
