@@ -231,7 +231,7 @@ pub async fn get_workout_details(
 pub async fn set_workout_status(app: AppHandle, workout: &str, status: bool) -> Result<(), String> {
     let workout = workout.to_string();
     let res = run_blocking(app.clone(), move |database| {
-        Ok(database
+        database
             .run_in_transaction(|tx| {
                 let wk_cl = workout.clone();
 
@@ -256,7 +256,7 @@ pub async fn set_workout_status(app: AppHandle, workout: &str, status: bool) -> 
 
                 Ok(res?)
             })
-            .map_err(|e| e.to_string())?)
+            .map_err(|e| e.to_string())
     })
     .await;
 
