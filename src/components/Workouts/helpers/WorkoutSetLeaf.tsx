@@ -71,12 +71,14 @@ export function WorkoutSetLeaf({
         ) ?? undefined;
 
     const onTypeChange = (e: SelectChangeEvent<string>) => {
-        onChange({
-            ...leaf,
-            ex_cat: null,
-            ex_id: null,
-            kind: e.target.value as StepType,
-        });
+        switch (e.target.value as StepType) {
+            case StepType.Exercise:
+                onChange(WorkoutUtils.DEFAULT_EXERCISE);
+                break;
+            case StepType.Rest:
+                onChange(WorkoutUtils.DEFAULT_REST);
+                break;
+        }
     };
 
     const onLimitChange = (e: SelectChangeEvent<number>) => {

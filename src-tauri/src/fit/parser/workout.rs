@@ -152,7 +152,7 @@ impl WorkoutAccumulator {
 
         Ok(Workout {
             name: self.name,
-            suggest: true,
+            enabled: true,
             steps: self.steps,
             notes: self.notes,
         })

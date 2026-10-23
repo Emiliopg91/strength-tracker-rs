@@ -497,7 +497,7 @@ where
                             .or_ignore()
                             .item(&mut Workout {
                                 name: workout.name.clone(),
-                                suggest: true,
+                                enabled: true,
                                 notes: workout.notes.clone(),
                                 steps: Vec::new(),
                             })

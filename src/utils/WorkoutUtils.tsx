@@ -237,7 +237,7 @@ export class WorkoutUtils {
         time: null,
         ex_cat: null,
         ex_id: null,
-        reps: 1,
+        reps: 8,
         weight: 0,
         notes: "",
     };

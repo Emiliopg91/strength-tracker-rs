@@ -1,6 +1,5 @@
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
 import { ExerciseDetails, SessionSet } from "@/utils/backend/models";
-import { SessionUtils } from "@/utils/SessionUtils";
 import { useContext } from "react";
 import {
     CartesianGrid,
@@ -34,15 +33,11 @@ function ExerciseVolumeTooltip({
         date: number;
         weight: number;
         reps: number;
-        e1rm: number;
     };
     return (
         <div className="chart-tooltip">
             <div>
                 <b>{formatDate(data.date)}</b>
-            </div>
-            <div>
-                {translate("rm")}: {formatNumber(fromKg(data.e1rm), 1)}
             </div>
             <div>
                 {translate("weight")}: {formatNumber(fromKg(data.weight), 1)}
@@ -60,7 +55,6 @@ export function ExerciseVolumeChart({ series, exercise }: Props) {
         date: number;
         weight: number;
         reps: number;
-        e1rm: number;
     }[] = [];
 
     Object.keys(series).forEach((k) => {
@@ -76,7 +70,6 @@ export function ExerciseVolumeChart({ series, exercise }: Props) {
             date: date.getTime(),
             weight,
             reps: Math.floor(count / series[k].length),
-            e1rm: SessionUtils.maxE1rm(series[k], exercise.unilateral),
         });
     });
     chartData.sort((a, b) => a.date - b.date);
@@ -84,7 +77,7 @@ export function ExerciseVolumeChart({ series, exercise }: Props) {
     const minDate = Math.min(...dates);
     const maxDate = Math.max(...dates);
     const minWeight = Math.min(...chartData.map(({ weight }) => weight));
-    const maxWeight = Math.max(...chartData.map(({ e1rm }) => e1rm));
+    const maxWeight = Math.max(...chartData.map(({ weight }) => weight));
     const maxReps = Math.max(...chartData.map(({ reps }) => reps));
 
     return (
@@ -107,7 +100,7 @@ export function ExerciseVolumeChart({ series, exercise }: Props) {
                         yAxisId="left"
                         stroke="#fff"
                         width={0}
-                        domain={[minWeight / 2, maxWeight]}
+                        domain={[minWeight, maxWeight]}
                         tick={false}
                     />{" "}
                     <YAxis
@@ -117,16 +110,6 @@ export function ExerciseVolumeChart({ series, exercise }: Props) {
                         width={0}
                         tick={false}
                     />{" "}
-                    <Line
-                        yAxisId="left"
-                        type="monotone"
-                        name={translate("rm")}
-                        dataKey="e1rm"
-                        stroke="#f00"
-                        dot={{ fill: "#f00" }}
-                        activeDot={{ stroke: "#f0f0f000" }}
-                        isAnimationActive={false}
-                    />
                     <Line
                         yAxisId="left"
                         type="monotone"

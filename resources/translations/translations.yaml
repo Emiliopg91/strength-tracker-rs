@@ -61,6 +61,9 @@ ok_workout_save:
 ok_workout_send:
   en: Workout sent to device succesfully
   es: Entrenamiento enviado al dispositivo correctamente
+ok_workout_delete:
+  en: Workout deleted from device succesfully
+  es: Entrenamiento eliminado del dispositivo correctamente
 sessions:
   en: Sessions
   es: Sesiones
@@ -127,9 +130,9 @@ update_session:
 latest_session:
   en: Latest session
   es: Última sesión
-suggestions_enabled:
-  en: Show in suggestions
-  es: Mostrar en sugerencias
+enabled:
+  en: Enabled
+  es: Activado
 session_count:
   en: Session count
   es: Número de sesiones
@@ -577,6 +580,9 @@ error_applying_progression:
 apply_suggestion:
   en: Apply suggestion
   es: Aplicar sugerencia
+apply_progression_suggestions:
+  en: Apply progression suggestions
+  es: Aplicar sugerencias de progresión
 reps_range:
   en: Repetitions range
   es: Rango de repeticiones

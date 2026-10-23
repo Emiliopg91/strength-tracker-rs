@@ -1,4 +1,5 @@
 import { LeafStep, StepGroup, WorkoutUtils } from "@/utils/WorkoutUtils";
+import { StepType } from "@/utils/backend/models";
 import { WorkoutSetLeaf } from "./WorkoutSetLeaf";
 import {
     Box,
@@ -6,13 +7,15 @@ import {
     FormControl,
     IconButton,
     InputLabel,
+    ListItemText,
+    Menu,
     MenuItem,
     Select,
     SelectChangeEvent,
     Stack,
     Tooltip,
 } from "@mui/material";
-import { useContext, useId } from "react";
+import { useContext, useId, useState } from "react";
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
@@ -41,6 +44,9 @@ export function WorkoutSetGroup({
 }: Props) {
     const { translate } = useContext(I18nSettingsContext);
     const lapsLabelId = useId();
+    const [addMenuAnchor, setAddMenuAnchor] = useState<HTMLElement | null>(
+        null,
+    );
     const leafs = group.wrapped;
 
     const onLapChanged = (e: SelectChangeEvent<number>) => {
@@ -66,8 +72,13 @@ export function WorkoutSetGroup({
         setLeafs(leafs.filter((_, idx) => idx != i));
     };
 
-    const addStep = () => {
-        setLeafs([...leafs, structuredClone(WorkoutUtils.DEFAULT_EXERCISE)]);
+    const addStep = (kind: StepType) => {
+        setAddMenuAnchor(null);
+        const leaf =
+            kind == StepType.Rest
+                ? WorkoutUtils.DEFAULT_REST
+                : WorkoutUtils.DEFAULT_EXERCISE;
+        setLeafs([...leafs, structuredClone(leaf)]);
     };
 
     return (
@@ -143,10 +154,40 @@ export function WorkoutSetGroup({
                             </span>
                         </Tooltip>
                         <Tooltip title={translate("add_step")}>
-                            <IconButton onClick={addStep}>
+                            <IconButton
+                                onClick={(e) =>
+                                    setAddMenuAnchor(e.currentTarget)
+                                }
+                            >
                                 <AddCircleOutlineRoundedIcon />
                             </IconButton>
                         </Tooltip>
+                        <Menu
+                            anchorEl={addMenuAnchor}
+                            open={Boolean(addMenuAnchor)}
+                            onClose={() => setAddMenuAnchor(null)}
+                            anchorOrigin={{
+                                vertical: "bottom",
+                                horizontal: "right",
+                            }}
+                            transformOrigin={{
+                                vertical: "top",
+                                horizontal: "right",
+                            }}
+                        >
+                            <MenuItem
+                                onClick={() => addStep(StepType.Exercise)}
+                            >
+                                <ListItemText>
+                                    {translate("step_type_exercise")}
+                                </ListItemText>
+                            </MenuItem>
+                            <MenuItem onClick={() => addStep(StepType.Rest)}>
+                                <ListItemText>
+                                    {translate("step_type_rest")}
+                                </ListItemText>
+                            </MenuItem>
+                        </Menu>
                         <Tooltip title={translate("delete")}>
                             <span>
                                 <IconButton

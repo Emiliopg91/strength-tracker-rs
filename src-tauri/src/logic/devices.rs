@@ -1,5 +1,6 @@
 use std::{
     fs,
+    sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -170,6 +171,7 @@ async fn mtp_dev_check_and_sync(app: AppHandle, devices: &mut Vec<DeviceListItem
             }
 
             download_pending_workouts(&app, &dev).await;
+            delete_pending_workouts(&app, &dev).await;
             push_pending_workouts(&app, &dev).await;
         }
         let _ = app.emit("finish_loading", ());
@@ -193,8 +195,30 @@ pub async fn push_pending_to_connected(app: &AppHandle) {
     }
 }
 
+/// Delete the pending workouts of every currently connected device.
+pub async fn delete_pending_from_connected(app: &AppHandle) {
+    // Bound in its own statement so the MTP lock is released before pushing
+    let connected = MTP_CLIENT_INST.lock().await.get_connected_devices().await;
+    match connected {
+        Ok(devices) => {
+            for device in devices {
+                delete_pending_workouts(app, &device.serial_number).await;
+            }
+        }
+        Err(e) => error!("Error listing connected devices: {e}"),
+    }
+}
+
+/// Serializes pending pushes so concurrent triggers don't upload the same queue twice.
+static PUSH_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+/// Gives every upload its own temp dir, so concurrent sends of the same workout don't share a file.
+static UPLOAD_SEQ: AtomicU64 = AtomicU64::new(0);
+
 /// Uploads to `device` the workouts queued while it was disconnected, removing each queue entry once sent.
 async fn push_pending_workouts(app: &AppHandle, serial: &str) {
+    // Held for the whole run: a waiting caller re-reads the queue after this one has cleared it
+    let _guard = PUSH_LOCK.lock().await;
     let serial = serial.to_string();
     let serial_q = serial.clone();
     let pending = match run_blocking(app.clone(), move |db| {
@@ -202,6 +226,13 @@ async fn push_pending_workouts(app: &AppHandle, serial: &str) {
             Ok(WorkoutDeviceRepository::select()
                 .columns(&[workout_device::entity::columns::WORKOUT])
                 .where_(Where::And(vec![
+                    Where::InSub(
+                        workout_device::entity::columns::WORKOUT,
+                        WorkoutRepository::select()
+                            .distinct(&[workout::entity::columns::NAME])
+                            .where_(Where::Eq(workout::entity::columns::ENABLED, true.into()))
+                            .to_subquery(),
+                    ),
                     Where::Eq(
                         workout_device::entity::columns::DEVICE,
                         serial_q.clone().into(),
@@ -269,6 +300,94 @@ async fn push_pending_workouts(app: &AppHandle, serial: &str) {
         show_notification(NotificationDefinition {
             title: workout.to_string(),
             body: translate("ok_workout_send", lang),
+            kind: NotificationKind::Temporal,
+        });
+    }
+}
+
+/// Deletes from `device` the disabled workouts queued while it was disconnected, removing each queue entry once deleted.
+async fn delete_pending_workouts(app: &AppHandle, serial: &str) {
+    // Held for the whole run: a waiting caller re-reads the queue after this one has cleared it
+    let _guard = PUSH_LOCK.lock().await;
+    let serial = serial.to_string();
+    let serial_q = serial.clone();
+    let pending = match run_blocking(app.clone(), move |db| {
+        db.run_in_connection(|conn| {
+            Ok(WorkoutDeviceRepository::select()
+                .columns(&[workout_device::entity::columns::WORKOUT])
+                .where_(Where::And(vec![
+                    Where::InSub(
+                        workout_device::entity::columns::WORKOUT,
+                        WorkoutRepository::select()
+                            .distinct(&[workout::entity::columns::NAME])
+                            .where_(Where::Eq(workout::entity::columns::ENABLED, false.into()))
+                            .to_subquery(),
+                    ),
+                    Where::Eq(
+                        workout_device::entity::columns::DEVICE,
+                        serial_q.clone().into(),
+                    ),
+                    Where::Eq(workout_device::entity::columns::PENDING, true.into()),
+                ]))
+                .fetch_in(conn)?
+                .iter()
+                .filter_map(
+                    |r| match r.get(workout_device::entity::columns::WORKOUT.as_ref()) {
+                        Some(Value::Text(name)) => Some(name.clone()),
+                        _ => None,
+                    },
+                )
+                .collect::<Vec<_>>())
+        })
+    })
+    .await
+    {
+        Ok(pending) => pending,
+        Err(e) => {
+            error!("Error fetching pending workouts for deleting from {serial}: {e}");
+            return;
+        }
+    };
+    if pending.is_empty() {
+        return;
+    }
+
+    let lang = {
+        let state = app.state::<SettingsLock>();
+        let settings = state.read().unwrap();
+        settings.language
+    };
+    for workout in pending {
+        if let Err(e) = delete_workout_from_device(&workout, &serial).await {
+            error!("Error deleting workout '{workout}' from {serial}: {e}");
+            continue;
+        }
+
+        let device = serial.clone();
+        let wkt = workout.clone();
+        if let Err(e) = run_blocking(app.clone(), move |db| {
+            db.run_in_transaction(|tx| {
+                Ok(WorkoutDeviceRepository::update()
+                    .set(workout_device::entity::columns::PENDING, false.into())
+                    .where_(Where::And(vec![
+                        Where::Eq(workout_device::entity::columns::WORKOUT, wkt.clone().into()),
+                        Where::Eq(
+                            workout_device::entity::columns::DEVICE,
+                            device.clone().into(),
+                        ),
+                    ]))
+                    .execute_in(tx)?)
+            })
+        })
+        .await
+        {
+            error!("Error clearing pending deletion entry for {serial}: {e}");
+        }
+
+        info!("Workout '{workout}' deleted from device {serial}");
+        show_notification(NotificationDefinition {
+            title: workout.to_string(),
+            body: translate("ok_workout_delete", lang),
             kind: NotificationKind::Temporal,
         });
     }
@@ -521,10 +640,21 @@ async fn send_workout_to_device(
     .await
     .map_err(|e| e.to_string())?;
 
-    let path = std::env::temp_dir().join(workout.get_workout_file_name());
-    FitWriter::from(&workout)
-        .write(path.clone(), lang, weight_unit)
+    let dir = std::env::temp_dir().join(format!(
+        "{}-upload-{}-{}",
+        constants::MTP_TMP_DIR_PREFIX,
+        std::process::id(),
+        UPLOAD_SEQ.fetch_add(1, Ordering::Relaxed)
+    ));
+    tokio::fs::create_dir_all(&dir)
+        .await
         .map_err(|e| e.to_string())?;
+    // File name is kept as-is since it becomes the workout file name on the device
+    let path = dir.join(workout.get_workout_file_name());
+    if let Err(e) = FitWriter::from(&workout).write(path.clone(), lang, weight_unit) {
+        let _ = tokio::fs::remove_dir_all(&dir).await;
+        return Err(e.to_string());
+    }
 
     let upload = MTP_CLIENT_INST
         .lock()
@@ -533,9 +663,18 @@ async fn send_workout_to_device(
         .await
         .map_err(|e| e.to_string());
 
-    let _ = tokio::fs::remove_file(path).await;
+    let _ = tokio::fs::remove_dir_all(dir).await;
 
     upload
+}
+
+async fn delete_workout_from_device(workout: &str, serial: &str) -> Result<(), String> {
+    MTP_CLIENT_INST
+        .lock()
+        .await
+        .delete_workout(serial, &Workout::file_name_for(workout))
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Tauri command wrapper around `_import_from_device`; returns the number of sessions imported.

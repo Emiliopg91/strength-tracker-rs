@@ -20,21 +20,29 @@ export function WorkoutsList() {
     const { translate, toKg, formatTimeDate } = useContext(I18nSettingsContext);
     const withLoading = useLoadingTask();
 
+    const sortWorkouts = (workouts: WorkoutListItem[]): WorkoutListItem[] => {
+        return workouts.sort((a, b) => {
+            if (a.enabled && !b.enabled) {
+                return -1;
+            } else if (b.enabled && !a.enabled) {
+                return 1;
+            } else if (a.name.length > 0 && b.name.length > 0) {
+                return a.name.localeCompare(b.name);
+            } else {
+                if (a.name.length == 0) {
+                    return 1;
+                } else {
+                    return -1;
+                }
+            }
+        });
+    };
+
     const [workouts, setWorkouts, refreshList] =
         useBackendList<WorkoutListItem>(
             () =>
                 BackendClient.getWorkoutList().then((data) =>
-                    data.sort((a, b) => {
-                        if (a.name.length > 0 && b.name.length > 0) {
-                            return a.name.localeCompare(b.name);
-                        } else {
-                            if (a.name.length == 0) {
-                                return 1;
-                            } else {
-                                return -1;
-                            }
-                        }
-                    }),
+                    sortWorkouts(data),
                 ),
             [sessionsVersion],
         );
@@ -56,7 +64,7 @@ export function WorkoutsList() {
                     name: "",
                     avg_time: 0,
                     avg_volume: 0,
-                    suggest: true,
+                    enabled: true,
                     latest_session: 0,
                     session_count: 0,
                     sessions: [],
@@ -121,6 +129,19 @@ export function WorkoutsList() {
         }
     });
 
+    const changeEnabled = (workout: string, enabled: boolean) => {
+        setWorkouts((prev) =>
+            sortWorkouts(
+                prev.map((wk) => {
+                    if (wk.name == workout) {
+                        wk.enabled = enabled;
+                    }
+                    return wk;
+                }),
+            ),
+        );
+    };
+
     return (
         <>
             {filter}
@@ -168,6 +189,9 @@ export function WorkoutsList() {
                         onClose={() => setWorkoutDetails(undefined)}
                         onUpdate={setWorkoutState}
                         onOpenEdit={(workout) => openEdit(workout, true)}
+                        onEnabledChange={(enabled) =>
+                            changeEnabled(workoutDetails.name, enabled)
+                        }
                     />
                 )}
             </div>

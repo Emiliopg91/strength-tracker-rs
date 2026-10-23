@@ -1,4 +1,8 @@
-import { ExerciseDetails, ExerciseListItem } from "@/utils/backend/models";
+import {
+    ExerciseDetails,
+    ExerciseListItem,
+    ProgressionSuggestion,
+} from "@/utils/backend/models";
 import { ExerciseModal } from "./ExerciseModal";
 import { ExerciseRow } from "./helpers/ExerciseRow";
 import { useContext, useState } from "react";
@@ -9,6 +13,7 @@ import { I18nSettingsContext } from "@/context/I18nSettingsContext";
 import { useFilterList } from "@/hooks/useFilterList";
 import { useLoadingTask } from "@/hooks/useLoadingTask";
 import "@/styles/Exercises/ExercisesList.css";
+import { Button } from "@mui/material";
 
 export function ExercisesList() {
     const loadingTask = useLoadingTask();
@@ -30,13 +35,23 @@ export function ExercisesList() {
     const [exerciseDetails, setExerciseDetails] = useState<
         ExerciseDetails | undefined
     >(undefined);
+    const [suggestion, setSuggestion] = useState<ProgressionSuggestion | null>(
+        null,
+    );
+
+    const pendingSuggestions =
+        exercises.find((e) => e.progression) !== undefined;
 
     const getExerciseDetails = (category: number, id: number) => {
-        loadingTask(BackendClient.getExerciseDetails(category, id)).then(
-            (details) => {
-                setExerciseDetails(details);
-            },
-        );
+        loadingTask(
+            Promise.all([
+                BackendClient.getExerciseDetails(category, id),
+                BackendClient.getProgressionSuggestion(category, id),
+            ]),
+        ).then(([details, suggestion]) => {
+            setExerciseDetails(details);
+            setSuggestion(suggestion);
+        });
     };
 
     const appliedProgression = (exercise: ExerciseDetails) => {
@@ -56,6 +71,48 @@ export function ExercisesList() {
             formatDate(exercise.date),
         ];
     });
+
+    const applyProgressions = async () => {
+        const applied: ExerciseListItem[] = [];
+        try {
+            for (const exercise of exercises) {
+                if (!exercise.progression) {
+                    continue;
+                }
+
+                const progression = await loadingTask(
+                    BackendClient.getProgressionSuggestion(
+                        exercise.category,
+                        exercise.id,
+                    ),
+                );
+
+                if (progression) {
+                    await loadingTask(
+                        BackendClient.applyProgressionSuggestion(
+                            exercise.category,
+                            exercise.id,
+                            progression,
+                        ),
+                    );
+                    applied.push(exercise);
+                }
+            }
+        } catch (e) {
+            console.error("Error applying progression suggestions", e);
+        } finally {
+            // Reflect whatever was applied before a failure
+            setExercises((prev) =>
+                prev.map((e) =>
+                    applied.some(
+                        (a) => a.category == e.category && a.id == e.id,
+                    )
+                        ? { ...e, progression: false }
+                        : e,
+                ),
+            );
+        }
+    };
 
     return (
         <>
@@ -86,10 +143,24 @@ export function ExercisesList() {
                 </tbody>
             </table>
 
+            {pendingSuggestions && (
+                <div className="list-action-bar list-action-bar-row">
+                    <Button
+                        id="add-measure-button"
+                        variant="contained"
+                        className="full-width-button"
+                        onClick={applyProgressions}
+                    >
+                        {translate("apply_progression_suggestions")}
+                    </Button>
+                </div>
+            )}
+
             <div>
                 {exerciseDetails && (
                     <ExerciseModal
                         exercise={exerciseDetails}
+                        suggestion={suggestion}
                         onProgressionApplied={() => {
                             appliedProgression(exerciseDetails);
                         }}

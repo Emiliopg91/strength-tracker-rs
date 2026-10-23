@@ -96,6 +96,10 @@ impl ToFitMessages for Workout {
         typedef::File::WORKOUT
     }
 
+    fn file_key(&self) -> &str {
+        &self.name
+    }
+
     fn to_fit_messages(
         &self,
         lang: Languages,

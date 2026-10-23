@@ -21,6 +21,7 @@ type Props = {
     workout: WorkoutDetails;
     showEnable: boolean;
     onClose: () => void;
+    onEnabledChange?: (suggest: boolean) => void;
     onUpdate?: (name: string, status: boolean) => void;
     onOpenEdit: (workout: WorkoutDetails) => void;
     onOpenDuplicate?: (workout: WorkoutDetails) => void;
@@ -33,6 +34,7 @@ export function WorkoutModal({
     onUpdate,
     onOpenEdit,
     onOpenDuplicate,
+    onEnabledChange: onSuggestChange = undefined,
 }: Props) {
     const withLoading = useLoadingTask();
     const {
@@ -45,7 +47,7 @@ export function WorkoutModal({
         formatPercent,
     } = useContext(I18nSettingsContext);
     const [workout, setWorkout] = useState(initialWorkout);
-    const [enabled, setEnabled] = useState(initialWorkout.suggest);
+    const [enabled, setEnabled] = useState(initialWorkout.enabled);
 
     // Reset to the new prop during render instead of in an effect
     const [prevInitialWorkout, setPrevInitialWorkout] =
@@ -70,6 +72,7 @@ export function WorkoutModal({
             if (onUpdate) {
                 onUpdate(workout.name, !enabled);
             }
+            onSuggestChange!(!enabled);
             setEnabled((prev) => !prev);
         });
     };
@@ -89,12 +92,14 @@ export function WorkoutModal({
                                 workoutName={workout.name}
                                 onOpenEdit={() => onOpenEdit(workout)}
                                 onOpenDuplicate={() => onOpenDuplicate(workout)}
+                                send={workout.enabled}
                             />
                         )}
                         {!onOpenDuplicate && (
                             <WorkoutActionsMenu
                                 workoutName={workout.name}
                                 onOpenEdit={() => onOpenEdit(workout)}
+                                send={false}
                             />
                         )}
                     </Box>
@@ -167,18 +172,17 @@ export function WorkoutModal({
                                 )}
                                 {showEnable && (
                                     <tr>
-                                        <td>
-                                            {translate("suggestions_enabled")}:
-                                        </td>
+                                        <td>{translate("enabled")}:</td>
                                         <td>
                                             <Switch
                                                 checked={enabled}
                                                 onChange={toggleEnabled}
                                                 slotProps={{
                                                     input: {
-                                                        "aria-label": translate(
-                                                            "suggestions_enabled",
-                                                        ),
+                                                        "aria-label":
+                                                            translate(
+                                                                "enabled",
+                                                            ),
                                                     },
                                                 }}
                                             />

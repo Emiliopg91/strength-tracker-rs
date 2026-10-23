@@ -9,7 +9,7 @@ pub struct WorkoutListItem {
     pub sessions: u32,
     pub avg_time: u32,
     pub avg_load: u16,
-    pub suggest: bool,
+    pub enabled: bool,
     pub has_steps: bool,
 }
 
@@ -38,7 +38,7 @@ pub struct WorkoutDetails {
     pub avg_time: u32,
     pub avg_volume: f32,
     pub sessions: Vec<WorkoutSession>,
-    pub suggest: bool,
+    pub enabled: bool,
     pub notes: Option<String>,
     pub steps: Vec<WorkoutStep>,
 }

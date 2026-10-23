@@ -7,7 +7,7 @@ use crate::dao::workout_step::{self, WorkoutStep};
 #[primary_key(name)]
 pub struct Workout {
     pub name: String,
-    pub suggest: bool,
+    pub enabled: bool,
     pub notes: Option<String>,
 
     #[relationship((name, workout_step::entity::columns::WORKOUT))]
@@ -16,7 +16,12 @@ pub struct Workout {
 
 impl Workout {
     pub fn get_workout_file_name(&self) -> String {
-        let name = &self.name[..self.name.floor_char_boundary(31)];
+        Self::file_name_for(&self.name)
+    }
+
+    /// Device file name for the workout called `name`, truncated to 31 bytes like the device expects.
+    pub fn file_name_for(name: &str) -> String {
+        let name = &name[..name.floor_char_boundary(31)];
         format!("{}_workout.fit", name.replace(' ', "_"))
     }
 }

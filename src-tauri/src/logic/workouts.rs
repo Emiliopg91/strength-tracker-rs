@@ -22,8 +22,9 @@ use crate::{
         workouts::{WorkoutDetails, WorkoutListItem, WorkoutSession},
     },
     logic::{
-        devices::push_pending_to_connected, notifications::show_notification, report_error,
-        row_f64, row_int, row_text, run_blocking,
+        devices::{delete_pending_from_connected, push_pending_to_connected},
+        notifications::show_notification,
+        report_error, row_f64, row_int, row_text, run_blocking,
     },
     utils::translations::translate,
 };
@@ -62,7 +63,7 @@ pub async fn get_workout_list(
             let suggested_workouts = workouts
                 .iter()
                 .filter_map(|w| {
-                    if w.suggest {
+                    if w.enabled {
                         Some(w.name.clone())
                     } else {
                         None
@@ -98,7 +99,7 @@ pub async fn get_workout_list(
                 .into_iter()
                 .map(|wd| WorkoutListItem {
                     has_steps: with_steps.contains(&wd.0),
-                    suggest: suggested_workouts.contains(&wd.0),
+                    enabled: suggested_workouts.contains(&wd.0),
                     name: wd.0,
                     sessions: wd.1.0,
                     avg_time: wd.1.1.checked_div(wd.1.0).unwrap_or(0),
@@ -201,7 +202,7 @@ pub async fn get_workout_details(
                 avg_volume: volume / (sessions.len() as f32),
                 session_count: count,
                 sessions: session_list,
-                suggest: workout.suggest,
+                enabled: workout.enabled,
                 notes: workout.notes,
                 steps: workout.steps,
             };
@@ -229,15 +230,45 @@ pub async fn get_workout_details(
 #[tauri::command]
 pub async fn set_workout_status(app: AppHandle, workout: &str, status: bool) -> Result<(), String> {
     let workout = workout.to_string();
-    run_blocking(app, move |database| {
-        WorkoutRepository::update()
-            .where_(Where::Eq(workout::entity::columns::NAME, workout.into()))
-            .set(workout::entity::columns::SUGGEST, status.into())
-            .execute(database)
-            .map(|_| ())
-            .map_err(|e| e.to_string())
+    let res = run_blocking(app.clone(), move |database| {
+        Ok(database
+            .run_in_transaction(|tx| {
+                let wk_cl = workout.clone();
+
+                let res = WorkoutRepository::update()
+                    .where_(Where::Eq(
+                        workout::entity::columns::NAME,
+                        workout.clone().into(),
+                    ))
+                    .set(workout::entity::columns::ENABLED, status.into())
+                    .execute_in(tx)
+                    .map(|_| ());
+
+                if res.is_ok() {
+                    let _ = WorkoutDeviceRepository::update()
+                        .set(workout_device::entity::columns::PENDING, true.into())
+                        .where_(Where::Eq(
+                            workout_device::entity::columns::WORKOUT,
+                            wk_cl.into(),
+                        ))
+                        .execute_in(tx);
+                }
+
+                Ok(res?)
+            })
+            .map_err(|e| e.to_string())?)
     })
-    .await
+    .await;
+
+    if res.is_ok() {
+        if status {
+            push_pending_to_connected(&app).await;
+        } else {
+            delete_pending_from_connected(&app).await;
+        }
+    }
+
+    res
 }
 
 #[traced_command]

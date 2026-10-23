@@ -172,34 +172,34 @@ export enum WeightUnit {
 
 // From src-tauri/src/dao/workout.rs:8
 export interface Workout {
+  enabled: boolean;
   name: string;
   notes: string | null;
   steps: WorkoutStep[];
-  suggest: boolean;
 }
 
 // From src-tauri/src/dto/workouts.rs:34
 export interface WorkoutDetails {
   avg_time: number;
   avg_volume: number;
+  enabled: boolean;
   latest_session: number | null;
   name: string;
   notes: string | null;
   session_count: number;
   sessions: WorkoutSession[];
   steps: WorkoutStep[];
-  suggest: boolean;
 }
 
 // From src-tauri/src/dto/workouts.rs:6
 export interface WorkoutListItem {
   avg_load: number;
   avg_time: number;
+  enabled: boolean;
   has_steps: boolean;
   latest_session: number | null;
   name: string;
   sessions: number;
-  suggest: boolean;
 }
 
 // From src-tauri/src/dto/workouts.rs:17

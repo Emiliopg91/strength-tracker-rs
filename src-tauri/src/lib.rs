@@ -128,7 +128,7 @@ fn initialize() -> (DatabasePool, Settings) {
         .location(constants::DB_FILE.clone())
         .busy_timeout(Duration::from_secs(8))
         .connection_timeout(Duration::from_secs(5))
-        .pool_size(2)
+        .pool_size(5)
         .min_idle(2)
         .enable_foreign_keys()
         .journal_mode(JournalMode::Delete);

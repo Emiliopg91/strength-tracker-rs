@@ -1,6 +1,6 @@
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
 import { ExerciseDetails, ProgressionSuggestion } from "@/utils/backend/models";
-import { useContext, useEffect, useEffectEvent, useState } from "react";
+import { useContext, useEffect, useEffectEvent, useRef, useState } from "react";
 import {
     Button,
     Dialog,
@@ -19,12 +19,14 @@ import { BackendClient } from "@/utils/backend/client";
 
 type Props = {
     exercise: ExerciseDetails;
+    suggestion: ProgressionSuggestion | null;
     onProgressionApplied: () => void;
     onClose: () => void;
 };
 
 export function ExerciseModal({
     exercise,
+    suggestion: suggestionInput,
     onClose,
     onProgressionApplied,
 }: Props) {
@@ -34,7 +36,7 @@ export function ExerciseModal({
     const [unilateral, setUnilateral] = useState(exercise.unilateral);
     const [progression, setProgression] = useState(exercise.progression);
     const [suggestion, setSuggestion] = useState<ProgressionSuggestion | null>(
-        null,
+        suggestionInput,
     );
     const [minRange, setMinRange] = useState(exercise.min_range);
     const [maxRange, setMaxRange] = useState(exercise.max_range);
@@ -61,22 +63,26 @@ export function ExerciseModal({
         ).then(setSuggestion);
     });
 
+    const settingsKey = `${exercise.category}|${exercise.id}|${progression}|${unilateral}|${minRange}|${maxRange}`;
+    // Settings the current suggestion was fetched for; the initial one comes from the parent
+    const fetchedFor = useRef<string | null>(settingsKey);
+
     // Debounced so a burst of setting changes only fetches once
     useEffect(() => {
         if (!progression) {
+            fetchedFor.current = null;
+            return;
+        }
+        if (fetchedFor.current === settingsKey) {
             return;
         }
 
-        const timer = setTimeout(() => fetchSuggestion(), 200);
+        const timer = setTimeout(() => {
+            fetchedFor.current = settingsKey;
+            fetchSuggestion();
+        }, 200);
         return () => clearTimeout(timer);
-    }, [
-        exercise.category,
-        exercise.id,
-        progression,
-        unilateral,
-        minRange,
-        maxRange,
-    ]);
+    }, [settingsKey, progression]);
 
     const toggleUnilateral = () => {
         loadingTask(
@@ -259,23 +265,13 @@ export function ExerciseModal({
                         )}
                     </tbody>
                 </table>
-                {Object.keys(exercise.workouts).length > 1 && (
-                    <>
-                        <hr />
-                        <ExerciseVolumeChart
-                            series={exercise.series}
-                            exercise={exercise}
-                        />
-                        <br />
-                    </>
-                )}
-                <hr />
                 {progression && suggestion && (
                     <>
+                        <hr />
                         <table className="full-width">
                             <tbody>
                                 <tr>
-                                    <td style={{ paddingLeft: "15px" }}>
+                                    <td>
                                         <>
                                             {translate(
                                                 "exercises_requires_progression",
@@ -295,7 +291,6 @@ export function ExerciseModal({
                                     <td>
                                         <Button
                                             variant="contained"
-                                            style={{ marginLeft: "20px" }}
                                             onClick={applySuggestion}
                                         >
                                             {translate("apply_suggestion")}
@@ -304,13 +299,21 @@ export function ExerciseModal({
                                 </tr>
                             </tbody>
                         </table>
-                        <hr />
                     </>
                 )}
+                {Object.keys(exercise.workouts).length > 1 && (
+                    <>
+                        <hr />
+                        <ExerciseVolumeChart
+                            series={exercise.series}
+                            exercise={exercise}
+                        />
+                    </>
+                )}
+                <hr />
                 <table className="full-width">
                     <colgroup>
                         <col className="col-350" />
-                        <col />
                         <col />
                         <col />
                     </colgroup>
@@ -319,16 +322,10 @@ export function ExerciseModal({
                             <th>{translate("workout")}</th>
                             <th></th>
                             <th>{translate("series")}</th>
-                            <th>{translate("rm")}</th>
                         </tr>
                     </thead>
                     <tbody>
                         {exercise.workouts.map((workout) => {
-                            const e1rm = SessionUtils.maxE1rm(
-                                exercise.series[workout],
-                                unilateral,
-                            );
-
                             return exercise.series[workout].map(
                                 (serie, idx) => (
                                     <tr key={`${workout}-${idx}`}>
@@ -387,21 +384,6 @@ export function ExerciseModal({
                                                 " " +
                                                 getWeightUnit()}
                                         </td>
-
-                                        {idx === 0 && (
-                                            <td
-                                                className="divider-bottom"
-                                                rowSpan={
-                                                    exercise.series[workout]
-                                                        .length
-                                                }
-                                                style={{ textAlign: "center" }}
-                                            >
-                                                {formatNumber(fromKg(e1rm), 0) +
-                                                    " " +
-                                                    getWeightUnit()}
-                                            </td>
-                                        )}
                                     </tr>
                                 ),
                             );

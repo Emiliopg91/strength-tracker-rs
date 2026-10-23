@@ -138,6 +138,23 @@ async fn download_files(
     Ok(paths)
 }
 
+/// Deletes a file from MTP storage.
+async fn delete_file(storage: &Storage, obj: ObjectInfo) -> Result<()> {
+    info!("Deleting file {}...", obj.filename);
+    let t0 = Instant::now();
+    match storage.delete(obj.handle).await {
+        Ok(()) => {
+            let elapsed_secs = t0.elapsed().as_secs_f64();
+            info!("File deleted in {:.3}s", elapsed_secs,);
+            Ok(())
+        }
+        Err(e) => {
+            error!("Error deleting file {}: {}", obj.filename, e);
+            Err(MtpError::DeleteFile(obj.filename, e))
+        }
+    }
+}
+
 /// Uploads the local file `src` into the folder `parent` on `storage` and returns the new handle.
 /// MTP cannot overwrite, so any file with the same name in `parent` is deleted first.
 async fn upload_file(storage: &Storage, parent: ObjectHandle, src: &Path) -> Result<ObjectHandle> {
@@ -286,6 +303,47 @@ impl MtpClient {
             info!("Found {} files", objs.len());
 
             download_files(storage, objs, &dst_dir).await?;
+            Ok(())
+        }
+        .await;
+
+        let _ = device.close().await;
+        result
+    }
+
+    /// Deletes the workout file `file_name`, looking first in `Workouts` and then in `NewFiles`.
+    pub async fn delete_workout(&self, serial: &str, file_name: &str) -> Result<()> {
+        let device = open_device(serial).await?;
+
+        let result: Result<()> = async {
+            info!("Looking for .fit file '{}'", file_name);
+            let matches =
+                |o: &ObjectInfo| o.is_file() && o.filename.eq_ignore_ascii_case(file_name);
+
+            let storages = device.storages().await.map_err(MtpError::Storage)?;
+            let storage = storages
+                .first()
+                .ok_or_else(|| MtpError::NoStorageDevice(serial.to_string()))?;
+
+            let objs =
+                list_garmin_folder(storage, serial, constants::MTP_GARMIN_WORKOUTS_FOLDER).await?;
+
+            let mut obj = objs.into_iter().find(matches);
+
+            if obj.is_none() {
+                let objs =
+                    list_garmin_folder(storage, serial, constants::MTP_GARMIN_NEW_FILES_FOLDER)
+                        .await?;
+
+                obj = objs.into_iter().find(matches);
+            }
+
+            if let Some(obj) = obj {
+                delete_file(storage, obj).await?;
+            } else {
+                info!("Not found .fit file");
+            }
+
             Ok(())
         }
         .await;

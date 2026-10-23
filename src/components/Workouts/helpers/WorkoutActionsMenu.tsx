@@ -18,13 +18,15 @@ import { DeviceContext } from "@/context/DeviceContext";
 
 type Props = {
     workoutName: string;
+    dense?: boolean;
+    send: boolean;
     onOpenEdit: () => void;
     onOpenDuplicate?: () => void;
-    dense?: boolean;
 };
 
 export function WorkoutActionsMenu({
     workoutName,
+    send,
     onOpenEdit,
     onOpenDuplicate = undefined,
     dense = false,
@@ -72,42 +74,46 @@ export function WorkoutActionsMenu({
                 >
                     <ListItemText>{translate("edit_workout")}</ListItemText>
                 </MenuItem>
-                <MenuItem
-                    onClick={(e) => setSendMenuAnchor(e.currentTarget)}
-                    onMouseEnter={(e) => setSendMenuAnchor(e.currentTarget)}
-                    // The Popper is a React child, so hovering it doesn't count as leaving
-                    onMouseLeave={() => setSendMenuAnchor(null)}
-                    selected={Boolean(sendMenuAnchor)}
-                    disabled={registeredDevices.length == 0}
-                >
-                    <ListItemText>{translate("send_to")}</ListItemText>
-                    <ChevronRightIcon fontSize="small" />
-                    <Popper
-                        anchorEl={sendMenuAnchor}
-                        open={Boolean(sendMenuAnchor)}
-                        placement="left-start"
-                        sx={{ zIndex: (theme) => theme.zIndex.modal + 1 }}
+                {send && (
+                    <MenuItem
+                        onClick={(e) => setSendMenuAnchor(e.currentTarget)}
+                        onMouseEnter={(e) => setSendMenuAnchor(e.currentTarget)}
+                        // The Popper is a React child, so hovering it doesn't count as leaving
+                        onMouseLeave={() => setSendMenuAnchor(null)}
+                        selected={Boolean(sendMenuAnchor)}
+                        disabled={registeredDevices.length == 0}
                     >
-                        <Paper elevation={8}>
-                            <MenuList>
-                                {registeredDevices.map((device, idx) => (
-                                    <MenuItem
-                                        key={"dev-" + idx}
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            closeMenus();
-                                            sendToDevice(device.serial_number);
-                                        }}
-                                    >
-                                        {device.manufacturer +
-                                            " " +
-                                            device.model}
-                                    </MenuItem>
-                                ))}
-                            </MenuList>
-                        </Paper>
-                    </Popper>
-                </MenuItem>
+                        <ListItemText>{translate("send_to")}</ListItemText>
+                        <ChevronRightIcon fontSize="small" />
+                        <Popper
+                            anchorEl={sendMenuAnchor}
+                            open={Boolean(sendMenuAnchor)}
+                            placement="left-start"
+                            sx={{ zIndex: (theme) => theme.zIndex.modal + 1 }}
+                        >
+                            <Paper elevation={8}>
+                                <MenuList>
+                                    {registeredDevices.map((device, idx) => (
+                                        <MenuItem
+                                            key={"dev-" + idx}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                closeMenus();
+                                                sendToDevice(
+                                                    device.serial_number,
+                                                );
+                                            }}
+                                        >
+                                            {device.manufacturer +
+                                                " " +
+                                                device.model}
+                                        </MenuItem>
+                                    ))}
+                                </MenuList>
+                            </Paper>
+                        </Popper>
+                    </MenuItem>
+                )}
                 {onOpenDuplicate && (
                     <MenuItem
                         onClick={() => {

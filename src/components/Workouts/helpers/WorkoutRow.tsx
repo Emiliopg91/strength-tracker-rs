@@ -22,7 +22,7 @@ export function WorkoutRow({
     return (
         <tr
             className={
-                "clickable-row" + (workout.suggest ? "" : " workout-disabled")
+                "clickable-row" + (workout.enabled ? "" : " workout-disabled")
             }
             onClick={() => onSelect(workout.name)}
         >
@@ -44,6 +44,7 @@ export function WorkoutRow({
                         workoutName={workout.name}
                         onOpenEdit={() => onOpenEdit(workout.name)}
                         onOpenDuplicate={() => onOpenDuplicate(workout.name)}
+                        send={workout.enabled}
                         dense
                     />
                 )}
