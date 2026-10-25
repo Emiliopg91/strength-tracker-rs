@@ -166,7 +166,7 @@ pub async fn get_report_data(
                 .map(|set| (set.ex_cat, set.ex_id))
                 .collect();
 
-            let mut exercises = trained
+            let mut exercises: Vec<_> = trained
                 .into_iter()
                 .filter_map(|(category, id)| {
                     if let Ok(mut details) =
@@ -178,7 +178,7 @@ pub async fn get_report_data(
                         None
                     }
                 })
-                .collect::<Vec<_>>();
+                .collect();
             exercises
                 .sort_by_key(|e| translate(&format!("exercise_{}_{}", e.category, e.id), lang));
 

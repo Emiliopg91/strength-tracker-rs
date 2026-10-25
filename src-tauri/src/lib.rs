@@ -283,11 +283,11 @@ pub fn run(log_level: LevelFilter) {
                     } else if let WindowEvent::DragDrop(event) = event
                         && let tauri::DragDropEvent::Drop { paths, position: _ } = event
                     {
-                        let paths = paths
+                        let paths: Vec<_> = paths
                             .iter()
                             .filter(|p| p.display().to_string().to_lowercase().ends_with(".fit"))
                             .cloned()
-                            .collect::<Vec<_>>();
+                            .collect();
 
                         info!("Dropped {} .fit files: {:?}", paths.len(), paths);
 

@@ -127,11 +127,11 @@ fn gpx_track_and_lap_waypoints() {
     assert_eq!(points[1].elevation, None);
     assert!((points[1].point().y() - 90.0).abs() < 1e-9);
 
-    let names = gpx
+    let names: Vec<_> = gpx
         .waypoints
         .iter()
         .map(|w| w.name.clone().unwrap())
-        .collect::<Vec<_>>();
+        .collect();
     assert_eq!(names, vec!["1", "3"], "laps without position are skipped");
 }
 

@@ -213,10 +213,10 @@ pub fn fetch_session_details(
 
     let condition_set: HashSet<(_, _)> = session.sets.iter().map(|r| (r.ex_cat, r.ex_id)).collect();
 
-    let in_conditions = condition_set
+    let in_conditions: Vec<Vec<Value>> = condition_set
         .into_iter()
         .map(|(cat, id)| vec![cat.into(), id.into()])
-        .collect::<Vec<Vec<Value>>>();
+        .collect();
 
     let exercises = if in_conditions.is_empty() {
         Vec::new()
@@ -271,11 +271,7 @@ pub async fn save_session_changes(
                     Where::Eq(entity::columns::SESSION, details.timestamp.into()),
                     Where::In(
                         entity::columns::IDX,
-                        details
-                            .sets
-                            .iter()
-                            .map(|s| s.idx.into())
-                            .collect(),
+                        details.sets.iter().map(|s| s.idx.into()).collect(),
                     ),
                 ]))
                 .fetch_in(tx)?
@@ -409,7 +405,7 @@ where
     let mut success = Vec::new();
     let mut handled_exercises = HashSet::new();
 
-    let mut sessions = files
+    let mut sessions: Vec<_> = files
         .par_iter()
         .filter_map(|file| {
             info!("Parsing session file {}", file.as_ref().display());
@@ -443,7 +439,7 @@ where
                 }
             }
         })
-        .collect::<Vec<_>>();
+        .collect();
 
     sessions.sort_by_key(|s| s.0.date);
 
@@ -635,7 +631,7 @@ pub fn update_pending_geolocation(app: &AppHandle, db: &DatabasePool) {
             .where_(Where::Eq(session::entity::columns::NAME, "".into()))
             .to_subquery();
 
-        let pending = AdditionalDataRepository::select()
+        let pending: Vec<_> = AdditionalDataRepository::select()
             .columns(&[
                 additional_data::entity::columns::SESSION,
                 additional_data::entity::columns::COORDINATES,
@@ -659,7 +655,7 @@ pub fn update_pending_geolocation(app: &AppHandle, db: &DatabasePool) {
                 }
                 add_data
             })
-            .collect::<Vec<_>>();
+            .collect();
 
         Ok(pending)
     }) {

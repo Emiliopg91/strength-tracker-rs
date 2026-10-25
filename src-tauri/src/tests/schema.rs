@@ -29,14 +29,14 @@ fn schema_version_matches_last_ddl() {
 fn schema_ddls_are_sorted_with_hooks_on_their_migration() {
     let ddls = schema_ddls();
 
-    let versions = ddls.iter().map(|d| d.version).collect::<Vec<_>>();
+    let versions: Vec<_> = ddls.iter().map(|d| d.version).collect();
     assert_eq!(versions, (1..=versions.len() as u16).collect::<Vec<_>>());
 
-    let with_hooks = ddls
+    let with_hooks: Vec<_> = ddls
         .iter()
         .filter(|d| d.update_fn.is_some())
         .map(|d| d.version)
-        .collect::<Vec<_>>();
+        .collect();
     assert!(with_hooks.is_empty());
 }
 

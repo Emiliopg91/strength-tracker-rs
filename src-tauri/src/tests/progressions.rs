@@ -72,7 +72,7 @@ fn program(db: &DatabasePool, exercise: (u16, u16), weight: f32, reps: u16) {
             })
             .execute_in(tx)?;
 
-        let mut steps = (0..3)
+        let mut steps: Vec<_> = (0..3)
             .map(|idx| {
                 WorkoutStep::exercise(
                     &name,
@@ -85,7 +85,7 @@ fn program(db: &DatabasePool, exercise: (u16, u16), weight: f32, reps: u16) {
                     None,
                 )
             })
-            .collect::<Vec<_>>();
+            .collect();
         let mut insert = WorkoutStepRepository::insert();
         for step in &mut steps {
             insert = insert.item(step);

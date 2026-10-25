@@ -74,7 +74,7 @@ impl TryFrom<FitParser> for Session {
         })?;
 
         let mut serie_idx = 0;
-        let mut series = series_data
+        let mut series: Vec<_> = series_data
             .into_iter()
             .map(|(idx, reps, weight, duration)| {
                 let res = if let Some(exercise) = exercises.get(idx)
@@ -107,7 +107,7 @@ impl TryFrom<FitParser> for Session {
                 serie_idx += 1;
                 res
             })
-            .collect::<Vec<_>>();
+            .collect();
 
         // Drop trailing rest sets while the last two are both rests
         while let [.., a, b] = series.as_slice()

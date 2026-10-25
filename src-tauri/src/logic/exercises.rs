@@ -171,7 +171,7 @@ pub fn fetch_exercise_details(
         conditions.push(Where::Lte(session::entity::columns::DATE, to.into()));
     }
 
-    let workouts = SessionRepository::select()
+    let workouts: HashMap<_, _> = SessionRepository::select()
         .columns(&[
             session::entity::columns::DATE,
             session::entity::columns::NAME,
@@ -185,7 +185,7 @@ pub fn fetch_exercise_details(
                 row_text(s, session::entity::columns::NAME.as_ref()),
             )
         })
-        .collect::<HashMap<_, _>>();
+        .collect();
 
     let mut last_session = None;
     let mut ex_str = String::new();
@@ -442,7 +442,7 @@ pub fn fetch_progression_suggestion(
         .limit(1)
         .to_subquery();
 
-    let sets = SetRepository::select()
+    let sets: Vec<_> = SetRepository::select()
         .columns(&[set::entity::columns::WEIGHT, set::entity::columns::REPS])
         .where_(Where::And(vec![
             Where::Eq(set::entity::columns::EX_CAT, category.into()),
@@ -457,7 +457,7 @@ pub fn fetch_progression_suggestion(
                 row_int(r, set::entity::columns::REPS.as_ref()) as u16,
             )
         })
-        .collect::<Vec<_>>();
+        .collect();
 
     let Some(&(weight, _)) = sets.first() else {
         return Ok(None);
@@ -466,23 +466,23 @@ pub fn fetch_progression_suggestion(
         return Ok(None);
     }
 
-    let range = exercise
+    let range: Vec<_> = exercise
         .reps
         .split('-')
         .filter_map(|s| s.parse::<u16>().ok())
-        .collect::<Vec<_>>();
+        .collect();
     if range.is_empty() {
         return Ok(None);
     }
 
     // Index of the highest range step reached by each set (first one if below it); every set must share it
-    let brackets = sets
+    let brackets: Vec<_> = sets
         .iter()
         .map(|&(_, reps)| {
             let reps = if exercise.unilateral { reps / 2 } else { reps };
             range.iter().rposition(|&r| reps >= r).unwrap_or(0)
         })
-        .collect::<Vec<_>>();
+        .collect();
     if brackets.iter().any(|&b| b != brackets[0]) {
         return Ok(None);
     }

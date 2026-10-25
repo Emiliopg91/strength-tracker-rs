@@ -7,7 +7,7 @@ use tauri_plugin_log::log::LevelFilter;
 
 /// Binary entrypoint: handles the debug-only `--unwrap` dump mode, sets up env vars, and hands off to `run()`.
 fn main() {
-    let args = std::env::args().collect::<Vec<_>>();
+    let args: Vec<_> = std::env::args().collect();
 
     if args.len() > 1 {
         match args.get(1).unwrap().as_str() {

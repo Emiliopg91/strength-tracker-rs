@@ -43,10 +43,10 @@ pub async fn get_workout_list(
     info!("Getting workouts list...");
     let res = run_blocking(app, move |database| {
         database.run_in_connection(|conn| {
-            let workouts = WorkoutRepository::select()
+            let workouts: Vec<_> = WorkoutRepository::select()
                 .fetch_in(conn)?
                 .into_iter()
-                .collect::<Vec<_>>();
+                .collect();
 
             let sessions = SessionRepository::select()
                 .columns(&[
@@ -64,7 +64,7 @@ pub async fn get_workout_list(
                 workout_stats.insert(w.name.clone(), (0, 0, None, 0_u32));
             });
 
-            let suggested_workouts = workouts
+            let suggested_workouts: HashSet<_> = workouts
                 .iter()
                 .filter_map(|w| {
                     if w.enabled {
@@ -73,7 +73,7 @@ pub async fn get_workout_list(
                         None
                     }
                 })
-                .collect::<HashSet<_>>();
+                .collect();
 
             sessions.iter().for_each(|s| {
                 let entry = workout_stats
@@ -87,7 +87,7 @@ pub async fn get_workout_list(
                 entry.3 += row_int(s, entity::columns::TRAINING_LOAD.as_ref()) as u32
             });
 
-            let with_steps = WorkoutStepRepository::select()
+            let with_steps: HashSet<_> = WorkoutStepRepository::select()
                 .distinct(&[workout_step::entity::columns::WORKOUT])
                 .fetch_in(conn)?
                 .iter()
@@ -97,9 +97,9 @@ pub async fn get_workout_list(
                         _ => None,
                     },
                 )
-                .collect::<HashSet<_>>();
+                .collect();
 
-            let mut res = workout_stats
+            let mut res: Vec<_> = workout_stats
                 .into_iter()
                 .map(|wd| WorkoutListItem {
                     has_steps: with_steps.contains(&wd.0),
@@ -110,7 +110,7 @@ pub async fn get_workout_list(
                     avg_load: wd.1.3.checked_div(wd.1.0).unwrap_or(0) as u16,
                     latest_session: wd.1.2,
                 })
-                .collect::<Vec<_>>();
+                .collect();
 
             res.sort_by(|a, b| a.name.cmp(&b.name));
 
