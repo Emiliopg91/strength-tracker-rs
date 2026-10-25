@@ -120,7 +120,7 @@ pub fn fetch_sessions(
             }
             r
         })
-        .collect::<Vec<_>>())
+        .collect())
 }
 
 /// Maps every session that has sets (within `[min_date, max_date]`, each bound optional) to whether any of them is a personal record.
@@ -275,7 +275,7 @@ pub async fn save_session_changes(
                             .sets
                             .iter()
                             .map(|s| s.idx.into())
-                            .collect::<Vec<_>>(),
+                            .collect(),
                     ),
                 ]))
                 .fetch_in(tx)?
@@ -459,7 +459,7 @@ where
             .fetch_in(tx)?
             .iter()
             .map(|row| row_int(row, session::entity::columns::DATE.as_ref()) as u32)
-            .collect::<HashSet<_>>()
+            .collect()
     };
     let mut handled_workouts = HashSet::new();
 

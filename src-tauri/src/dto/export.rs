@@ -45,7 +45,7 @@ impl Export {
                 .fetch_in(conn)?
                 .into_iter()
                 .map(LapExport::from)
-                .collect::<Vec<_>>();
+                .collect();
 
             let mut additional_datas: HashMap<u32, AdditionalData> = HashMap::new();
             AdditionalDataRepository::select()
@@ -75,7 +75,7 @@ impl Export {
 
                     SessionExport::from((&session, add_data, serie))
                 })
-                .collect::<Vec<_>>();
+                .collect();
 
             let exercises = used_exercises
                 .into_iter()

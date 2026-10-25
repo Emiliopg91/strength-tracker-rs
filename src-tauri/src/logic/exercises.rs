@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use rusqlite_orm::{
     dao::Repository,
     errors::DatabaseError,
-    types::{order_by::OrderBy, value::Value, where_clause::Where},
+    types::{order_by::OrderBy, where_clause::Where},
 };
 use strength_tracker_rs_macros::traced_command;
 use tauri::{AppHandle, State};
@@ -54,7 +54,7 @@ pub async fn get_exercises(
                     ],
                     prs.iter()
                         .map(|e| vec![e.ex_cat.into(), e.ex_id.into()])
-                        .collect::<Vec<Vec<Value>>>(),
+                        .collect(),
                 )]))
                 .fetch_in(conn)?;
             let mut suggested_progressions = Vec::new();
