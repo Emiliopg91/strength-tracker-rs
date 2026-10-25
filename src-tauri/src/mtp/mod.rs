@@ -314,10 +314,10 @@ impl MtpClient {
     }
 
     /// Deletes the workout file `file_name`, looking first in `Workouts` and then in `NewFiles`.
-    pub async fn delete_workout(&self, serial: &str, file_name: &str) -> Result<()> {
+    pub async fn delete_workout(&self, serial: &str, file_name: &str) -> Result<bool> {
         let device = open_device(serial).await?;
 
-        let result: Result<()> = async {
+        let result: Result<bool> = async {
             info!("Looking for .fit file '{}'", file_name);
             let matches =
                 |o: &ObjectInfo| o.is_file() && o.filename.eq_ignore_ascii_case(file_name);
@@ -342,11 +342,11 @@ impl MtpClient {
 
             if let Some(obj) = obj {
                 delete_file(storage, obj).await?;
+                Ok(true)
             } else {
                 info!("Not found .fit file");
+                Ok(false)
             }
-
-            Ok(())
         }
         .await;
 

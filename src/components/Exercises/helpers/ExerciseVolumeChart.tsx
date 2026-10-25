@@ -106,7 +106,7 @@ export function ExerciseVolumeChart({ series, exercise }: Props) {
                     <YAxis
                         yAxisId="right"
                         stroke="#fff"
-                        domain={[exercise.min_range / 1.3, maxReps]}
+                        domain={[parseInt(exercise.reps_range) / 1.3, maxReps]}
                         width={0}
                         tick={false}
                     />{" "}
@@ -131,6 +131,7 @@ export function ExerciseVolumeChart({ series, exercise }: Props) {
                         isAnimationActive={false}
                     />
                     <Tooltip
+                        isAnimationActive={false}
                         content={(props) => (
                             <ExerciseVolumeTooltip {...props} />
                         )}

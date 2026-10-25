@@ -5,7 +5,6 @@ import {
     Area,
     CartesianGrid,
     ComposedChart,
-    Legend,
     Line,
     ResponsiveContainer,
     Tooltip,
@@ -116,9 +115,9 @@ export function WorkloadChart({ workload, minDate }: Props) {
                         activeDot={false}
                     />
                     <Tooltip
+                        isAnimationActive={false}
                         content={(props) => <WorkloadTooltip {...props} />}
                     />
-                    <Legend />
                 </ComposedChart>
             </ResponsiveContainer>
         </div>

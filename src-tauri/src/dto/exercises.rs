@@ -40,8 +40,7 @@ pub struct ExerciseDetails {
     pub series: HashMap<String, Vec<SessionSet>>,
     pub pr_date: u32,
     pub progression: bool,
-    pub min_range: u16,
-    pub max_range: u16,
+    pub reps_range: String,
 }
 
 impl From<&Exercise> for ExerciseDetails {
@@ -56,8 +55,7 @@ impl From<&Exercise> for ExerciseDetails {
             pr_date: 0,
             unilateral: value.unilateral,
             progression: value.progression,
-            min_range: value.min_range,
-            max_range: value.max_range,
+            reps_range: value.reps.clone(),
         }
     }
 }

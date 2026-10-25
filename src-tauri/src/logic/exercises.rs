@@ -374,13 +374,12 @@ pub async fn set_exercise_reps_range(
     settings: State<'_, SettingsLock>,
     category: u16,
     id: u16,
-    min: u16,
-    max: u16,
+    reps: &str,
 ) -> Result<(), String> {
+    let reps = reps.to_string();
     let res: Result<_, String> = run_blocking(app, move |database| {
         ExerciseRepository::update()
-            .set(exercise::entity::columns::MIN_RANGE, min.into())
-            .set(exercise::entity::columns::MAX_RANGE, max.into())
+            .set(exercise::entity::columns::REPS, reps.into())
             .where_(Where::And(vec![
                 Where::Eq(exercise::entity::columns::CATEGORY, category.into()),
                 Where::Eq(exercise::entity::columns::ID, id.into()),
@@ -467,58 +466,37 @@ pub fn fetch_progression_suggestion(
         return Ok(None);
     }
 
-    let min_rng = exercise.min_range;
-    let mid_rng = (exercise.min_range + exercise.max_range) / 2;
-    let max_rng = exercise.max_range;
+    let range = exercise
+        .reps
+        .split('-')
+        .filter_map(|s| s.parse::<u16>().ok())
+        .collect::<Vec<_>>();
+    if range.is_empty() {
+        return Ok(None);
+    }
 
-    // Rep bracket reached by each set (8, 10, 12 or 0 below 8); every set must share it
+    // Index of the highest range step reached by each set (first one if below it); every set must share it
     let brackets = sets
         .iter()
         .map(|&(_, reps)| {
             let reps = if exercise.unilateral { reps / 2 } else { reps };
-            if reps >= max_rng {
-                max_rng
-            } else if reps >= mid_rng {
-                mid_rng
-            } else {
-                min_rng
-            }
+            range.iter().rposition(|&r| reps >= r).unwrap_or(0)
         })
-        .collect::<Vec<u16>>();
+        .collect::<Vec<_>>();
     if brackets.iter().any(|&b| b != brackets[0]) {
         return Ok(None);
     }
 
-    let suggestion = match brackets[0] {
-        b if b == max_rng => Some(ProgressionSuggestion {
-            weight: weight + if exercise.unilateral { 1_f32 } else { 2_f32 },
-            reps: if exercise.unilateral {
-                min_rng * 2
-            } else {
-                min_rng
-            },
-        }),
-        b if b == mid_rng => Some(ProgressionSuggestion {
-            weight,
-            reps: if exercise.unilateral {
-                max_rng * 2
-            } else {
-                max_rng
-            },
-        }),
-        b if b == min_rng => Some(ProgressionSuggestion {
-            weight,
-            reps: if exercise.unilateral {
-                mid_rng * 2
-            } else {
-                mid_rng
-            },
-        }),
-        _ => None,
+    let (weight, reps) = match brackets[0] {
+        i if i == range.len() - 1 => (
+            weight + if exercise.unilateral { 1_f32 } else { 2_f32 },
+            range[0],
+        ),
+        i => (weight, range[i + 1]),
     };
-
-    let Some(suggestion) = suggestion else {
-        return Ok(None);
+    let suggestion = ProgressionSuggestion {
+        weight,
+        reps: if exercise.unilateral { reps * 2 } else { reps },
     };
 
     let pending = WorkoutStepRepository::select()

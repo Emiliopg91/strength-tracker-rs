@@ -1,12 +1,12 @@
 import { AppContext } from "@/context/AppContext";
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
 import { BackendClient } from "@/utils/backend/client";
-import { WorkoutDetails } from "@/utils/backend/models";
+import { ExerciseListItem, WorkoutDetails } from "@/utils/backend/models";
 import { LeafStep, StepGroup, WorkoutUtils } from "@/utils/WorkoutUtils";
 import { JSX, useContext, useEffect, useState } from "react";
+import NoPageBreak from "@/components/Report/helpers/NoPageBreak";
 
 import "@/styles/Workouts/WorkoutPrintView.css";
-import NoPageBreak from "../Report/helpers/NoPageBreak";
 
 type Props = {
     workout: string;
@@ -19,27 +19,28 @@ export default function WorkoutPrintView({
     const { translate, fromKg, formatDuration, formatNumber, getWeightUnit } =
         useContext(I18nSettingsContext);
     const [workout, setWorkout] = useState<WorkoutDetails>();
+    const [exercises, setExercises] = useState<ExerciseListItem[]>();
 
     useEffect(() => {
         if (!appReady) return;
-        BackendClient.getWorkoutDetails(workout_name).then((data) => {
-            setWorkout(data);
-        });
+        BackendClient.getWorkoutDetails(workout_name).then(setWorkout);
+        BackendClient.getExercises().then(setExercises);
     }, [appReady, workout_name]);
 
     useEffect(() => {
-        if (!workout) return;
+        if (!workout || !exercises) return;
         (async () => {
             await document.fonts.ready;
             await BackendClient.workoutPrintReady(workout.name);
         })();
-    }, [workout]);
+    }, [workout, exercises]);
 
-    if (!workout) {
+    if (!workout || !exercises) {
         return <></>;
     }
 
     const steps = WorkoutUtils.parseWorkoutSteps(workout.steps, fromKg);
+    const unilaterals = exercises?.filter((e) => e.unilateral);
 
     return (
         <div className="workout-print">
@@ -49,6 +50,7 @@ export default function WorkoutPrintView({
                 if (WorkoutUtils.isStepGroup(step)) {
                     return groupToHtml(
                         step,
+                        unilaterals,
                         translate,
                         formatDuration,
                         formatNumber,
@@ -59,6 +61,7 @@ export default function WorkoutPrintView({
                     return leafToHtml(
                         idx,
                         step,
+                        unilaterals,
                         translate,
                         formatDuration,
                         formatNumber,
@@ -73,6 +76,7 @@ export default function WorkoutPrintView({
 
 function groupToHtml(
     group: StepGroup,
+    unilaterals: ExerciseListItem[],
     translate: (lit: string) => string,
     formatDuration: (time: number) => string,
     formatNumber: (time: number, dec: number) => string,
@@ -109,6 +113,7 @@ function groupToHtml(
                             leafToHtml(
                                 idx,
                                 leaf,
+                                unilaterals,
                                 translate,
                                 formatDuration,
                                 formatNumber,
@@ -126,6 +131,7 @@ function groupToHtml(
 function leafToHtml(
     idx: number,
     leaf: LeafStep,
+    unilaterals: ExerciseListItem[],
     translate: (lit: string) => string,
     formatDuration: (time: number) => string,
     formatNumber: (time: number, dec: number) => string,
@@ -148,6 +154,10 @@ function leafToHtml(
             </tr>
         );
     } else {
+        const unilateral =
+            unilaterals.find(
+                (e) => e.category == leaf.ex_cat && e.id == leaf.ex_id,
+            ) !== undefined;
         return (
             <tr key={idx}>
                 <td>
@@ -158,7 +168,12 @@ function leafToHtml(
                     </b>
                 </td>
                 <td className="centered">
-                    {leaf.reps !== null && <>{leaf.reps}</>}
+                    {leaf.reps !== null && (
+                        <>
+                            {unilateral && "2x" + leaf.reps / 2}
+                            {!unilateral && leaf.reps}
+                        </>
+                    )}
                 </td>
                 <td className="centered">
                     {leaf.weight !== null && (

@@ -38,11 +38,10 @@ export enum DistanceUnit {
 export interface ExerciseDetails {
   category: number;
   id: number;
-  max_range: number;
-  min_range: number;
   pr_date: number;
   progression: boolean;
   reps: number;
+  reps_range: string;
   series: Record<string, SessionSet[]>;
   unilateral: boolean;
   weight: number;
@@ -66,7 +65,7 @@ export enum Languages {
 	English = "English",
 }
 
-// From src-tauri/src/dto/exercises.rs:66
+// From src-tauri/src/dto/exercises.rs:64
 export interface ProgressionSuggestion {
   reps: number;
   weight: number;

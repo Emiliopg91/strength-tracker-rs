@@ -151,6 +151,7 @@ export function SessionHeartRateChart({
                         activeDot={false}
                     />
                     <Tooltip
+                        isAnimationActive={false}
                         content={(props) => (
                             <HeartRateTooltip
                                 {...props}

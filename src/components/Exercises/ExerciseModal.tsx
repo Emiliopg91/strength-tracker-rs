@@ -38,19 +38,17 @@ export function ExerciseModal({
     const [suggestion, setSuggestion] = useState<ProgressionSuggestion | null>(
         suggestionInput,
     );
-    const [minRange, setMinRange] = useState(exercise.min_range);
-    const [maxRange, setMaxRange] = useState(exercise.max_range);
-    // Value being edited as "MIN-MAX"; the range above only changes once saved
-    const [rangeInput, setRangeInput] = useState(
-        `${exercise.min_range}-${exercise.max_range}`,
-    );
+    const [range, setRange] = useState(exercise.reps_range);
+    // Value being edited as "N-N-...-N"; the range above only changes once saved
+    const [rangeInput, setRangeInput] = useState(exercise.reps_range);
     const parsedRange = (() => {
-        const match = /^(\d+)-(\d+)$/.exec(rangeInput);
-        if (!match) {
+        if (!/^\d+(-\d+)+$/.test(rangeInput)) {
             return null;
         }
-        const [min, max] = [parseInt(match[1]), parseInt(match[2])];
-        return min > 0 && min < max ? { min, max } : null;
+        const steps = rangeInput.split("-").map((s) => parseInt(s));
+        const valid =
+            steps[0] > 0 && steps.every((s, i) => i == 0 || s > steps[i - 1]);
+        return valid ? steps : null;
     })();
     const loadingTask = useLoadingTask();
 
@@ -63,7 +61,7 @@ export function ExerciseModal({
         ).then(setSuggestion);
     });
 
-    const settingsKey = `${exercise.category}|${exercise.id}|${progression}|${unilateral}|${minRange}|${maxRange}`;
+    const settingsKey = `${exercise.category}|${exercise.id}|${progression}|${unilateral}|${range}`;
     // Settings the current suggestion was fetched for; the initial one comes from the parent
     const fetchedFor = useRef<string | null>(settingsKey);
 
@@ -121,10 +119,10 @@ export function ExerciseModal({
         });
     };
 
-    // Keystrokes that break the "MIN-MAX" pattern are dropped
+    // Keystrokes that break the "N-N-...-N" pattern are dropped
     const onRangeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value;
-        if (/^\d{0,3}(-\d{0,3})?$/.test(value)) {
+        if (/^\d{0,3}(-\d{0,3})*$/.test(value)) {
             setRangeInput(value);
         }
     };
@@ -133,20 +131,18 @@ export function ExerciseModal({
         if (!parsedRange) {
             return;
         }
-        const { min, max } = parsedRange;
+        const normalized = parsedRange.join("-");
 
-        setRangeInput(`${min}-${max}`);
+        setRangeInput(normalized);
 
         loadingTask(
             BackendClient.setExerciseRepsRange(
                 exercise.category,
                 exercise.id,
-                min,
-                max,
+                normalized,
             ),
         ).then(() => {
-            setMinRange(min);
-            setMaxRange(max);
+            setRange(normalized);
         });
     };
 
@@ -243,8 +239,8 @@ export function ExerciseModal({
                                         size="small"
                                         error={parsedRange == null}
                                         value={rangeInput}
-                                        placeholder="8-12"
-                                        sx={{ width: 100 }}
+                                        placeholder="8-10-12"
+                                        sx={{ width: 140 }}
                                         slotProps={{
                                             htmlInput: {
                                                 inputMode: "numeric",

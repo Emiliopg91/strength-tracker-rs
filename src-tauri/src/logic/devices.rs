@@ -358,38 +358,46 @@ async fn delete_pending_workouts(app: &AppHandle, serial: &str) {
         settings.language
     };
     for workout in pending {
-        if let Err(e) = delete_workout_from_device(&workout, &serial).await {
-            error!("Error deleting workout '{workout}' from {serial}: {e}");
-            continue;
-        }
+        match delete_workout_from_device(&workout, &serial).await {
+            Ok(deleted) => {
+                if deleted {
+                    let device = serial.clone();
+                    let wkt = workout.clone();
+                    if let Err(e) = run_blocking(app.clone(), move |db| {
+                        db.run_in_transaction(|tx| {
+                            Ok(WorkoutDeviceRepository::update()
+                                .set(workout_device::entity::columns::PENDING, false.into())
+                                .where_(Where::And(vec![
+                                    Where::Eq(
+                                        workout_device::entity::columns::WORKOUT,
+                                        wkt.clone().into(),
+                                    ),
+                                    Where::Eq(
+                                        workout_device::entity::columns::DEVICE,
+                                        device.clone().into(),
+                                    ),
+                                ]))
+                                .execute_in(tx)?)
+                        })
+                    })
+                    .await
+                    {
+                        error!("Error clearing pending deletion entry for {serial}: {e}");
+                    }
 
-        let device = serial.clone();
-        let wkt = workout.clone();
-        if let Err(e) = run_blocking(app.clone(), move |db| {
-            db.run_in_transaction(|tx| {
-                Ok(WorkoutDeviceRepository::update()
-                    .set(workout_device::entity::columns::PENDING, false.into())
-                    .where_(Where::And(vec![
-                        Where::Eq(workout_device::entity::columns::WORKOUT, wkt.clone().into()),
-                        Where::Eq(
-                            workout_device::entity::columns::DEVICE,
-                            device.clone().into(),
-                        ),
-                    ]))
-                    .execute_in(tx)?)
-            })
-        })
-        .await
-        {
-            error!("Error clearing pending deletion entry for {serial}: {e}");
+                    info!("Workout '{workout}' deleted from device {serial}");
+                    show_notification(NotificationDefinition {
+                        title: workout.to_string(),
+                        body: translate("ok_workout_delete", lang),
+                        kind: NotificationKind::Temporal,
+                    });
+                }
+            }
+            Err(e) => {
+                error!("Error deleting workout '{workout}' from {serial}: {e}");
+                continue;
+            }
         }
-
-        info!("Workout '{workout}' deleted from device {serial}");
-        show_notification(NotificationDefinition {
-            title: workout.to_string(),
-            body: translate("ok_workout_delete", lang),
-            kind: NotificationKind::Temporal,
-        });
     }
 }
 
@@ -668,7 +676,7 @@ async fn send_workout_to_device(
     upload
 }
 
-async fn delete_workout_from_device(workout: &str, serial: &str) -> Result<(), String> {
+async fn delete_workout_from_device(workout: &str, serial: &str) -> Result<bool, String> {
     MTP_CLIENT_INST
         .lock()
         .await

@@ -220,8 +220,7 @@ fn handle_step_message(msg: &mesgdef::WorkoutStep, exercises: &mut Vec<Option<Ex
             unilateral: false,
             exercise_category: None,
             progression: false,
-            max_range: 0,
-            min_range: 0,
+            reps: "".to_string(),
         }))
     } else {
         exercises.push(None)

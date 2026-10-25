@@ -15,12 +15,11 @@ const BENCH: (u16, u16) = (0, 1);
 const CABLE_ROW: (u16, u16) = (23, 20);
 const PULL_UP: (u16, u16) = (21, 38);
 
-fn configure(db: &DatabasePool, exercise: (u16, u16), unilateral: bool, range: (u16, u16)) {
+fn configure(db: &DatabasePool, exercise: (u16, u16), unilateral: bool, range: &str) {
     db.run_in_transaction(|tx| {
         ExerciseRepository::update()
             .set(exercise::entity::columns::UNILATERAL, unilateral.into())
-            .set(exercise::entity::columns::MIN_RANGE, range.0.into())
-            .set(exercise::entity::columns::MAX_RANGE, range.1.into())
+            .set(exercise::entity::columns::REPS, range.into())
             .where_(Where::And(vec![
                 Where::Eq(exercise::entity::columns::CATEGORY, exercise.0.into()),
                 Where::Eq(exercise::entity::columns::ID, exercise.1.into()),
@@ -111,7 +110,7 @@ fn suggested(weight: f32, reps: u16) -> Option<ProgressionSuggestion> {
 #[test]
 fn bilateral_top_of_range_adds_weight_and_resets_reps() {
     let db = common::test_db();
-    configure(&db, BENCH, false, (8, 12));
+    configure(&db, BENCH, false, "8-10-12");
     log_session(&db, 1, BENCH, &[(12, 100.0), (12, 100.0), (13, 100.0)]);
     program(&db, BENCH, 100.0, 12);
 
@@ -121,7 +120,7 @@ fn bilateral_top_of_range_adds_weight_and_resets_reps() {
 #[test]
 fn bilateral_middle_of_range_targets_max_reps() {
     let db = common::test_db();
-    configure(&db, BENCH, false, (8, 12));
+    configure(&db, BENCH, false, "8-10-12");
     log_session(&db, 1, BENCH, &[(10, 100.0), (11, 100.0), (10, 100.0)]);
     program(&db, BENCH, 100.0, 10);
 
@@ -131,7 +130,7 @@ fn bilateral_middle_of_range_targets_max_reps() {
 #[test]
 fn bilateral_bottom_of_range_targets_middle_reps() {
     let db = common::test_db();
-    configure(&db, BENCH, false, (8, 12));
+    configure(&db, BENCH, false, "8-10-12");
     log_session(&db, 1, BENCH, &[(8, 100.0), (9, 100.0), (8, 100.0)]);
     program(&db, BENCH, 100.0, 8);
 
@@ -141,7 +140,7 @@ fn bilateral_bottom_of_range_targets_middle_reps() {
 #[test]
 fn custom_range_drives_brackets() {
     let db = common::test_db();
-    configure(&db, BENCH, false, (4, 6));
+    configure(&db, BENCH, false, "4-5-6");
     log_session(&db, 1, BENCH, &[(6, 120.0), (6, 120.0)]);
     program(&db, BENCH, 120.0, 6);
 
@@ -151,7 +150,7 @@ fn custom_range_drives_brackets() {
 #[test]
 fn only_latest_session_is_considered() {
     let db = common::test_db();
-    configure(&db, BENCH, false, (8, 12));
+    configure(&db, BENCH, false, "8-10-12");
     log_session(&db, 1, BENCH, &[(12, 100.0), (12, 100.0)]);
     log_session(&db, 2, BENCH, &[(8, 100.0), (8, 100.0)]);
     program(&db, BENCH, 100.0, 8);
@@ -162,7 +161,7 @@ fn only_latest_session_is_considered() {
 #[test]
 fn sets_in_different_brackets_give_no_suggestion() {
     let db = common::test_db();
-    configure(&db, BENCH, false, (8, 12));
+    configure(&db, BENCH, false, "8-10-12");
     log_session(&db, 1, BENCH, &[(12, 100.0), (12, 100.0), (9, 100.0)]);
     program(&db, BENCH, 100.0, 12);
 
@@ -172,7 +171,7 @@ fn sets_in_different_brackets_give_no_suggestion() {
 #[test]
 fn sets_with_different_weights_give_no_suggestion() {
     let db = common::test_db();
-    configure(&db, BENCH, false, (8, 12));
+    configure(&db, BENCH, false, "8-10-12");
     log_session(&db, 1, BENCH, &[(12, 60.0), (12, 100.0), (12, 100.0)]);
     program(&db, BENCH, 100.0, 12);
 
@@ -184,7 +183,7 @@ fn sets_with_different_weights_give_no_suggestion() {
 #[test]
 fn unilateral_top_of_range_adds_weight_and_resets_reps() {
     let db = common::test_db();
-    configure(&db, CABLE_ROW, true, (8, 12));
+    configure(&db, CABLE_ROW, true, "8-10-12");
     log_session(&db, 1, CABLE_ROW, &[(24, 20.0), (24, 20.0)]);
     program(&db, CABLE_ROW, 20.0, 24);
 
@@ -194,7 +193,7 @@ fn unilateral_top_of_range_adds_weight_and_resets_reps() {
 #[test]
 fn unilateral_middle_of_range_targets_max_reps() {
     let db = common::test_db();
-    configure(&db, CABLE_ROW, true, (8, 12));
+    configure(&db, CABLE_ROW, true, "8-10-12");
     log_session(&db, 1, CABLE_ROW, &[(20, 20.0), (22, 20.0)]);
     program(&db, CABLE_ROW, 20.0, 20);
 
@@ -204,7 +203,7 @@ fn unilateral_middle_of_range_targets_max_reps() {
 #[test]
 fn unilateral_bottom_of_range_targets_middle_reps() {
     let db = common::test_db();
-    configure(&db, CABLE_ROW, true, (8, 12));
+    configure(&db, CABLE_ROW, true, "8-10-12");
     log_session(&db, 1, CABLE_ROW, &[(16, 20.0), (18, 20.0)]);
     program(&db, CABLE_ROW, 20.0, 16);
 
@@ -214,7 +213,7 @@ fn unilateral_bottom_of_range_targets_middle_reps() {
 #[test]
 fn unilateral_reps_are_halved_before_bracketing() {
     let db = common::test_db();
-    configure(&db, CABLE_ROW, true, (8, 12));
+    configure(&db, CABLE_ROW, true, "8-10-12");
     // 23 total reps is 11 per side: still the middle bracket, not the top one
     log_session(&db, 1, CABLE_ROW, &[(23, 20.0), (23, 20.0)]);
     program(&db, CABLE_ROW, 20.0, 20);
@@ -227,7 +226,7 @@ fn unilateral_reps_are_halved_before_bracketing() {
 #[test]
 fn bodyweight_middle_of_range_targets_max_reps_without_weight() {
     let db = common::test_db();
-    configure(&db, PULL_UP, false, (8, 12));
+    configure(&db, PULL_UP, false, "8-10-12");
     log_session(&db, 1, PULL_UP, &[(10, 0.0), (10, 0.0)]);
     program(&db, PULL_UP, 0.0, 10);
 
@@ -237,7 +236,7 @@ fn bodyweight_middle_of_range_targets_max_reps_without_weight() {
 #[test]
 fn bodyweight_bottom_of_range_targets_middle_reps_without_weight() {
     let db = common::test_db();
-    configure(&db, PULL_UP, false, (8, 12));
+    configure(&db, PULL_UP, false, "8-10-12");
     log_session(&db, 1, PULL_UP, &[(8, 0.0), (9, 0.0)]);
     program(&db, PULL_UP, 0.0, 8);
 
@@ -247,7 +246,7 @@ fn bodyweight_bottom_of_range_targets_middle_reps_without_weight() {
 #[test]
 fn bodyweight_top_of_range_adds_weight() {
     let db = common::test_db();
-    configure(&db, PULL_UP, false, (8, 12));
+    configure(&db, PULL_UP, false, "8-10-12");
     log_session(&db, 1, PULL_UP, &[(12, 0.0), (12, 0.0)]);
     program(&db, PULL_UP, 0.0, 12);
 
@@ -257,7 +256,7 @@ fn bodyweight_top_of_range_adds_weight() {
 #[test]
 fn unilateral_bodyweight_top_of_range_adds_weight() {
     let db = common::test_db();
-    configure(&db, PULL_UP, true, (8, 12));
+    configure(&db, PULL_UP, true, "8-10-12");
     log_session(&db, 1, PULL_UP, &[(24, 0.0), (24, 0.0)]);
     program(&db, PULL_UP, 0.0, 24);
 
@@ -269,7 +268,7 @@ fn unilateral_bodyweight_top_of_range_adds_weight() {
 #[test]
 fn no_logged_sets_give_no_suggestion() {
     let db = common::test_db();
-    configure(&db, BENCH, false, (8, 12));
+    configure(&db, BENCH, false, "8-10-12");
     program(&db, BENCH, 100.0, 8);
 
     assert_eq!(suggestion(&db, BENCH), None);
@@ -278,7 +277,7 @@ fn no_logged_sets_give_no_suggestion() {
 #[test]
 fn no_programmed_steps_give_no_suggestion() {
     let db = common::test_db();
-    configure(&db, BENCH, false, (8, 12));
+    configure(&db, BENCH, false, "8-10-12");
     log_session(&db, 1, BENCH, &[(12, 100.0), (12, 100.0)]);
 
     assert_eq!(suggestion(&db, BENCH), None);
@@ -287,7 +286,7 @@ fn no_programmed_steps_give_no_suggestion() {
 #[test]
 fn steps_already_at_suggestion_give_no_suggestion() {
     let db = common::test_db();
-    configure(&db, BENCH, false, (8, 12));
+    configure(&db, BENCH, false, "8-10-12");
     log_session(&db, 1, BENCH, &[(12, 100.0), (12, 100.0)]);
     program(&db, BENCH, 102.0, 8);
 
@@ -297,7 +296,7 @@ fn steps_already_at_suggestion_give_no_suggestion() {
 #[test]
 fn disabled_progression_gives_no_suggestion() {
     let db = common::test_db();
-    configure(&db, BENCH, false, (8, 12));
+    configure(&db, BENCH, false, "8-10-12");
     disable_progression(&db, BENCH);
     log_session(&db, 1, BENCH, &[(12, 100.0), (12, 100.0)]);
     program(&db, BENCH, 100.0, 12);

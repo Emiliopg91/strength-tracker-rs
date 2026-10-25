@@ -11,8 +11,7 @@ pub struct Exercise {
     pub id: u16,
     pub unilateral: bool,
     pub progression: bool,
-    pub min_range: u16,
-    pub max_range: u16,
+    pub reps: String,
 
     #[relationship((category, exercise_category::entity::columns::ID))]
     pub exercise_category: Option<ExerciseCategory>,

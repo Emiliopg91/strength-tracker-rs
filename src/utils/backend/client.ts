@@ -14,7 +14,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/exercises.rs:544
+	// From src-tauri/src/logic/exercises.rs:522
 	public static applyProgressionSuggestion(category: number, id: number, suggestion: ProgressionSuggestion): Promise<void> {
 	  return BackendClient.inner_invoke("apply_progression_suggestion", { category, id, suggestion }); 
 	}
@@ -74,7 +74,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/exercises.rs:411
+	// From src-tauri/src/logic/exercises.rs:410
 	public static getProgressionSuggestion(category: number, id: number): Promise<ProgressionSuggestion | null> {
 	  return BackendClient.inner_invoke("get_progression_suggestion", { category, id }); 
 	}
@@ -189,8 +189,8 @@ export class BackendClient {
 	
 
 	// From src-tauri/src/logic/exercises.rs:372
-	public static setExerciseRepsRange(category: number, id: number, min: number, max: number): Promise<void> {
-	  return BackendClient.inner_invoke("set_exercise_reps_range", { category, id, min, max }); 
+	public static setExerciseRepsRange(category: number, id: number, reps: string): Promise<void> {
+	  return BackendClient.inner_invoke("set_exercise_reps_range", { category, id, reps }); 
 	}
 	
 

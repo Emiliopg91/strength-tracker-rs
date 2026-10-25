@@ -92,6 +92,7 @@ export function WorkoutVolumeChart({ sessions }: Props) {
                         strokeDasharray="10 5"
                     />
                     <Tooltip
+                        isAnimationActive={false}
                         content={(props) => <WorkoutVolumeTooltip {...props} />}
                     />
                     <Legend />

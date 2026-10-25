@@ -309,6 +309,7 @@ export function BodyMetricsChart({ metrics }: Props) {
                             isAnimationActive={false}
                         />
                         <Tooltip
+                            isAnimationActive={false}
                             content={(props) => <ChartTooltip {...props} />}
                         />
                         <Legend />
