@@ -1,6 +1,6 @@
 [package]
 name = "strength-tracker-rs"
-version = "3.5.1"
+version = "3.5.2"
 description = "Sync your devices and track your strength training"
 authors = ["Emiliopg91 <ojosdeserbio@gmail.com>"]
 edition = "2024"
