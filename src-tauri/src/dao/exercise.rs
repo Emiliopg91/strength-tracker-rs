@@ -12,6 +12,7 @@ pub struct Exercise {
     pub unilateral: bool,
     pub progression: bool,
     pub reps: String,
+    pub weight: f32,
 
     #[relationship((category, exercise_category::entity::columns::ID))]
     pub exercise_category: Option<ExerciseCategory>,

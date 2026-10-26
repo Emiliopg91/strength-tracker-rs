@@ -29,6 +29,7 @@ bytes = "^1"
 chrono = "^0"
 curl-rest = "^0"
 embedded-io-adapters = { version = "^0", features = ["std"] }
+futures-util = "^0"
 strength-tracker-rs-macros = { path = "../src-tauri-macros" }
 geo-types = "^0"
 gpx = "^0"
@@ -58,7 +59,6 @@ tokio = { version = "^1", features = [
     "rt-multi-thread",
     "signal",
 ] }
-tokio-stream = "^0"
 # Must match the versions wry depends on, to reach the WebKitGTK webview
 gtk = "0.18"
 webkit2gtk = "2.0"

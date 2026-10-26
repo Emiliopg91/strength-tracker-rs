@@ -369,17 +369,19 @@ pub async fn set_exercise_progression(
 
 #[traced_command]
 #[tauri::command]
-pub async fn set_exercise_reps_range(
+pub async fn set_exercise_progression_parameters(
     app: AppHandle,
     settings: State<'_, SettingsLock>,
     category: u16,
     id: u16,
     reps: &str,
+    weight: f32,
 ) -> Result<(), String> {
     let reps = reps.to_string();
     let res: Result<_, String> = run_blocking(app, move |database| {
         ExerciseRepository::update()
             .set(exercise::entity::columns::REPS, reps.into())
+            .set(exercise::entity::columns::WEIGHT, weight.into())
             .where_(Where::And(vec![
                 Where::Eq(exercise::entity::columns::CATEGORY, category.into()),
                 Where::Eq(exercise::entity::columns::ID, id.into()),
@@ -475,21 +477,29 @@ pub fn fetch_progression_suggestion(
         return Ok(None);
     }
 
-    // Index of the highest range step reached by each set (first one if below it); every set must share it
-    let brackets: Vec<_> = sets
+    // Index of the highest range step reached by each set; every set must reach the range and share it
+    let brackets: Option<Vec<_>> = sets
         .iter()
         .map(|&(_, reps)| {
             let reps = if exercise.unilateral { reps / 2 } else { reps };
-            range.iter().rposition(|&r| reps >= r).unwrap_or(0)
+            range.iter().rposition(|&r| reps >= r)
         })
         .collect();
+    let Some(brackets) = brackets else {
+        return Ok(None);
+    };
     if brackets.iter().any(|&b| b != brackets[0]) {
         return Ok(None);
     }
 
     let (weight, reps) = match brackets[0] {
         i if i == range.len() - 1 => (
-            weight + if exercise.unilateral { 1_f32 } else { 2_f32 },
+            weight
+                + if exercise.unilateral {
+                    exercise.weight / 2_f32
+                } else {
+                    exercise.weight
+                },
             range[0],
         ),
         i => (weight, range[i + 1]),

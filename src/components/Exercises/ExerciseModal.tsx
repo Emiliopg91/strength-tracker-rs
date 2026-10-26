@@ -16,6 +16,7 @@ import { SessionUtils } from "@/utils/SessionUtils";
 import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
 import { useLoadingTask } from "@/hooks/useLoadingTask";
 import { BackendClient } from "@/utils/backend/client";
+import { WeightField } from "../Fields/WeightField";
 
 type Props = {
     exercise: ExerciseDetails;
@@ -30,8 +31,14 @@ export function ExerciseModal({
     onClose,
     onProgressionApplied,
 }: Props) {
-    const { translate, fromKg, getWeightUnit, formatTimeDate, formatNumber } =
-        useContext(I18nSettingsContext);
+    const {
+        translate,
+        fromKg,
+        toKg,
+        getWeightUnit,
+        formatTimeDate,
+        formatNumber,
+    } = useContext(I18nSettingsContext);
 
     const [unilateral, setUnilateral] = useState(exercise.unilateral);
     const [progression, setProgression] = useState(exercise.progression);
@@ -41,6 +48,9 @@ export function ExerciseModal({
     const [range, setRange] = useState(exercise.reps_range);
     // Value being edited as "N-N-...-N"; the range above only changes once saved
     const [rangeInput, setRangeInput] = useState(exercise.reps_range);
+    const [weightInput, setWeightInput] = useState(
+        fromKg(exercise.prog_weight),
+    );
     const parsedRange = (() => {
         if (!/^\d+(-\d+)+$/.test(rangeInput)) {
             return null;
@@ -127,7 +137,7 @@ export function ExerciseModal({
         }
     };
 
-    const updateRepsRange = () => {
+    const updateProgressionParameters = () => {
         if (!parsedRange) {
             return;
         }
@@ -136,10 +146,11 @@ export function ExerciseModal({
         setRangeInput(normalized);
 
         loadingTask(
-            BackendClient.setExerciseRepsRange(
+            BackendClient.setExerciseProgressionParameters(
                 exercise.category,
                 exercise.id,
                 normalized,
+                toKg(weightInput),
             ),
         ).then(() => {
             setRange(normalized);
@@ -158,7 +169,7 @@ export function ExerciseModal({
             <DialogContent dividers>
                 <table id="workout-details-table">
                     <colgroup>
-                        <col className="col-200" />
+                        <col className="col-180" />
                         <col />
                         <col />
                     </colgroup>
@@ -216,7 +227,7 @@ export function ExerciseModal({
                             </td>
                         </tr>
                         <tr>
-                            <td>{translate("progression_suggestion")}</td>
+                            <td>{translate("progression_suggestion")}:</td>
                             <td>
                                 <Switch
                                     checked={progression}
@@ -233,23 +244,32 @@ export function ExerciseModal({
                         </tr>
                         {progression && (
                             <tr>
-                                <td>{translate("reps_range")}</td>
+                                <td>{translate("progression")}:</td>
                                 <td>
                                     <TextField
                                         size="small"
                                         error={parsedRange == null}
                                         value={rangeInput}
                                         placeholder="8-10-12"
-                                        sx={{ width: 140 }}
+                                        sx={{ width: 150 }}
                                         slotProps={{
                                             htmlInput: {
                                                 inputMode: "numeric",
                                             },
                                         }}
                                         onChange={onRangeChange}
+                                        label={translate("reps_range")}
+                                    />
+                                    <WeightField
+                                        value={weightInput}
+                                        onChange={(weight) => {
+                                            setWeightInput(weight!);
+                                        }}
+                                        sx={{ ml: 1, width: 100 }}
+                                        allowEmpty={false}
                                     />
                                     <Button
-                                        onClick={updateRepsRange}
+                                        onClick={updateProgressionParameters}
                                         disabled={parsedRange == null}
                                         variant="contained"
                                         sx={{ ml: 1, mt: 0.25 }}

@@ -41,7 +41,7 @@ use crate::{
         exercises::{
             apply_progression_suggestion, get_exercise_details, get_exercises,
             get_exercises_catalog, get_progression_suggestion, set_exercise_progression,
-            set_exercise_reps_range, set_exercise_unilateral,
+            set_exercise_progression_parameters, set_exercise_unilateral,
         },
         export::{export_database, export_gpx, upload_to_cloud},
         report::{get_report_data, load_report, report_ready},
@@ -360,7 +360,7 @@ pub fn run(log_level: LevelFilter) {
             set_exercise_progression,
             get_progression_suggestion,
             apply_progression_suggestion,
-            set_exercise_reps_range,
+            set_exercise_progression_parameters,
             //Workouts
             get_workout_list,
             get_workout_details,

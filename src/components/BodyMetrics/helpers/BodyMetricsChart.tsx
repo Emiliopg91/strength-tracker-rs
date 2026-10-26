@@ -243,7 +243,7 @@ export function BodyMetricsChart({ metrics }: Props) {
                 <ResponsiveContainer width="100%" height="100%">
                     <LineChart
                         data={chartData}
-                        margin={{ top: 5, right: 5, left: 5, bottom: 5 }}
+                        margin={{ top: 5, right: 15, left: 5, bottom: 5 }}
                     >
                         <CartesianGrid
                             stroke="#80808000"

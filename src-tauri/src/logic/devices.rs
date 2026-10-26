@@ -5,15 +5,15 @@ use std::{
 };
 
 use chrono::{Datelike, Local, TimeZone, Timelike};
+use futures_util::StreamExt;
 use nusb::hotplug::HotplugEvent;
 use rusqlite_orm::{
     dao::Repository,
     database::DatabasePool,
     errors::DatabaseError,
-    types::{value::Value, where_clause::Where},
+    types::{order_by::OrderBy, value::Value, where_clause::Where},
 };
 use strength_tracker_rs_macros::traced_command;
-use tokio_stream::StreamExt;
 
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_log::log::{error, info};
@@ -239,12 +239,13 @@ async fn push_pending_workouts(app: &AppHandle, serial: &str) {
                     ),
                     Where::Eq(workout_device::entity::columns::PENDING, true.into()),
                 ]))
+                .order_by(OrderBy::Asc(workout_device::entity::columns::WORKOUT))
                 .fetch_in(conn)?
                 .iter()
                 .filter_map(
                     |r| match r.get(workout_device::entity::columns::WORKOUT.as_ref()) {
                         Some(Value::Text(name)) => Some(name.clone()),
-                        _ => None,
+                        _ => unreachable!(),
                     },
                 )
                 .collect::<Vec<_>>())
@@ -329,12 +330,13 @@ async fn delete_pending_workouts(app: &AppHandle, serial: &str) {
                     ),
                     Where::Eq(workout_device::entity::columns::PENDING, true.into()),
                 ]))
+                .order_by(OrderBy::Asc(workout_device::entity::columns::WORKOUT))
                 .fetch_in(conn)?
                 .iter()
                 .filter_map(
                     |r| match r.get(workout_device::entity::columns::WORKOUT.as_ref()) {
                         Some(Value::Text(name)) => Some(name.clone()),
-                        _ => None,
+                        _ => unreachable!(),
                     },
                 )
                 .collect::<Vec<_>>())
@@ -360,31 +362,30 @@ async fn delete_pending_workouts(app: &AppHandle, serial: &str) {
     for workout in pending {
         match delete_workout_from_device(&workout, &serial).await {
             Ok(deleted) => {
-                if deleted {
-                    let device = serial.clone();
-                    let wkt = workout.clone();
-                    if let Err(e) = run_blocking(app.clone(), move |db| {
-                        db.run_in_transaction(|tx| {
-                            Ok(WorkoutDeviceRepository::update()
-                                .set(workout_device::entity::columns::PENDING, false.into())
-                                .where_(Where::And(vec![
-                                    Where::Eq(
-                                        workout_device::entity::columns::WORKOUT,
-                                        wkt.clone().into(),
-                                    ),
-                                    Where::Eq(
-                                        workout_device::entity::columns::DEVICE,
-                                        device.clone().into(),
-                                    ),
-                                ]))
-                                .execute_in(tx)?)
-                        })
+                let device = serial.clone();
+                let wkt = workout.clone();
+                if let Err(e) = run_blocking(app.clone(), move |db| {
+                    db.run_in_transaction(|tx| {
+                        Ok(WorkoutDeviceRepository::update()
+                            .set(workout_device::entity::columns::PENDING, false.into())
+                            .where_(Where::And(vec![
+                                Where::Eq(
+                                    workout_device::entity::columns::WORKOUT,
+                                    wkt.clone().into(),
+                                ),
+                                Where::Eq(
+                                    workout_device::entity::columns::DEVICE,
+                                    device.clone().into(),
+                                ),
+                            ]))
+                            .execute_in(tx)?)
                     })
-                    .await
-                    {
-                        error!("Error clearing pending deletion entry for {serial}: {e}");
-                    }
-
+                })
+                .await
+                {
+                    error!("Error clearing pending deletion entry for {serial}: {e}");
+                }
+                if deleted {
                     info!("Workout '{workout}' deleted from device {serial}");
                     show_notification(NotificationDefinition {
                         title: workout.to_string(),
@@ -437,7 +438,7 @@ async fn download_pending_workouts(app: &AppHandle, serial: &str) {
             .iter()
             .filter_map(|r| match r.get(workout::entity::columns::NAME.as_ref()) {
                 Some(Value::Text(name)) => Some(name.clone()),
-                _ => None,
+                _ => unreachable!(),
             })
             .collect::<Vec<_>>(),
         Err(e) => {

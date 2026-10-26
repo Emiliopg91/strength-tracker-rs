@@ -39,6 +39,7 @@ export interface ExerciseDetails {
   category: number;
   id: number;
   pr_date: number;
+  prog_weight: number;
   progression: boolean;
   reps: number;
   reps_range: string;
@@ -65,7 +66,7 @@ export enum Languages {
 	English = "English",
 }
 
-// From src-tauri/src/dto/exercises.rs:64
+// From src-tauri/src/dto/exercises.rs:66
 export interface ProgressionSuggestion {
   reps: number;
   weight: number;

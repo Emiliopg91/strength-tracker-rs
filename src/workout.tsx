@@ -7,6 +7,7 @@ import WorkoutPrintView from "./components/Workouts/WorkoutPrintView";
 
 const params = new URLSearchParams(window.location.search);
 const workout = params.get("workout")!;
+document.title = workout;
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <I18nSettingsProvider>

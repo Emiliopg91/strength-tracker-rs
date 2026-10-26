@@ -14,7 +14,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/exercises.rs:522
+	// From src-tauri/src/logic/exercises.rs:532
 	public static applyProgressionSuggestion(category: number, id: number, suggestion: ProgressionSuggestion): Promise<void> {
 	  return BackendClient.inner_invoke("apply_progression_suggestion", { category, id, suggestion }); 
 	}
@@ -68,19 +68,19 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/sessions.rs:766
+	// From src-tauri/src/logic/sessions.rs:762
 	public static getHeatmapData(): Promise<[number, number][][]> {
 	  return BackendClient.inner_invoke("get_heatmap_data"); 
 	}
 	
 
-	// From src-tauri/src/logic/exercises.rs:410
+	// From src-tauri/src/logic/exercises.rs:412
 	public static getProgressionSuggestion(category: number, id: number): Promise<ProgressionSuggestion | null> {
 	  return BackendClient.inner_invoke("get_progression_suggestion", { category, id }); 
 	}
 	
 
-	// From src-tauri/src/logic/devices.rs:805
+	// From src-tauri/src/logic/devices.rs:814
 	public static getRegisteredDevices(): Promise<DeviceListItem[]> {
 	  return BackendClient.inner_invoke("get_registered_devices"); 
 	}
@@ -128,13 +128,13 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/devices.rs:683
+	// From src-tauri/src/logic/devices.rs:692
 	public static importFromDevice(serial: string): Promise<number> {
 	  return BackendClient.inner_invoke("import_from_device", { serial }); 
 	}
 	
 
-	// From src-tauri/src/logic/sessions.rs:333
+	// From src-tauri/src/logic/sessions.rs:329
 	public static importFromFiles(): Promise<number> {
 	  return BackendClient.inner_invoke("import_from_files"); 
 	}
@@ -176,7 +176,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/devices.rs:527
+	// From src-tauri/src/logic/devices.rs:536
 	public static sendToDevice(workout: string, serial: string): Promise<void> {
 	  return BackendClient.inner_invoke("send_to_device", { workout, serial }); 
 	}
@@ -189,8 +189,8 @@ export class BackendClient {
 	
 
 	// From src-tauri/src/logic/exercises.rs:372
-	public static setExerciseRepsRange(category: number, id: number, reps: string): Promise<void> {
-	  return BackendClient.inner_invoke("set_exercise_reps_range", { category, id, reps }); 
+	public static setExerciseProgressionParameters(category: number, id: number, reps: string, weight: number): Promise<void> {
+	  return BackendClient.inner_invoke("set_exercise_progression_parameters", { category, id, reps, weight }); 
 	}
 	
 

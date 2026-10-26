@@ -186,7 +186,7 @@ async fn upload_file(storage: &Storage, parent: ObjectHandle, src: &Path) -> Res
     info!("Uploading file {} ({} bytes)...", filename, data.len());
     let t0 = Instant::now();
     let new_info = NewObjectInfo::file(filename.clone(), data.len() as u64);
-    let stream = tokio_stream::iter([Ok(Bytes::from(data))]);
+    let stream = futures_util::stream::iter([Ok(Bytes::from(data))]);
     match storage.upload(Some(parent), new_info, stream).await {
         Ok(handle) => {
             info!(

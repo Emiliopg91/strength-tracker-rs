@@ -41,6 +41,7 @@ pub struct ExerciseDetails {
     pub pr_date: u32,
     pub progression: bool,
     pub reps_range: String,
+    pub prog_weight: f32,
 }
 
 impl From<&Exercise> for ExerciseDetails {
@@ -56,6 +57,7 @@ impl From<&Exercise> for ExerciseDetails {
             unilateral: value.unilateral,
             progression: value.progression,
             reps_range: value.reps.clone(),
+            prog_weight: value.weight,
         }
     }
 }

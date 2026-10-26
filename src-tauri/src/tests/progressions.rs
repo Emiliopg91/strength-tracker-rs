@@ -169,6 +169,16 @@ fn sets_in_different_brackets_give_no_suggestion() {
 }
 
 #[test]
+fn sets_below_range_give_no_suggestion() {
+    let db = common::test_db();
+    configure(&db, BENCH, false, "10-12");
+    log_session(&db, 1, BENCH, &[(10, 84.0), (10, 84.0), (4, 84.0)]);
+    program(&db, BENCH, 84.0, 10);
+
+    assert_eq!(suggestion(&db, BENCH), None);
+}
+
+#[test]
 fn sets_with_different_weights_give_no_suggestion() {
     let db = common::test_db();
     configure(&db, BENCH, false, "8-10-12");

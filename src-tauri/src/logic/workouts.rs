@@ -94,7 +94,7 @@ pub async fn get_workout_list(
                 .filter_map(
                     |r| match r.get(workout_step::entity::columns::WORKOUT.as_ref()) {
                         Some(Value::Text(name)) => Some(name.clone()),
-                        _ => None,
+                        _ => unreachable!(),
                     },
                 )
                 .collect();
