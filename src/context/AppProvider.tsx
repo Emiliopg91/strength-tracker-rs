@@ -74,7 +74,7 @@ export function AppProvider({
     const categoryLabels = new Map<number, string>();
     for (const [cat, ex_ids] of Object.entries(rawCatalog)) {
         const ex_cat = Number(cat);
-        categoryLabels.set(ex_cat, translate("exercise_" + ex_cat));
+        categoryLabels.set(ex_cat, translate("category_" + ex_cat));
         for (const ex_id of ex_ids) {
             exercisesCatalog.push({
                 ex_cat,

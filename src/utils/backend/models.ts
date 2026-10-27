@@ -39,10 +39,12 @@ export interface ExerciseDetails {
   category: number;
   id: number;
   pr_date: number;
+  primary_muscles: string[];
   prog_weight: number;
   progression: boolean;
   reps: number;
   reps_range: string;
+  secondary_muscles: string[];
   series: Record<string, SessionSet[]>;
   unilateral: boolean;
   weight: number;
@@ -66,7 +68,7 @@ export enum Languages {
 	English = "English",
 }
 
-// From src-tauri/src/dto/exercises.rs:66
+// From src-tauri/src/dto/exercises.rs:90
 export interface ProgressionSuggestion {
   reps: number;
   weight: number;
@@ -92,6 +94,8 @@ export interface SessionDetails {
   max_hr: number;
   name: string;
   notes: string;
+  primary_muscles: string[];
+  secondary_muscles: string[];
   sets: SessionSet[];
   speeds: (number | null)[];
   sport: number;
@@ -121,7 +125,7 @@ export interface SessionListItem {
   training_load: number;
 }
 
-// From src-tauri/src/dto/sessions.rs:204
+// From src-tauri/src/dto/sessions.rs:227
 export interface SessionLocation {
   location: string;
   session: number;
@@ -139,7 +143,7 @@ export interface SessionSet {
   weight: number;
 }
 
-// From src-tauri/src/dto/sessions.rs:197
+// From src-tauri/src/dto/sessions.rs:220
 export interface SessionSetsUpdate {
   notes: string | null;
   sets: SessionSet[];

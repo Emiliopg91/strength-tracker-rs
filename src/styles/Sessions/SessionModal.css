@@ -96,3 +96,7 @@
 .session-sets-values-cell {
   vertical-align: top;
 }
+
+#session-details-table td {
+  vertical-align: top;
+}

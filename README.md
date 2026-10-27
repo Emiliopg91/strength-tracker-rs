@@ -2,9 +2,11 @@
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Emiliopg91/strength-tracker-rs)
 
-**Sync your Garmin devices and track your activities — all in one desktop app.**
+**Everything Garmin Connect doesn't do for your strength training — on Linux, offline, with your data in a local file.**
 
-Strength Tracker is a Linux desktop application built with [Tauri](https://tauri.app/), combining a Rust backend with a React + TypeScript frontend. It connects to Garmin watches over USB (MTP), imports your activity `.FIT` files, and stores your sessions, exercises, and body measurements in a local SQLite database — no cloud account required.
+Your Garmin watch records every set you lift, but Garmin Connect does little with it: exercises get misdetected, sets are tedious to fix, and nothing tells you when it's time to add weight. Strength Tracker is a Linux desktop app that takes over from there. Plug in your watch, and your sessions are imported, analyzed and turned into your next workout — which goes straight back to the watch.
+
+No account, no cloud, no Garmin Express (which doesn't exist on Linux anyway). Just a USB cable and a SQLite database you own.
 
 ## Screenshots
 
@@ -13,30 +15,56 @@ Strength Tracker is a Linux desktop application built with [Tauri](https://tauri
 | ![Screenshot 3](resources/screenshots/screenshot3.png) | ![Screenshot 4](resources/screenshots/screenshot4.png) |
 | ![Screenshot 5](resources/screenshots/screenshot5.png) |
 
-## Features
+## The training loop
 
-- **Device sync over USB (MTP)** — Auto-detects Garmin devices and downloads new activities.
+1. **Plan** — Build strength workouts in the app and send them to your watch.
+2. **Train** — Follow the workout on the watch as usual.
+3. **Sync** — Plug the watch in. The app can launch itself on connect and imports new activities automatically.
+4. **Progress** — Strength Tracker checks each exercise against its rep range and suggests your next target. Apply the suggestion and the affected workouts are updated and queued for your watch, ready for the next session.
+
+## Progression, done for you
+
+- **Double progression per exercise** — Set a rep range such as `8-10-12` and a weight increment. Once every set reaches the top of the range, the app suggests adding the increment and starting again from the bottom; otherwise it moves you to the next rep step.
+- **Only when it's earned** — No suggestion while sets are below the range, at mixed weights, or at different steps of the range.
+- **Unilateral aware** — Per-side reps and half the increment for single-arm or single-leg exercises.
+- **One click to apply** — Accepted suggestions update your workouts and are pushed to the watch on its next connection.
+
+## Strength analysis
+
+- **Session review and editing** — Fix exercises, sets, reps and weights, and add notes.
+- **Personal records** — 1RM estimation per exercise, with a desktop notification when you set a new PR.
+- **Exercise history** — Full per-session set history and volume chart for every exercise.
+- **Session comparison** — Compare sessions and their exercises side by side.
+- **Training load** — Daily load heatmap and workload chart on the home page.
+- **Progression report** — Printable report for any date range, covering sessions, exercises, body composition and notes.
+
+## Beyond the gym
+
+- **Cardio activities** — Heart-rate chart with time-in-zone breakdown, speed and laps.
+- **GPS routes** — Interactive map with a speed-colored track, satellite/street toggle, reverse-geocoded naming and GPX export with elevation.
+- **Body measurements** — Log, compare and chart them over time with 7-day averages.
+
+## Device sync
+
+- **USB (MTP) sync** — Auto-detects Garmin devices and downloads new activities.
+- **Workout upload queue** — Workouts sent or changed while the watch is disconnected are pushed automatically on its next connection.
+- **Workout import** — Import workout steps back from the device.
+- **Print workouts** — Print a workout or save it as PDF to take to the gym.
 - **Manual `.FIT` import** — Import activity files from disk.
-- **Launch on device connect** — Starts the app automatically when a device is plugged in.
-- **`.FIT` parsing** — Sessions, series, heart rate, GPS, speed, and laps.
-- **Activities and training tracking** — Review/edit sessions, notes and sets, with 1RM estimation.
-- **Strength session comparison** — Compare sessions and their exercises side by side.
-- **Workouts** — Create and edit strength workouts, upload them to the device, and import their steps from it.
-- **Workout upload queue** — Workouts sent while a device is disconnected are queued and pushed automatically on its next connection.
-- **Training load heatmap** — Daily load overview with records on the home page.
-- **GPS route tracking with laps** — Interactive map, speed-colored track, satellite/street toggle, reverse-geocoded naming, GPX export with elevation.
-- **Heart-rate zones** — Color-coded HR chart and time-in-zone breakdown.
-- **Personal record notifications** — Desktop alert on a new strength PR.
-- **Body measurements** — Log, review, delete, and compare over time, with 7-day average charts.
-- **Database export to JSON** — Full database export for backup or analysis.
-- **Cloud backup** — One-click backup upload to OneDrive or Dropbox via `rclone`.
+
+## Your data, your machine
+
+- **Local SQLite database** — Versioned migrations, applied automatically.
+- **JSON export** — Full database export for backup or your own analysis.
+- **Cloud backup, if you want it** — One-click upload to OneDrive or Dropbox via `rclone`.
+
+## Desktop integration
+
+- **System tray** — Start minimized and keep running in the background.
+- **Launch on boot or on device connect.**
+- **Native notifications** — Localized alerts for imports, PRs and updates.
+- **English and Spanish**, metric or imperial units, all applied live.
 - **Update check** — Notifies you when a new release is available.
-- **System tray icon** — Open or quit from the tray, optionally start minimized and keep running in the background when the window is closed.
-- **Configurable settings** — Language, units, launch on boot, auto-sync, tray behavior — applied live.
-- **Local database** — SQLite with versioned, auto-applied migrations.
-- **Desktop notifications** — Native, localized alerts for background events.
-- **Single instance** — Prevents multiple app copies from corrupting the database.
-- **Rotating file logs** — Leveled logging with automatic rotation.
 
 ## Installation
 
@@ -57,9 +85,13 @@ make build       # or: pnpm tauri build
 
 ## Development
 
+Built with [Tauri](https://tauri.app/): a Rust backend with a React + TypeScript frontend.
+
 ```bash
 pnpm install
 make run          # runs the app in dev mode
+make test         # frontend and backend tests
+make lint         # eslint, tsc and clippy
 ```
 
 Development builds use [`mold`](https://github.com/rui314/mold) as the linker and [`sccache`](https://github.com/mozilla/sccache) for compilation caching to speed up iteration; install both for the best experience (or adjust the `Makefile` if you don't have them).

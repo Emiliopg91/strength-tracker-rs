@@ -1,4 +1,4 @@
-use std::hash::Hash;
+use std::{collections::HashSet, hash::Hash};
 
 use geo_types::Point;
 use gpx::{Gpx, Track, TrackSegment, Waypoint};
@@ -118,6 +118,9 @@ pub struct SessionDetails {
     pub distance: Option<f64>,
     pub notes: String,
 
+    pub primary_muscles: Vec<String>,
+    pub secondary_muscles: Vec<String>,
+
     pub device: Option<String>,
 }
 
@@ -167,6 +170,24 @@ impl From<(&Session, &[Exercise], &[Set], &[Lap])> for SessionDetails {
             }
         }
 
+        let mut primary_set = HashSet::new();
+        let mut secondary_set = HashSet::new();
+        for exercise in value.1 {
+            for muscle in &exercise.muscles {
+                if muscle.is_primary {
+                    primary_set.insert(muscle.muscle.clone());
+                } else {
+                    secondary_set.insert(muscle.muscle.clone());
+                }
+            }
+        }
+
+        let secondary_muscles = secondary_set
+            .into_iter()
+            .filter(|m| !primary_set.contains(m))
+            .collect();
+        let primary_muscles = primary_set.into_iter().collect();
+
         let sets = value.2.iter().map(SessionSet::from).collect();
         let laps = value.3.iter().map(SessionLap::from).collect();
 
@@ -189,6 +210,8 @@ impl From<(&Session, &[Exercise], &[Set], &[Lap])> for SessionDetails {
             distance,
             altitudes,
             notes,
+            primary_muscles,
+            secondary_muscles,
         }
     }
 }

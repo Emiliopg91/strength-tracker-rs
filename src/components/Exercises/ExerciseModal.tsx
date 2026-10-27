@@ -22,6 +22,7 @@ type Props = {
     exercise: ExerciseDetails;
     suggestion: ProgressionSuggestion | null;
     onProgressionApplied: () => void;
+    onSuggestionChange: (sug: ProgressionSuggestion | null) => void;
     onClose: () => void;
 };
 
@@ -30,6 +31,7 @@ export function ExerciseModal({
     suggestion: suggestionInput,
     onClose,
     onProgressionApplied,
+    onSuggestionChange,
 }: Props) {
     const {
         translate,
@@ -51,6 +53,7 @@ export function ExerciseModal({
     const [weightInput, setWeightInput] = useState(
         fromKg(exercise.prog_weight),
     );
+    const [weigh, setWeight] = useState(fromKg(exercise.prog_weight));
     const parsedRange = (() => {
         if (!/^\d+(-\d+)+$/.test(rangeInput)) {
             return null;
@@ -62,23 +65,34 @@ export function ExerciseModal({
     })();
     const loadingTask = useLoadingTask();
 
+    // Effect events, so the parent's callback identity never retriggers the effect below
+    const reportSuggestion = useEffectEvent(
+        (sug: ProgressionSuggestion | null) => {
+            setSuggestion(sug);
+            onSuggestionChange(sug);
+        },
+    );
+
     const fetchSuggestion = useEffectEvent(() => {
         loadingTask(
             BackendClient.getProgressionSuggestion(
                 exercise.category,
                 exercise.id,
             ),
-        ).then(setSuggestion);
+        ).then(reportSuggestion);
     });
 
-    const settingsKey = `${exercise.category}|${exercise.id}|${progression}|${unilateral}|${range}`;
+    const settingsKey = `${exercise.category}|${exercise.id}|${progression}|${unilateral}|${range}|${weigh}`;
     // Settings the current suggestion was fetched for; the initial one comes from the parent
     const fetchedFor = useRef<string | null>(settingsKey);
 
     // Debounced so a burst of setting changes only fetches once
     useEffect(() => {
         if (!progression) {
-            fetchedFor.current = null;
+            if (fetchedFor.current !== null) {
+                fetchedFor.current = null;
+                reportSuggestion(null);
+            }
             return;
         }
         if (fetchedFor.current === settingsKey) {
@@ -154,6 +168,7 @@ export function ExerciseModal({
             ),
         ).then(() => {
             setRange(normalized);
+            setWeight(weightInput);
         });
     };
 
@@ -177,9 +192,31 @@ export function ExerciseModal({
                         <tr>
                             <td>{translate("category")}:</td>
                             <td>
-                                {translate("exercise_" + exercise.category)}
+                                {translate("category_" + exercise.category)}
                             </td>
                         </tr>
+                        {exercise.primary_muscles.length > 0 && (
+                            <tr>
+                                <td>{translate("primary_muscles")}:</td>
+                                <td>
+                                    {exercise.primary_muscles
+                                        .map((e) => translate("muscle_" + e))
+                                        .toSorted()
+                                        .join(", ")}
+                                </td>
+                            </tr>
+                        )}
+                        {exercise.secondary_muscles.length > 0 && (
+                            <tr>
+                                <td>{translate("secondary_muscles")}:</td>
+                                <td>
+                                    {exercise.secondary_muscles
+                                        .map((e) => translate("muscle_" + e))
+                                        .toSorted()
+                                        .join(", ")}
+                                </td>
+                            </tr>
+                        )}
                         <tr>
                             <td>{translate("rm")}:</td>
                             <td>

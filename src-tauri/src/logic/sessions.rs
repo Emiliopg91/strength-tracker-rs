@@ -221,7 +221,7 @@ pub fn fetch_session_details(
     let exercises = if in_conditions.is_empty() {
         Vec::new()
     } else {
-        ExerciseRepository::select()
+        let mut exercises = ExerciseRepository::select()
             .where_(Where::InMultiple(
                 vec![
                     exercise::entity::columns::CATEGORY,
@@ -229,7 +229,15 @@ pub fn fetch_session_details(
                 ],
                 in_conditions,
             ))
-            .fetch_in(conn)?
+            .fetch_in(conn)?;
+
+        for exercise in &mut exercises {
+            if exercise.category != u16::MAX {
+                exercise.fetch_muscles_relationship_in(conn)?;
+            }
+        }
+
+        exercises
     };
     session.sets.sort_by_key(|s| s.idx);
     session.laps.sort_by_key(|l| l.idx);

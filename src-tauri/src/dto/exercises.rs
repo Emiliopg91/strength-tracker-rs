@@ -42,6 +42,8 @@ pub struct ExerciseDetails {
     pub progression: bool,
     pub reps_range: String,
     pub prog_weight: f32,
+    pub primary_muscles: Vec<String>,
+    pub secondary_muscles: Vec<String>,
 }
 
 impl From<&Exercise> for ExerciseDetails {
@@ -58,6 +60,28 @@ impl From<&Exercise> for ExerciseDetails {
             progression: value.progression,
             reps_range: value.reps.clone(),
             prog_weight: value.weight,
+            primary_muscles: value
+                .muscles
+                .iter()
+                .filter_map(|m| {
+                    if m.is_primary {
+                        Some(m.muscle.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
+            secondary_muscles: value
+                .muscles
+                .iter()
+                .filter_map(|m| {
+                    if !m.is_primary {
+                        Some(m.muscle.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
         }
     }
 }

@@ -136,7 +136,8 @@ pub fn fetch_exercise_details(
     id: u16,
     from_to: Option<(u32, u32)>,
 ) -> rusqlite_orm::errors::Result<ExerciseDetails> {
-    let exercise = ExerciseRepository::select_by_id_in(conn, category, id)?.unwrap();
+    let mut exercise = ExerciseRepository::select_by_id_in(conn, category, id)?.unwrap();
+    exercise.fetch_muscles_relationship_in(conn)?;
     let mut res = ExerciseDetails::from(&exercise);
 
     let series = SetRepository::select_by_exercise_in(
@@ -477,7 +478,7 @@ pub fn fetch_progression_suggestion(
         return Ok(None);
     }
 
-    // Index of the highest range step reached by each set; every set must reach the range and share it
+    // Index of the highest range step reached by each set; every set must reach the range and the weakest one rules
     let brackets: Option<Vec<_>> = sets
         .iter()
         .map(|&(_, reps)| {
@@ -485,23 +486,12 @@ pub fn fetch_progression_suggestion(
             range.iter().rposition(|&r| reps >= r)
         })
         .collect();
-    let Some(brackets) = brackets else {
+    let Some(bracket) = brackets.and_then(|b| b.into_iter().min()) else {
         return Ok(None);
     };
-    if brackets.iter().any(|&b| b != brackets[0]) {
-        return Ok(None);
-    }
 
-    let (weight, reps) = match brackets[0] {
-        i if i == range.len() - 1 => (
-            weight
-                + if exercise.unilateral {
-                    exercise.weight / 2_f32
-                } else {
-                    exercise.weight
-                },
-            range[0],
-        ),
+    let (weight, reps) = match bracket {
+        i if i == range.len() - 1 => (weight + exercise.weight, range[0]),
         i => (weight, range[i + 1]),
     };
     let suggestion = ProgressionSuggestion {

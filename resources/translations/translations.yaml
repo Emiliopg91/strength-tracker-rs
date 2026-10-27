@@ -607,3 +607,9 @@ save_as_pdf:
 progression:
   en: Progression
   es: Progresión
+primary_muscles:
+  en: Primary muscles
+  es: Músculos principales
+secondary_muscles:
+  en: Secondary muscles
+  es: Músculos secundarios

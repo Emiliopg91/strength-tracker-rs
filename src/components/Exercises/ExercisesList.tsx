@@ -54,11 +54,14 @@ export function ExercisesList() {
         });
     };
 
-    const appliedProgression = (exercise: ExerciseDetails) => {
+    const setPendingProgression = (
+        exercise: ExerciseDetails,
+        pending: boolean,
+    ) => {
         setExercises((prevs) =>
             prevs.map((cur) =>
                 cur.category == exercise.category && cur.id == exercise.id
-                    ? { ...cur, progression: false }
+                    ? { ...cur, progression: pending }
                     : cur,
             ),
         );
@@ -67,7 +70,7 @@ export function ExercisesList() {
     const [filter, filteredExercises] = useFilterList(exercises, (exercise) => {
         return [
             translate("exercise_" + exercise.category + "_" + exercise.id),
-            translate("exercise_" + exercise.category),
+            translate("category_" + exercise.category),
             formatDate(exercise.date),
         ];
     });
@@ -162,8 +165,11 @@ export function ExercisesList() {
                         exercise={exerciseDetails}
                         suggestion={suggestion}
                         onProgressionApplied={() => {
-                            appliedProgression(exerciseDetails);
+                            setPendingProgression(exerciseDetails, false);
                         }}
+                        onSuggestionChange={(sug) =>
+                            setPendingProgression(exerciseDetails, sug != null)
+                        }
                         onClose={() => setExerciseDetails(undefined)}
                     />
                 )}

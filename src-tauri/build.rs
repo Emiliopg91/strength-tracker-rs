@@ -13,7 +13,7 @@ fn main() {
     generate_translations_file();
 }
 
-/// Reads `resources/translations.yaml` and generates a static `phf::Map` of translations at `$OUT_DIR/translations_map.rs`.
+/// Reads `resources/translations/translations.yaml` and `resources/translations/catalog/{exercises,categories,muscles}.yaml` and generates a static `phf::Map` of translations at `$OUT_DIR/translations_map.rs`.
 fn generate_translations_file() {
     let translations_file = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
         .parent()
@@ -28,8 +28,27 @@ fn generate_translations_file() {
         .unwrap()
         .join("resources")
         .join("translations")
-        .join("catalog.yaml");
+        .join("catalog")
+        .join("exercises.yaml");
     println!("cargo:rerun-if-changed={}", catalog_file.display());
+
+    let categories_file = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
+        .parent()
+        .unwrap()
+        .join("resources")
+        .join("translations")
+        .join("catalog")
+        .join("categories.yaml");
+    println!("cargo:rerun-if-changed={}", categories_file.display());
+
+    let muscles_file = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
+        .parent()
+        .unwrap()
+        .join("resources")
+        .join("translations")
+        .join("catalog")
+        .join("muscles.yaml");
+    println!("cargo:rerun-if-changed={}", muscles_file.display());
 
     let mut yaml_str = fs::read_to_string(&translations_file)
         .unwrap_or_else(|e| panic!("Could not read {}: {}", translations_file.display(), e));
@@ -45,6 +64,22 @@ fn generate_translations_file() {
         .unwrap_or_else(|e| panic!("Error parsing translations file: {}", e));
 
     translation_map.extend(catalog_map);
+
+    yaml_str = fs::read_to_string(&categories_file)
+        .unwrap_or_else(|e| panic!("Could not read {}: {}", categories_file.display(), e));
+
+    let categories_map = noyalib::from_str::<HashMap<String, HashMap<String, String>>>(&yaml_str)
+        .unwrap_or_else(|e| panic!("Error parsing translations file: {}", e));
+
+    translation_map.extend(categories_map);
+
+    yaml_str = fs::read_to_string(&muscles_file)
+        .unwrap_or_else(|e| panic!("Could not read {}: {}", muscles_file.display(), e));
+
+    let muscles_map = noyalib::from_str::<HashMap<String, HashMap<String, String>>>(&yaml_str)
+        .unwrap_or_else(|e| panic!("Error parsing translations file: {}", e));
+
+    translation_map.extend(muscles_map);
 
     let mut inner_codes: Vec<(String, String)> = Vec::new();
     for (key, translations) in &translation_map {

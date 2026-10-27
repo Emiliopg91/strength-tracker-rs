@@ -70,7 +70,7 @@ pub fn show_main_window(app: &AppHandle) -> tauri::Result<()> {
         .windows
         .iter()
         .find(|w| w.label == "main")
-        .expect("no hay ventana 'main' en tauri.conf.json")
+        .expect("no 'main' window in tauri.conf.json")
         .clone();
 
     let w = WebviewWindowBuilder::from_config(app, &config)?.build()?;
@@ -220,8 +220,11 @@ fn check_for_update(app: AppHandle) {
             Ok(response) => {
                 if response.status == curl_rest::StatusCode::Ok {
                     match serde_json::from_slice::<Value>(&response.body) {
-                        Ok(response_json) => match response_json.get("tag_name") {
-                            Some(tag_name) => match Version::parse(tag_name.as_str().unwrap()) {
+                        Ok(response_json) => match response_json
+                            .get("tag_name")
+                            .and_then(Value::as_str)
+                        {
+                            Some(tag_name) => match Version::parse(tag_name) {
                                 Ok(version) => {
                                     if version > *constants::APP_SEM_VERSION {
                                         info!("Update {} found!", version);
