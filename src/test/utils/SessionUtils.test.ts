@@ -34,6 +34,8 @@ const makeDetails = (
     active_calories: 0,
     total_elapsed_time: 0,
     training_load: 0,
+    primary_muscles: [],
+    secondary_muscles: [],
     ...overrides,
 });
 
