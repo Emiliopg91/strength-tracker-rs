@@ -24,14 +24,15 @@ No account, no cloud, no Garmin Express (which doesn't exist on Linux anyway). J
 
 ## Progression, done for you
 
-- **Double progression per exercise** — Set a rep range such as `8-10-12` and a weight increment. Once every set reaches the top of the range, the app suggests adding the increment and starting again from the bottom; otherwise it moves you to the next rep step.
-- **Only when it's earned** — No suggestion while sets are below the range, at mixed weights, or at different steps of the range.
-- **Unilateral aware** — Per-side reps and half the increment for single-arm or single-leg exercises.
+- **Double progression per exercise** — Set a rep range such as `8-10-12` and a weight increment. Your weakest set sets the pace: once every set reaches the top of the range, the app suggests adding the increment and starting again from the bottom; otherwise it moves you to the next rep step.
+- **Only when it's earned** — No suggestion while any set is below the range or sets were done at mixed weights. Progression can be turned off per exercise.
+- **Unilateral aware** — Rep ranges count per side for single-arm or single-leg exercises.
 - **One click to apply** — Accepted suggestions update your workouts and are pushed to the watch on its next connection.
 
 ## Strength analysis
 
 - **Session review and editing** — Fix exercises, sets, reps and weights, and add notes.
+- **Muscles worked** — Every catalog exercise lists its primary and secondary muscles, and sessions and workouts show them on a front and back body map.
 - **Personal records** — 1RM estimation per exercise, with a desktop notification when you set a new PR.
 - **Exercise history** — Full per-session set history and volume chart for every exercise.
 - **Session comparison** — Compare sessions and their exercises side by side.
