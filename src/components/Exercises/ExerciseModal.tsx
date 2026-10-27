@@ -17,6 +17,7 @@ import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
 import { useLoadingTask } from "@/hooks/useLoadingTask";
 import { BackendClient } from "@/utils/backend/client";
 import { WeightField } from "../Fields/WeightField";
+import { MuscleModel } from "./helpers/MuscleModel";
 
 type Props = {
     exercise: ExerciseDetails;
@@ -182,104 +183,141 @@ export function ExerciseModal({
             </DialogTitle>
 
             <DialogContent dividers>
-                <table id="workout-details-table">
-                    <colgroup>
-                        <col className="col-180" />
-                        <col />
-                        <col />
-                    </colgroup>
-                    <tbody>
-                        <tr>
-                            <td>{translate("category")}:</td>
-                            <td>
-                                {translate("category_" + exercise.category)}
-                            </td>
-                        </tr>
-                        {exercise.primary_muscles.length > 0 && (
-                            <tr>
-                                <td>{translate("primary_muscles")}:</td>
-                                <td>
-                                    {exercise.primary_muscles
-                                        .map((e) => translate("muscle_" + e))
-                                        .toSorted()
-                                        .join(", ")}
-                                </td>
-                            </tr>
-                        )}
-                        {exercise.secondary_muscles.length > 0 && (
-                            <tr>
-                                <td>{translate("secondary_muscles")}:</td>
-                                <td>
-                                    {exercise.secondary_muscles
-                                        .map((e) => translate("muscle_" + e))
-                                        .toSorted()
-                                        .join(", ")}
-                                </td>
-                            </tr>
-                        )}
-                        <tr>
-                            <td>{translate("rm")}:</td>
-                            <td>
-                                {formatNumber(
-                                    fromKg(
-                                        SessionUtils.estimate1rm(
-                                            exercise.weight,
-                                            exercise.reps,
-                                            unilateral,
-                                        ),
-                                    ),
-                                    0,
-                                ) +
-                                    " " +
-                                    getWeightUnit()}
-                            </td>
-                        </tr>
-                        <tr>
-                            <td>{translate("personal_record")}:</td>
-                            <td>
-                                {exercise.reps +
-                                    "x" +
-                                    formatNumber(fromKg(exercise.weight), 1) +
-                                    " " +
-                                    getWeightUnit()}
-                            </td>
-                        </tr>
-                        <tr>
-                            <td>{translate("record_date")}:</td>
-                            <td>{formatTimeDate(exercise.pr_date)}</td>
-                        </tr>
-                        <tr>
-                            <td>{translate("unilateral")}:</td>
-                            <td>
-                                <Switch
-                                    checked={unilateral}
-                                    onChange={toggleUnilateral}
-                                    slotProps={{
-                                        input: {
-                                            "aria-label":
-                                                translate("unilateral"),
-                                        },
-                                    }}
-                                />
-                            </td>
-                        </tr>
-                        <tr>
-                            <td>{translate("progression_suggestion")}:</td>
-                            <td>
-                                <Switch
-                                    checked={progression}
-                                    onChange={toggleProgression}
-                                    slotProps={{
-                                        input: {
-                                            "aria-label": translate(
-                                                "progression_suggestion",
+                <div style={{ display: "flex" }}>
+                    <div style={{ flex: 1 }}>
+                        <table id="workout-details-table">
+                            <colgroup>
+                                <col className="col-180" />
+                                <col />
+                                <col />
+                            </colgroup>
+                            <tbody>
+                                <tr>
+                                    <td>{translate("category")}:</td>
+                                    <td>
+                                        {translate(
+                                            "category_" + exercise.category,
+                                        )}
+                                    </td>
+                                </tr>
+                                {exercise.primary_muscles.length > 0 && (
+                                    <tr>
+                                        <td>{translate("primary_muscles")}:</td>
+                                        <td>
+                                            {exercise.primary_muscles
+                                                .map((e) =>
+                                                    translate("muscle_" + e),
+                                                )
+                                                .toSorted()
+                                                .join(", ")}
+                                        </td>
+                                    </tr>
+                                )}
+                                {exercise.secondary_muscles.length > 0 && (
+                                    <tr>
+                                        <td>
+                                            {translate("secondary_muscles")}:
+                                        </td>
+                                        <td>
+                                            {exercise.secondary_muscles
+                                                .map((e) =>
+                                                    translate("muscle_" + e),
+                                                )
+                                                .toSorted()
+                                                .join(", ")}
+                                        </td>
+                                    </tr>
+                                )}
+                                <tr>
+                                    <td>{translate("rm")}:</td>
+                                    <td>
+                                        {formatNumber(
+                                            fromKg(
+                                                SessionUtils.estimate1rm(
+                                                    exercise.weight,
+                                                    exercise.reps,
+                                                    unilateral,
+                                                ),
                                             ),
-                                        },
-                                    }}
+                                            0,
+                                        ) +
+                                            " " +
+                                            getWeightUnit()}
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>{translate("personal_record")}:</td>
+                                    <td>
+                                        {exercise.reps +
+                                            "x" +
+                                            formatNumber(
+                                                fromKg(exercise.weight),
+                                                1,
+                                            ) +
+                                            " " +
+                                            getWeightUnit()}
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>{translate("record_date")}:</td>
+                                    <td>{formatTimeDate(exercise.pr_date)}</td>
+                                </tr>
+                                <tr>
+                                    <td>{translate("unilateral")}:</td>
+                                    <td>
+                                        <Switch
+                                            checked={unilateral}
+                                            onChange={toggleUnilateral}
+                                            slotProps={{
+                                                input: {
+                                                    "aria-label":
+                                                        translate("unilateral"),
+                                                },
+                                            }}
+                                        />
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>
+                                        {translate("progression_suggestion")}:
+                                    </td>
+                                    <td>
+                                        <Switch
+                                            checked={progression}
+                                            onChange={toggleProgression}
+                                            slotProps={{
+                                                input: {
+                                                    "aria-label": translate(
+                                                        "progression_suggestion",
+                                                    ),
+                                                },
+                                            }}
+                                        />
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div>
+                        {(exercise.primary_muscles.length > 0 ||
+                            exercise.secondary_muscles.length > 0) && (
+                            <div className="session-muscle-model">
+                                <MuscleModel
+                                    primary={exercise.primary_muscles}
+                                    secondary={exercise.secondary_muscles}
                                 />
-                            </td>
-                        </tr>
-                        {progression && (
+                            </div>
+                        )}
+                    </div>
+                </div>
+                {progression && (
+                    <table id="workout-details-table">
+                        <colgroup>
+                            <col className="col-180" />
+                            <col />
+                            <col />
+                        </colgroup>
+                        <tbody>
                             <tr>
                                 <td>{translate("progression")}:</td>
                                 <td>
@@ -315,9 +353,9 @@ export function ExerciseModal({
                                     </Button>
                                 </td>
                             </tr>
-                        )}
-                    </tbody>
-                </table>
+                        </tbody>
+                    </table>
+                )}
                 {progression && suggestion && (
                     <>
                         <hr />
