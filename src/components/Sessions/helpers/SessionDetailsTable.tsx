@@ -23,7 +23,7 @@ export function SessionDetailsTable({ session }: Props) {
         <table id="session-details-table">
             <colgroup>
                 <col className="col-200" />
-                <col className="col-400" />
+                <col className="col-200" />
                 <col />
             </colgroup>
             <tbody>
@@ -90,28 +90,6 @@ export function SessionDetailsTable({ session }: Props) {
                         <td>
                             {formatNumber(fromKg(session.volume), 1)}{" "}
                             {getWeightUnit()}
-                        </td>
-                    </tr>
-                )}
-                {session.primary_muscles.length > 0 && (
-                    <tr>
-                        <td>{translate("primary_muscles")}:</td>
-                        <td>
-                            {session.primary_muscles
-                                .map((e) => translate("muscle_" + e))
-                                .toSorted()
-                                .join(", ")}
-                        </td>
-                    </tr>
-                )}
-                {session.secondary_muscles.length > 0 && (
-                    <tr>
-                        <td>{translate("secondary_muscles")}:</td>
-                        <td>
-                            {session.secondary_muscles
-                                .map((e) => translate("muscle_" + e))
-                                .toSorted()
-                                .join(", ")}
                         </td>
                     </tr>
                 )}

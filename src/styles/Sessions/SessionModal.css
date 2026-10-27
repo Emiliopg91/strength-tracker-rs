@@ -97,6 +97,18 @@
   vertical-align: top;
 }
 
+.session-details-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.session-muscle-model {
+  display: flex;
+  gap: 5px;
+}
+
 #session-details-table td {
   vertical-align: top;
 }

@@ -74,6 +74,8 @@ export function WorkoutsList() {
                         "",
                         toKg,
                     ),
+                    primary_muscles: [],
+                    secondary_muscles: [],
                 };
                 setWorkoutEdit(workout);
             } else {

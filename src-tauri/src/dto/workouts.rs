@@ -41,4 +41,6 @@ pub struct WorkoutDetails {
     pub enabled: bool,
     pub notes: Option<String>,
     pub steps: Vec<WorkoutStep>,
+    pub primary_muscles: Vec<String>,
+    pub secondary_muscles: Vec<String>,
 }

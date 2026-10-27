@@ -18,6 +18,7 @@ import { SessionDetailsTable } from "./helpers/SessionDetailsTable";
 import { SessionHeartRateChart } from "./helpers/SessionHeartRateChart";
 import { SessionSetsTable } from "./helpers/SessionSetsTable";
 import "@/styles/Sessions/SessionModal.css";
+import { MuscleModel } from "../Exercises/helpers/MuscleModel";
 
 type Props = {
     session: SessionFrontDetails;
@@ -140,7 +141,18 @@ export function SessionModal({ session, onClose, onUpdate }: Props) {
                         <hr />
                     </>
                 )}
-                <SessionDetailsTable session={localSession} />
+                <div className="session-details-row">
+                    <SessionDetailsTable session={localSession} />
+                    {(localSession.primary_muscles.length > 0 ||
+                        localSession.secondary_muscles.length > 0) && (
+                        <div className="session-muscle-model">
+                            <MuscleModel
+                                primary={localSession.primary_muscles}
+                                secondary={localSession.secondary_muscles}
+                            />
+                        </div>
+                    )}
+                </div>
                 {localSession.hrBreathData.length > 0 && (
                     <>
                         <hr />

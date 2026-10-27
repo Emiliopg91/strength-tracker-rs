@@ -15,6 +15,7 @@ use tauri_plugin_log::log::{error, info};
 use crate::{
     SettingsLock,
     dao::{
+        exercise::{self, ExerciseRepository},
         session::{self, SessionRepository, entity},
         set::{self, SetRepository},
         workout::{self, Workout, WorkoutRepository},
@@ -155,6 +156,44 @@ pub async fn get_workout_details(
                 Some(&[OrderBy::Desc(entity::columns::DATE)]),
             )?;
 
+            let mut exercises = ExerciseRepository::select()
+                .where_(Where::InMultipleSub(
+                    vec![
+                        exercise::entity::columns::CATEGORY,
+                        exercise::entity::columns::ID,
+                    ],
+                    WorkoutStepRepository::select()
+                        .distinct(&[
+                            workout_step::entity::columns::EX_CAT,
+                            workout_step::entity::columns::EX_ID,
+                        ])
+                        .where_(Where::Eq(
+                            workout_step::entity::columns::WORKOUT,
+                            workout.name.clone().into(),
+                        ))
+                        .to_subquery(),
+                ))
+                .fetch_in(conn)?;
+
+            let mut primary_set = HashSet::new();
+            let mut secondary_set = HashSet::new();
+            for exercise in &mut exercises {
+                exercise.fetch_muscles_relationship_in(conn)?;
+                for muscle in &exercise.muscles {
+                    if muscle.is_primary {
+                        primary_set.insert(muscle.muscle.clone());
+                    } else {
+                        secondary_set.insert(muscle.muscle.clone());
+                    }
+                }
+            }
+
+            let secondary_muscles = secondary_set
+                .into_iter()
+                .filter(|m| !primary_set.contains(m))
+                .collect();
+            let primary_muscles = primary_set.into_iter().collect();
+
             let latest = sessions.first().map(|latest| latest.date);
             let mut count = 0_u32;
             let mut time = 0_u32;
@@ -209,6 +248,8 @@ pub async fn get_workout_details(
                 enabled: workout.enabled,
                 notes: workout.notes,
                 steps: workout.steps,
+                primary_muscles,
+                secondary_muscles,
             };
 
             Ok(details)

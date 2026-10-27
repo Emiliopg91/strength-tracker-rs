@@ -16,6 +16,7 @@ import { useBackendEvent } from "@/hooks/useBackendEvent";
 import { WorkoutVolumeChart } from "./helpers/WorkoutVolumeChart";
 import { WorkoutActionsMenu } from "./helpers/WorkoutActionsMenu";
 import { BackendListener } from "@/utils/backend/listener";
+import { MuscleModel } from "../Exercises/helpers/MuscleModel";
 
 type Props = {
     workout: WorkoutDetails;
@@ -112,85 +113,102 @@ export function WorkoutModal({
             <DialogContent dividers>
                 <div style={{ display: "flex" }}>
                     <div style={{ flex: 1 }}>
-                        <table id="workout-details-table">
-                            <colgroup>
-                                <col className="col-200" />
-                                <col className="col-150" />
-                                <col />
-                            </colgroup>
-                            <tbody>
-                                {workout.session_count > 0 && (
-                                    <>
-                                        <tr>
-                                            <td>{translate("sessions")}:</td>
-                                            <td>
-                                                {formatNumber(
-                                                    workout.session_count,
-                                                    0,
-                                                )}
-                                            </td>
-                                        </tr>
-                                        <tr>
-                                            <td>
-                                                {translate("latest_session")}
-                                            </td>
-                                            <td>
-                                                {workout.latest_session &&
-                                                    formatTimeDate(
-                                                        workout.latest_session,
-                                                    )}
-                                            </td>
-                                        </tr>
-                                        <tr>
-                                            <td>{translate("average_time")}</td>
-                                            <td>
-                                                {formatDuration(
-                                                    workout.avg_time,
-                                                )}
-                                            </td>
-                                        </tr>
-                                        {workout.name.length > 0 && (
+                        <div className="session-details-row">
+                            <table id="workout-details-table">
+                                <colgroup>
+                                    <col className="col-200" />
+                                    <col className="col-150" />
+                                    <col />
+                                </colgroup>
+                                <tbody>
+                                    {workout.session_count > 0 && (
+                                        <>
                                             <tr>
                                                 <td>
-                                                    {translate(
-                                                        "average_volume",
-                                                    )}
-                                                    :
+                                                    {translate("sessions")}:
                                                 </td>
                                                 <td>
                                                     {formatNumber(
-                                                        fromKg(
-                                                            workout.avg_volume,
-                                                        ),
-                                                        1,
-                                                    )}{" "}
-                                                    {getWeightUnit()}
+                                                        workout.session_count,
+                                                        0,
+                                                    )}
                                                 </td>
                                             </tr>
-                                        )}
-                                    </>
-                                )}
-                                {showEnable && (
-                                    <tr>
-                                        <td>{translate("enabled")}:</td>
-                                        <td>
-                                            <Switch
-                                                checked={enabled}
-                                                onChange={toggleEnabled}
-                                                slotProps={{
-                                                    input: {
-                                                        "aria-label":
-                                                            translate(
-                                                                "enabled",
+                                            <tr>
+                                                <td>
+                                                    {translate(
+                                                        "latest_session",
+                                                    )}
+                                                </td>
+                                                <td>
+                                                    {workout.latest_session &&
+                                                        formatTimeDate(
+                                                            workout.latest_session,
+                                                        )}
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td>
+                                                    {translate("average_time")}
+                                                </td>
+                                                <td>
+                                                    {formatDuration(
+                                                        workout.avg_time,
+                                                    )}
+                                                </td>
+                                            </tr>
+                                            {workout.name.length > 0 && (
+                                                <tr>
+                                                    <td>
+                                                        {translate(
+                                                            "average_volume",
+                                                        )}
+                                                        :
+                                                    </td>
+                                                    <td>
+                                                        {formatNumber(
+                                                            fromKg(
+                                                                workout.avg_volume,
                                                             ),
-                                                    },
-                                                }}
-                                            />
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
+                                                            1,
+                                                        )}{" "}
+                                                        {getWeightUnit()}
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </>
+                                    )}
+                                    {showEnable && (
+                                        <tr>
+                                            <td>{translate("enabled")}:</td>
+                                            <td>
+                                                <Switch
+                                                    checked={enabled}
+                                                    onChange={toggleEnabled}
+                                                    slotProps={{
+                                                        input: {
+                                                            "aria-label":
+                                                                translate(
+                                                                    "enabled",
+                                                                ),
+                                                        },
+                                                    }}
+                                                />
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                            {(workout.primary_muscles.length > 0 ||
+                                workout.secondary_muscles.length > 0) && (
+                                <div className="session-muscle-model">
+                                    <MuscleModel
+                                        primary={workout.primary_muscles}
+                                        secondary={workout.secondary_muscles}
+                                    />
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
                 {workout.sessions.length > 1 && (

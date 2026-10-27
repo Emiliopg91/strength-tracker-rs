@@ -30,9 +30,7 @@ export function SessionSetsTable({
 
     const [hasRests] = useState(series.find((s) => s.rest) !== undefined);
 
-    const [groupedSets, setGroupedSets] = useState(
-        series.find((s) => s.rest) !== undefined,
-    );
+    const [groupedSets, setGroupedSets] = useState(true);
 
     const updateSerieReps = (idx: number, reps: number | null) => {
         onUpdateSerieRepsWeight(idx, "reps", reps ?? 0);

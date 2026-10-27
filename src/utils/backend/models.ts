@@ -190,6 +190,8 @@ export interface WorkoutDetails {
   latest_session: number | null;
   name: string;
   notes: string | null;
+  primary_muscles: string[];
+  secondary_muscles: string[];
   session_count: number;
   sessions: WorkoutSession[];
   steps: WorkoutStep[];
