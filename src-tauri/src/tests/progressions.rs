@@ -159,13 +159,13 @@ fn only_latest_session_is_considered() {
 }
 
 #[test]
-fn sets_in_different_brackets_give_no_suggestion() {
+fn sets_in_different_brackets_follow_the_weakest() {
     let db = common::test_db();
     configure(&db, BENCH, false, "8-10-12");
     log_session(&db, 1, BENCH, &[(12, 100.0), (12, 100.0), (9, 100.0)]);
     program(&db, BENCH, 100.0, 12);
 
-    assert_eq!(suggestion(&db, BENCH), None);
+    assert_eq!(suggestion(&db, BENCH), suggested(100.0, 10));
 }
 
 #[test]
@@ -197,7 +197,7 @@ fn unilateral_top_of_range_adds_weight_and_resets_reps() {
     log_session(&db, 1, CABLE_ROW, &[(24, 20.0), (24, 20.0)]);
     program(&db, CABLE_ROW, 20.0, 24);
 
-    assert_eq!(suggestion(&db, CABLE_ROW), suggested(21.0, 16));
+    assert_eq!(suggestion(&db, CABLE_ROW), suggested(22.0, 16));
 }
 
 #[test]
@@ -270,7 +270,7 @@ fn unilateral_bodyweight_top_of_range_adds_weight() {
     log_session(&db, 1, PULL_UP, &[(24, 0.0), (24, 0.0)]);
     program(&db, PULL_UP, 0.0, 24);
 
-    assert_eq!(suggestion(&db, PULL_UP), suggested(1.0, 16));
+    assert_eq!(suggestion(&db, PULL_UP), suggested(2.0, 16));
 }
 
 // Missing data / nothing to change

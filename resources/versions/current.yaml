@@ -25,6 +25,7 @@ node:
   leaflet: 1.9.4
   prettier: 3.9.10
   react: 19.3.1
+  react-body-highlighter: 2.0.5
   react-dom: 19.3.1
   react-leaflet: 5.0.0
   recharts: 3.10.1
@@ -38,11 +39,12 @@ rust:
   chrono: 0.4.45
   curl-rest: 0.6.0
   embedded-io-adapters: 0.7.0
+  futures-util: 0.3.34
   geo-types: 0.7.20
   gpx: 0.10.0
   gtk: 0.18.2
   libc: 0.2.191
-  mtp-rs: 0.34.3
+  mtp-rs: 0.35.0
   noyalib: 0.0.58
   nusb: 0.2.9
   ouroboros: 0.18.5
@@ -64,6 +66,5 @@ rust:
   tempfile: 3.27.0
   thiserror: 2.0.21
   tokio: 1.54.1
-  tokio-stream: 0.1.19
   tray-icon: 0.25.1
   webkit2gtk: 2.0.2
