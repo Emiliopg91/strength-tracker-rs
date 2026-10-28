@@ -60,8 +60,9 @@ export function App(): JSX.Element {
         startTransition(() => setTabState(newTab));
     };
 
+    // Even when preloaded, lazy suspends once on first render; a transition avoids hiding the tab and React's fallback throttle
     const showSettings = () => {
-        setSettingsOpened(true);
+        startTransition(() => setSettingsOpened(true));
     };
 
     const closeSettings = () => {
