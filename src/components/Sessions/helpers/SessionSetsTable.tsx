@@ -258,7 +258,9 @@ export function SessionSetsTable({
                                                             opt,
                                                         )
                                                     }
-                                                    sx={{ width: 300 }}
+                                                    sx={{
+                                                        width: 300,
+                                                    }}
                                                 />
                                             )}
                                         </td>

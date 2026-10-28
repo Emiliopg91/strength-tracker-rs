@@ -106,20 +106,19 @@ export function SessionModal({ session, onClose, onUpdate }: Props) {
     return (
         <Dialog open={true} onClose={onClose} fullWidth maxWidth="sm">
             <DialogTitle>
-                {translate("sport_" + localSession.sport) +
-                    " - " +
-                    translate(
-                        "sport_" +
-                            localSession.sport +
-                            "_" +
-                            localSession.sub_sport,
-                    )}
                 {localSession.name.length > 0 && (
+                    <span>{localSession.name}</span>
+                )}
+                {localSession.name.length == 0 && (
                     <span>
-                        :{" "}
-                        <span className="session-modal-name">
-                            {localSession.name}
-                        </span>
+                        {translate("sport_" + localSession.sport) +
+                            " - " +
+                            translate(
+                                "sport_" +
+                                    localSession.sport +
+                                    "_" +
+                                    localSession.sub_sport,
+                            )}
                     </span>
                 )}
                 <IconButton onClick={onClose} className="modal-close-button">

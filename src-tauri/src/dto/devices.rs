@@ -1,4 +1,3 @@
-use mtp_rs::DeviceInfo;
 use serde::Serialize;
 
 use crate::dao::device::Device;
@@ -10,22 +9,12 @@ pub struct DeviceListItem {
     pub serial_number: String,
 }
 
-impl From<&DeviceInfo> for DeviceListItem {
-    fn from(value: &DeviceInfo) -> Self {
+impl From<&Device> for DeviceListItem {
+    fn from(value: &Device) -> Self {
         Self {
-            manufacturer: value.manufacturer.clone(),
+            manufacturer: "Garmin".to_string(),
             model: value.model.clone(),
-            serial_number: value.serial_number.clone(),
-        }
-    }
-}
-
-impl From<&DeviceListItem> for Device {
-    fn from(value: &DeviceListItem) -> Self {
-        Device {
-            serial: value.serial_number.clone(),
-            model: value.model.clone(),
-            last_sync: None,
+            serial_number: value.serial.clone(),
         }
     }
 }

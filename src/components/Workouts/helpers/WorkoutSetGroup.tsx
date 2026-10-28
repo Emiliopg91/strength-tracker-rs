@@ -90,19 +90,18 @@ export function WorkoutSetGroup({
                 }}
             >
                 <legend>
-                    <b>{translate("set_x", [(index + 1).toString()])}</b>
-                </legend>
-                <Box
-                    sx={{
-                        display: "flex",
-                        flexWrap: "wrap",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        gap: 1,
-                        pb: 1,
-                    }}
-                >
-                    <FormControl size="small" sx={{ minWidth: 100 }}>
+                    <FormControl
+                        size="small"
+                        sx={{
+                            minWidth: 100,
+                            // Straddles the fieldset border, so it needs an opaque background.
+                            // --Paper-overlay is inherited from the dialog's Paper (dark-mode elevation tint).
+                            "& .MuiInputBase-root": {
+                                backgroundColor: "background.paper",
+                                backgroundImage: "var(--Paper-overlay)",
+                            },
+                        }}
+                    >
                         <InputLabel id={lapsLabelId}>
                             {translate("repeat")}
                         </InputLabel>
@@ -126,6 +125,17 @@ export function WorkoutSetGroup({
                             )}
                         </Select>
                     </FormControl>
+                </legend>
+                <Box
+                    sx={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: 1,
+                        pb: 1,
+                    }}
+                >
                     <Box sx={{ display: "flex", gap: 0.5 }}>
                         <Tooltip title={translate("move_up")}>
                             <span>

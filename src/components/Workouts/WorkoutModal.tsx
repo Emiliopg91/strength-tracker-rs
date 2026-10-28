@@ -100,7 +100,7 @@ export function WorkoutModal({
                             <WorkoutActionsMenu
                                 workoutName={workout.name}
                                 onOpenEdit={() => onOpenEdit(workout)}
-                                send={false}
+                                send={workout.enabled}
                             />
                         )}
                     </Box>

@@ -58,19 +58,22 @@ export function ExerciseVolumeChart({ series, exercise }: Props) {
     }[] = [];
 
     Object.keys(series).forEach((k) => {
-        const date = new Date(parseInt(k.split("\n")[1]));
+        const dateNumber = parseInt(k.split("\n")[1]);
+        if (exercise.chart_session.includes(dateNumber)) {
+            const date = new Date(dateNumber);
 
-        let count = 0;
-        let weight = 0;
-        series[k].forEach((s) => {
-            count += s.reps;
-            weight = Math.max(weight, s.weight);
-        });
-        chartData.push({
-            date: date.getTime(),
-            weight,
-            reps: Math.floor(count / series[k].length),
-        });
+            let count = 0;
+            let weight = 0;
+            series[k].forEach((s) => {
+                count += s.reps;
+                weight = Math.max(weight, s.weight);
+            });
+            chartData.push({
+                date: date.getTime(),
+                weight,
+                reps: Math.floor(count / series[k].length),
+            });
+        }
     });
     chartData.sort((a, b) => a.date - b.date);
     const dates = chartData.map(({ date }) => date);

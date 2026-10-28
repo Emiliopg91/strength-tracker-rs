@@ -154,6 +154,7 @@ impl TryFrom<FitParser> for Session {
             device: None,
             device_obj: None,
             additional_data,
+            show_exercises_chart: true,
         })
     }
 }
@@ -223,6 +224,7 @@ fn handle_step_message(msg: &mesgdef::WorkoutStep, exercises: &mut Vec<Option<Ex
             reps: "".to_string(),
             weight: 0_f32,
             muscles: vec![],
+            notes: None,
         }))
     } else {
         exercises.push(None)

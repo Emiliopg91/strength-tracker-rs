@@ -48,7 +48,11 @@ export function ExerciseModal({
     const [suggestion, setSuggestion] = useState<ProgressionSuggestion | null>(
         suggestionInput,
     );
+    const [progressionStatus, setProgressionStatus] =
+        useState<ProgressionSuggestion | null>(null);
     const [range, setRange] = useState(exercise.reps_range);
+    const [notes, setNotes] = useState(exercise.notes);
+    const [originalNotes, setOriginalNotes] = useState(() => exercise.notes);
     // Value being edited as "N-N-...-N"; the range above only changes once saved
     const [rangeInput, setRangeInput] = useState(exercise.reps_range);
     const [weightInput, setWeightInput] = useState(
@@ -64,6 +68,9 @@ export function ExerciseModal({
             steps[0] > 0 && steps.every((s, i) => i == 0 || s > steps[i - 1]);
         return valid ? steps : null;
     })();
+    const parametersChanged =
+        parsedRange != null &&
+        (parsedRange.join("-") !== range || weightInput !== weigh);
     const loadingTask = useLoadingTask();
 
     // Effect events, so the parent's callback identity never retriggers the effect below
@@ -83,12 +90,26 @@ export function ExerciseModal({
         ).then(reportSuggestion);
     });
 
+    const reportProgressionStatus = useEffectEvent(
+        (sug: ProgressionSuggestion | null) => {
+            setProgressionStatus(sug);
+        },
+    );
+
+    const fetchProgressionStatus = useEffectEvent(() => {
+        loadingTask(
+            BackendClient.getProgressionStatus(exercise.category, exercise.id),
+        ).then(reportProgressionStatus);
+    });
+
     const settingsKey = `${exercise.category}|${exercise.id}|${progression}|${unilateral}|${range}|${weigh}`;
     // Settings the current suggestion was fetched for; the initial one comes from the parent
     const fetchedFor = useRef<string | null>(settingsKey);
 
     // Debounced so a burst of setting changes only fetches once
     useEffect(() => {
+        fetchProgressionStatus();
+
         if (!progression) {
             if (fetchedFor.current !== null) {
                 fetchedFor.current = null;
@@ -173,6 +194,18 @@ export function ExerciseModal({
         });
     };
 
+    const saveNotes = () => {
+        loadingTask(
+            BackendClient.saveExerciseNotes(
+                exercise.category,
+                exercise.id,
+                notes ?? "",
+            ),
+        ).then(() => {
+            setOriginalNotes(notes);
+        });
+    };
+
     return (
         <Dialog open={true} onClose={onClose} fullWidth maxWidth="sm">
             <DialogTitle>
@@ -200,34 +233,6 @@ export function ExerciseModal({
                                         )}
                                     </td>
                                 </tr>
-                                {exercise.primary_muscles.length > 0 && (
-                                    <tr>
-                                        <td>{translate("primary_muscles")}:</td>
-                                        <td>
-                                            {exercise.primary_muscles
-                                                .map((e) =>
-                                                    translate("muscle_" + e),
-                                                )
-                                                .toSorted()
-                                                .join(", ")}
-                                        </td>
-                                    </tr>
-                                )}
-                                {exercise.secondary_muscles.length > 0 && (
-                                    <tr>
-                                        <td>
-                                            {translate("secondary_muscles")}:
-                                        </td>
-                                        <td>
-                                            {exercise.secondary_muscles
-                                                .map((e) =>
-                                                    translate("muscle_" + e),
-                                                )
-                                                .toSorted()
-                                                .join(", ")}
-                                        </td>
-                                    </tr>
-                                )}
                                 <tr>
                                     <td>{translate("rm")}:</td>
                                     <td>
@@ -310,52 +315,101 @@ export function ExerciseModal({
                         )}
                     </div>
                 </div>
-                {progression && (
-                    <table id="workout-details-table">
-                        <colgroup>
-                            <col className="col-180" />
-                            <col />
-                            <col />
-                        </colgroup>
-                        <tbody>
-                            <tr>
-                                <td>{translate("progression")}:</td>
-                                <td>
-                                    <TextField
-                                        size="small"
-                                        error={parsedRange == null}
-                                        value={rangeInput}
-                                        placeholder="8-10-12"
-                                        sx={{ width: 150 }}
-                                        slotProps={{
-                                            htmlInput: {
-                                                inputMode: "numeric",
-                                            },
-                                        }}
-                                        onChange={onRangeChange}
-                                        label={translate("reps_range")}
-                                    />
-                                    <WeightField
-                                        value={weightInput}
-                                        onChange={(weight) => {
-                                            setWeightInput(weight!);
-                                        }}
-                                        sx={{ ml: 1, width: 100 }}
-                                        allowEmpty={false}
-                                    />
-                                    <Button
-                                        onClick={updateProgressionParameters}
-                                        disabled={parsedRange == null}
-                                        variant="contained"
-                                        sx={{ ml: 1, mt: 0.25 }}
-                                    >
-                                        {translate("apply")}
-                                    </Button>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                )}
+                <table id="workout-details-table">
+                    <colgroup>
+                        <col className="col-180" />
+                        <col />
+                        <col />
+                    </colgroup>
+                    <tbody>
+                        {progression && (
+                            <>
+                                {progressionStatus && (
+                                    <tr>
+                                        <td style={{ paddingBottom: "10px" }}>
+                                            {translate("current_progression")}:
+                                        </td>
+                                        <td style={{ paddingBottom: "10px" }}>
+                                            {(exercise.unilateral
+                                                ? "2x" +
+                                                  progressionStatus.reps / 2
+                                                : progressionStatus.reps) +
+                                                "x" +
+                                                fromKg(
+                                                    progressionStatus.weight,
+                                                ) +
+                                                " " +
+                                                getWeightUnit()}
+                                        </td>
+                                    </tr>
+                                )}
+                                <tr>
+                                    <td>{translate("progression")}:</td>
+                                    <td>
+                                        <TextField
+                                            size="small"
+                                            error={parsedRange == null}
+                                            value={rangeInput}
+                                            placeholder="8-10-12"
+                                            sx={{ width: 150 }}
+                                            slotProps={{
+                                                htmlInput: {
+                                                    inputMode: "numeric",
+                                                },
+                                            }}
+                                            onChange={onRangeChange}
+                                            label={translate("reps_range")}
+                                        />
+                                        <WeightField
+                                            value={weightInput}
+                                            onChange={(weight) => {
+                                                setWeightInput(weight!);
+                                            }}
+                                            sx={{ ml: 1, width: 100 }}
+                                            allowEmpty={false}
+                                        />
+                                        <Button
+                                            onClick={
+                                                updateProgressionParameters
+                                            }
+                                            disabled={!parametersChanged}
+                                            variant="contained"
+                                            sx={{ ml: 1, mt: 0.25 }}
+                                        >
+                                            {translate("apply")}
+                                        </Button>
+                                    </td>
+                                </tr>
+                            </>
+                        )}
+                        <tr>
+                            <td colSpan={2}>
+                                <TextField
+                                    label={translate("notes")}
+                                    type="text"
+                                    maxRows={1}
+                                    size="small"
+                                    sx={{ width: 430 }}
+                                    value={notes ?? ""}
+                                    slotProps={{
+                                        htmlInput: {
+                                            maxLength: 200,
+                                        },
+                                    }}
+                                    onChange={(e) => setNotes(e.target.value)}
+                                />
+                                <Button
+                                    variant="contained"
+                                    sx={{ ml: 1, mt: 0.25 }}
+                                    disabled={originalNotes === notes}
+                                    onClick={saveNotes}
+                                >
+                                    {translate("save")}
+                                </Button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
                 {progression && suggestion && (
                     <>
                         <hr />

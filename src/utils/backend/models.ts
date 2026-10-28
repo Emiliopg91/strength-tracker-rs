@@ -21,7 +21,7 @@ export enum CloudProvider {
 	DropBox = "DropBox",
 }
 
-// From src-tauri/src/dto/devices.rs:7
+// From src-tauri/src/dto/devices.rs:6
 export interface DeviceListItem {
   manufacturer: string;
   model: string;
@@ -34,10 +34,12 @@ export enum DistanceUnit {
 	Miles = "Miles",
 }
 
-// From src-tauri/src/dto/exercises.rs:33
+// From src-tauri/src/dto/exercises.rs:35
 export interface ExerciseDetails {
   category: number;
+  chart_session: number[];
   id: number;
+  notes: string | null;
   pr_date: number;
   primary_muscles: string[];
   prog_weight: number;
@@ -56,6 +58,7 @@ export interface ExerciseListItem {
   category: number;
   date: number;
   id: number;
+  notes: string | null;
   progression: boolean;
   reps: number;
   unilateral: boolean;
@@ -68,7 +71,7 @@ export enum Languages {
 	English = "English",
 }
 
-// From src-tauri/src/dto/exercises.rs:90
+// From src-tauri/src/dto/exercises.rs:96
 export interface ProgressionSuggestion {
   reps: number;
   weight: number;
@@ -97,6 +100,7 @@ export interface SessionDetails {
   primary_muscles: string[];
   secondary_muscles: string[];
   sets: SessionSet[];
+  show_exercises_chart: boolean;
   speeds: (number | null)[];
   sport: number;
   sub_sport: number;
@@ -125,7 +129,7 @@ export interface SessionListItem {
   training_load: number;
 }
 
-// From src-tauri/src/dto/sessions.rs:227
+// From src-tauri/src/dto/sessions.rs:232
 export interface SessionLocation {
   location: string;
   session: number;
@@ -143,7 +147,7 @@ export interface SessionSet {
   weight: number;
 }
 
-// From src-tauri/src/dto/sessions.rs:220
+// From src-tauri/src/dto/sessions.rs:225
 export interface SessionSetsUpdate {
   notes: string | null;
   sets: SessionSet[];

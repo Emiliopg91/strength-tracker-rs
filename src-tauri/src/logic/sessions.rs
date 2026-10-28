@@ -480,80 +480,16 @@ where
                 warn!("{}", msg);
                 false
             } else {
-                let date = session.date;
-                let mut series = std::mem::take(&mut session.sets);
-                let mut laps = std::mem::take(&mut session.laps);
-                let add_data = session.additional_data.take();
-
-                if let Some(workout) = &session.workout_obj {
-                    let updated = WorkoutRepository::update()
-                        .set(
-                            workout::entity::columns::NOTES,
-                            workout.notes.clone().into(),
-                        )
-                        .where_(Where::Eq(
-                            workout::entity::columns::NAME,
-                            workout.name.clone().into(),
-                        ))
-                        .execute_in(tx)?;
-                    if updated == 0 {
-                        WorkoutRepository::insert()
-                            .or_ignore()
-                            .item(&mut Workout {
-                                name: workout.name.clone(),
-                                enabled: true,
-                                notes: workout.notes.clone(),
-                                steps: Vec::new(),
-                            })
-                            .execute_in(tx)?;
-                    }
-
-                    if handled_workouts.insert(workout.name.clone())
-                        && WorkoutStepRepository::count_by_workout_in(tx, &workout.name)? == 0
-                    {
-                        let mut insert = WorkoutStepRepository::insert();
-                        let mut steps = workout.steps.clone();
-                        for step in &mut steps {
-                            insert = insert.item(step);
-                        }
-
-                        insert.execute_in(tx)?;
-                    }
-                }
-
                 if let Some(ref device) = device {
                     session.device = Some(device.serial.clone());
                 }
-                SessionRepository::insert().item(session).execute_in(tx)?;
+                insert_session(tx, session, &mut handled_workouts)?;
 
-                for serie in &series {
+                for serie in &session.sets {
                     handled_exercises.insert((serie.ex_cat, serie.ex_id));
                 }
 
-                let mut insert = SetRepository::insert();
-                let mut count = 0;
-                for serie in &mut series {
-                    insert = insert.item(serie);
-                    count += 1;
-                }
-                if count > 0 {
-                    insert.execute_in(tx)?;
-                }
-
-                if let Some(mut additional_data) = add_data {
-                    AdditionalDataRepository::insert()
-                        .item(&mut additional_data)
-                        .execute_in(tx)?;
-                }
-
-                if !laps.is_empty() {
-                    let mut insert = LapRepository::insert();
-                    for lap in &mut laps {
-                        insert = insert.item(lap)
-                    }
-                    insert.execute_in(tx)?;
-                }
-
+                let date = session.date;
                 existing_sessions.insert(date);
                 success.push(date);
 
@@ -598,6 +534,85 @@ where
 }
 
 /// Stores the notes of a single session, creating its additional data row if needed. Blank notes are stored as `NULL`.
+/// Inserts a session with its sets, laps and additional data, creating its
+/// workout (and steps, if missing) when the session references one.
+/// Child collections are restored on the session after insertion.
+pub fn insert_session(
+    tx: &mut rusqlite_orm::rusqlite::Transaction,
+    session: &mut Session,
+    handled_workouts: &mut HashSet<String>,
+) -> Result<(), DatabaseError> {
+    let mut series = std::mem::take(&mut session.sets);
+    let mut laps = std::mem::take(&mut session.laps);
+    let mut add_data = session.additional_data.take();
+
+    if let Some(workout) = &session.workout_obj {
+        let updated = WorkoutRepository::update()
+            .set(
+                workout::entity::columns::NOTES,
+                workout.notes.clone().into(),
+            )
+            .where_(Where::Eq(
+                workout::entity::columns::NAME,
+                workout.name.clone().into(),
+            ))
+            .execute_in(tx)?;
+        if updated == 0 {
+            WorkoutRepository::insert()
+                .or_ignore()
+                .item(&mut Workout {
+                    name: workout.name.clone(),
+                    enabled: true,
+                    notes: workout.notes.clone(),
+                    steps: Vec::new(),
+                })
+                .execute_in(tx)?;
+        }
+
+        if handled_workouts.insert(workout.name.clone())
+            && WorkoutStepRepository::count_by_workout_in(tx, &workout.name)? == 0
+        {
+            let mut insert = WorkoutStepRepository::insert();
+            let mut steps = workout.steps.clone();
+            for step in &mut steps {
+                insert = insert.item(step);
+            }
+
+            insert.execute_in(tx)?;
+        }
+    }
+
+    SessionRepository::insert().item(session).execute_in(tx)?;
+
+    if !series.is_empty() {
+        let mut insert = SetRepository::insert();
+        for serie in &mut series {
+            insert = insert.item(serie);
+        }
+        insert.execute_in(tx)?;
+    }
+
+    if let Some(additional_data) = &mut add_data {
+        AdditionalDataRepository::insert()
+            .item(additional_data)
+            .execute_in(tx)?;
+    }
+
+    if !laps.is_empty() {
+        let mut insert = LapRepository::insert();
+        for lap in &mut laps {
+            insert = insert.item(lap)
+        }
+        insert.execute_in(tx)?;
+    }
+
+    session.sets = series;
+    session.laps = laps;
+    session.additional_data = add_data;
+
+    Ok(())
+}
+
 pub fn update_session_notes(
     tx: &rusqlite_orm::rusqlite::Transaction,
     session: u32,
@@ -825,4 +840,114 @@ pub fn heatmap_data(database: &DatabasePool) -> Result<Vec<Vec<(u32, u16)>>, Str
         .map_err(|e| e.to_string())?;
 
     Ok(res)
+}
+
+#[allow(dead_code)]
+pub fn merge_sessions(
+    database: &DatabasePool,
+    to_date: u32,
+    from_date: u32,
+) -> Result<(), DatabaseError> {
+    let mut to = SessionRepository::select_by_id(database, to_date)
+        .expect("Error on database query")
+        .expect(&format!(
+            "Could not find session with timestamp {}",
+            to_date
+        ));
+    to.fetch_additional_data_relationship(database)
+        .expect("Error on database query");
+    to.fetch_laps_relationship(database)
+        .expect("Error on database query");
+    to.fetch_sets_relationship(database)
+        .expect("Error on database query");
+
+    let mut from = SessionRepository::select_by_id(database, from_date)
+        .expect("Error on database query")
+        .expect(&format!(
+            "Could not find session with timestamp {}",
+            from_date
+        ));
+    from.fetch_additional_data_relationship(database)
+        .expect("Error on database query");
+    from.fetch_laps_relationship(database)
+        .expect("Error on database query");
+    from.fetch_sets_relationship(database)
+        .expect("Error on database query");
+
+    to.total_elapsed_time += from.total_elapsed_time;
+    to.active_time += from.active_time;
+    to.training_load += from.training_load;
+    to.active_calories += from.active_calories;
+
+    match &mut to.additional_data {
+        Some(add_data) => {
+            if let Some(add_data2) = &mut from.additional_data {
+                fn merge_vec<T>(to: &mut Option<Vec<T>>, from: &mut Option<Vec<T>>) {
+                    if let Some(v2) = from.take() {
+                        match to {
+                            Some(v) => v.extend(v2),
+                            None => *to = Some(v2),
+                        }
+                    }
+                }
+
+                merge_vec(&mut add_data.heart_rates, &mut add_data2.heart_rates);
+                merge_vec(&mut add_data.coordinates, &mut add_data2.coordinates);
+                merge_vec(&mut add_data.speeds, &mut add_data2.speeds);
+                merge_vec(&mut add_data.altitudes, &mut add_data2.altitudes);
+
+                add_data.distance = match (add_data.distance, add_data2.distance) {
+                    (Some(d1), Some(d2)) => Some(d1 + d2),
+                    (d1, d2) => d1.or(d2),
+                };
+
+                add_data.max_hr = match (add_data.max_hr, add_data2.max_hr) {
+                    (Some(hr1), Some(hr2)) => Some(hr1.max(hr2)),
+                    (hr1, hr2) => hr1.or(hr2),
+                };
+
+                if let Some(notes2) = add_data2.notes.take() {
+                    match &mut add_data.notes {
+                        Some(notes) => {
+                            notes.push(' ');
+                            notes.push_str(&notes2);
+                        }
+                        None => add_data.notes = Some(notes2),
+                    }
+                }
+            }
+        }
+        None => {
+            to.additional_data = from.additional_data.take().map(|mut add_data| {
+                add_data.session = to.date;
+                add_data
+            })
+        }
+    }
+
+    for lap in &from.laps {
+        let mut lap = lap.clone();
+        lap.session = to.date;
+        lap.idx = to.laps.len() as u16;
+        to.laps.push(lap);
+    }
+
+    for set in &from.sets {
+        let mut set = set.clone();
+        set.session = to.date;
+        set.idx = to.sets.len() as u8;
+        to.sets.push(set);
+    }
+
+    database.run_in_transaction(|tx| {
+        to.delete_by_id_in(tx)?;
+        from.delete_by_id_in(tx)?;
+
+        insert_session(tx, &mut to, &mut HashSet::new())?;
+
+        let handled_exercises = to.sets.iter().map(|s| (s.ex_cat, s.ex_id)).collect();
+        update_prs(tx, handled_exercises, &[to.date], None)?;
+
+        Ok(())
+    })
 }

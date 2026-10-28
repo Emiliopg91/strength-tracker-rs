@@ -1,4 +1,5 @@
 use std::{
+    collections::{HashMap, HashSet},
     fs,
     sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
@@ -6,7 +7,7 @@ use std::{
 
 use chrono::{Datelike, Local, TimeZone, Timelike};
 use futures_util::StreamExt;
-use nusb::hotplug::HotplugEvent;
+use mtp_rs::{MtpDevice, mtp::HotplugEvent};
 use rusqlite_orm::{
     dao::Repository,
     database::DatabasePool,
@@ -22,6 +23,7 @@ use crate::{
     SettingsLock,
     dao::{
         device::{Device, DeviceRepository},
+        exercise::{self, ExerciseRepository},
         session::{self, SessionRepository},
         settings::WeightUnit,
         workout::{self, Workout, WorkoutRepository},
@@ -49,16 +51,34 @@ use crate::{
 pub fn start_device_watcher(app: AppHandle) {
     info!("Starting device monitor...");
     tauri::async_runtime::spawn(async move {
-        let mut devices: Vec<DeviceListItem> = Vec::new();
-
-        match nusb::watch_devices() {
+        match mtp_rs::mtp::watch_devices() {
             Ok(w) => {
-                mtp_dev_check_and_sync(app.clone(), &mut devices).await;
+                let mut devices: HashMap<String, Device> = HashMap::new();
+                let mut locations: HashMap<u64, String> = HashMap::new();
+
                 let mut watch = w;
                 while let Some(event) = watch.next().await {
                     match event {
-                        HotplugEvent::Connected(_) | HotplugEvent::Disconnected(_) => {
-                            mtp_dev_check_and_sync(app.clone(), &mut devices).await;
+                        HotplugEvent::Arrived(info) => {
+                            if info.vendor_id != constants::MTP_GARMIN_VENDOR_ID {
+                                continue;
+                            }
+
+                            if let Ok(device) = MtpDevice::open_by_location(info.location_id).await
+                            {
+                                let parsed_device = Device::try_from(device.device_info());
+                                let _ = device.close().await;
+
+                                if let Ok(mut device) = parsed_device {
+                                    locations.insert(info.location_id, device.serial.clone());
+                                    on_device_connected(&app, &mut device, &mut devices).await
+                                }
+                            }
+                        }
+                        HotplugEvent::Left(info) => {
+                            if let Some(serial) = locations.remove(&info.location_id) {
+                                on_device_disconnected(&app, &serial, &mut devices).await
+                            }
                         }
                     }
                 }
@@ -70,114 +90,87 @@ pub fn start_device_watcher(app: AppHandle) {
     });
 }
 
-/// Diffs the currently connected Garmin devices against `devices`, enrolling new ones in the DB, emitting connect/disconnect events, and triggering auto-sync for newly connected devices.
-async fn mtp_dev_check_and_sync(app: AppHandle, devices: &mut Vec<DeviceListItem>) {
-    let mut devs_to_sync = Vec::new();
-    let mtp_client = MTP_CLIENT_INST.lock().await;
-    let connected = mtp_client
-        .get_connected_devices()
-        .await
-        .map_err(|e| e.to_string());
-    drop(mtp_client);
-
-    if let Ok(cur_dev) = connected {
-        let already_known: Vec<String> = devices.iter().map(|d| d.serial_number.clone()).collect();
-
-        let db = app.state::<DatabasePool>();
-
-        let newly_enrolled = db
-            .run_in_transaction(|tx| {
-                let mut enrolled = Vec::new();
-                for device in &cur_dev {
-                    if !already_known.contains(&device.serial_number) {
-                        let enrol_err = DeviceRepository::insert()
-                            .or_ignore()
-                            .item(&mut Device::from(device))
-                            .execute_in(tx)
-                            .err();
-
-                        match enrol_err {
-                            Some(e) => {
-                                error!(
-                                    "Error enrolling {} {} ({}): {}",
-                                    device.manufacturer, device.model, device.serial_number, e
-                                );
-                            }
-                            None => enrolled.push(device.clone()),
-                        }
-                    }
-                }
-
-                Ok(enrolled)
-            })
-            .unwrap_or_default();
+async fn on_device_disconnected(
+    app: &AppHandle,
+    serial: &str,
+    devices: &mut HashMap<String, Device>,
+) {
+    if let Some(device) = devices.remove(serial) {
+        let payload: DeviceListItem = DeviceListItem::from(&device);
+        let _ = app.emit("device_disconnected", payload);
 
         let lang = {
             let settings_state = app.state::<SettingsLock>();
             let settings = settings_state.read().unwrap();
             settings.language
         };
-        for device in &newly_enrolled {
-            info!(
-                "Connected {} {} ({})",
-                device.manufacturer, device.model, device.serial_number
-            );
-            devices.push(device.clone());
 
-            devs_to_sync.push(device.serial_number.clone());
-            show_notification(NotificationDefinition {
-                title: translate("device_connected", lang),
-                body: translate_and_replace(
-                    "syncing_device",
-                    &[&device.manufacturer, &device.model],
-                    lang,
-                ),
-                kind: NotificationKind::Temporal,
-            });
+        info!("Disconnected Garmin {} ({})", device.model, device.serial);
+        show_notification(NotificationDefinition {
+            title: translate("device_disconnected", lang),
+            body: format!("Garmin {}", device.model),
+            kind: NotificationKind::Temporal,
+        });
+    }
+}
 
-            let payload: DeviceListItem = device.clone();
-            let _ = app.emit("device_connected", payload);
-        }
-
-        for device in devices.iter() {
-            if !cur_dev
-                .iter()
-                .any(|d| d.serial_number == device.serial_number)
-            {
-                let payload: DeviceListItem = device.clone();
-                let _ = app.emit("device_disconnected", payload);
-
-                info!(
-                    "Disconnected {} {} ({})",
-                    device.manufacturer, device.model, device.serial_number
-                );
-                show_notification(NotificationDefinition {
-                    title: translate("device_disconnected", lang),
-                    body: format!("{} {}", device.manufacturer, device.model),
-                    kind: NotificationKind::Temporal,
-                });
-            }
-        }
-
-        devices.retain(|d| cur_dev.iter().any(|cd| cd.serial_number == d.serial_number));
+async fn on_device_connected(
+    app: &AppHandle,
+    device: &mut Device,
+    devices: &mut HashMap<String, Device>,
+) {
+    // The initial scan and the hotplug watcher can both report the same device.
+    if devices.contains_key(&device.serial) {
+        return;
     }
 
-    if !devs_to_sync.is_empty() {
-        let _ = app.emit("start_loading", ());
-        let mut imported = 0;
-        for dev in devs_to_sync {
-            if let Ok(i) = _import_from_device(&app, &dev).await {
-                imported += i;
-            }
+    let lang = {
+        let settings_state = app.state::<SettingsLock>();
+        let settings = settings_state.read().unwrap();
+        settings.language
+    };
+    let db = app.state::<DatabasePool>();
+    let enrol_res = db.run_in_transaction(|tx| {
+        Ok(DeviceRepository::insert()
+            .or_ignore()
+            .item(device)
+            .execute_in(tx)?)
+    });
+    if let Err(e) = enrol_res {
+        error!(
+            "Error enrolling Garmin {} ({}): {}",
+            device.model, device.serial, e
+        );
+        return;
+    }
 
-            download_pending_workouts(&app, &dev).await;
-            delete_pending_workouts(&app, &dev).await;
-            push_pending_workouts(&app, &dev).await;
-        }
-        let _ = app.emit("finish_loading", ());
-        if imported > 0 {
-            let _ = app.emit("sessions_added", ());
-        }
+    info!("Connected Garmin {} ({})", device.model, device.serial);
+    devices.insert(device.serial.clone(), device.clone());
+
+    show_notification(NotificationDefinition {
+        title: translate("device_connected", lang),
+        body: translate_and_replace("syncing_device", &["Garmin", &device.model], lang),
+        kind: NotificationKind::Temporal,
+    });
+
+    let payload: DeviceListItem = DeviceListItem::from(&device.clone());
+    let _ = app.emit("device_connected", payload);
+
+    let _ = app.emit("start_loading", ());
+    let mut imported = 0;
+    let serial = &device.serial;
+
+    if let Ok(i) = _import_from_device(&app, serial).await {
+        imported += i;
+    }
+
+    download_pending_workouts(&app, serial).await;
+    delete_pending_workouts(&app, serial).await;
+    push_pending_workouts(&app, serial).await;
+
+    let _ = app.emit("finish_loading", ());
+    if imported > 0 {
+        let _ = app.emit("sessions_added", ());
     }
 }
 
@@ -188,7 +181,7 @@ pub async fn push_pending_to_connected(app: &AppHandle) {
     match connected {
         Ok(devices) => {
             for device in devices {
-                push_pending_workouts(app, &device.serial_number).await;
+                push_pending_workouts(app, &device.serial).await;
             }
         }
         Err(e) => error!("Error listing connected devices: {e}"),
@@ -202,7 +195,7 @@ pub async fn delete_pending_from_connected(app: &AppHandle) {
     match connected {
         Ok(devices) => {
             for device in devices {
-                delete_pending_workouts(app, &device.serial_number).await;
+                delete_pending_workouts(app, &device.serial).await;
             }
         }
         Err(e) => error!("Error listing connected devices: {e}"),
@@ -643,6 +636,48 @@ async fn send_workout_to_device(
             let mut wk = WorkoutRepository::select_by_id_in(conn, &name)?.unwrap();
             wk.fetch_steps_relationship_in(conn)?;
 
+            // Exercise steps without their own notes inherit the exercise notes
+            let pending: Vec<(usize, (u16, u16))> = wk
+                .steps
+                .iter()
+                .enumerate()
+                .filter_map(|(idx, step)| {
+                    if step.notes.as_deref().is_none_or(str::is_empty)
+                        && let Some(id) = step.ex_id
+                        && let Some(cat) = step.ex_cat
+                        && cat != u16::MAX
+                    {
+                        Some((idx, (cat, id)))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            if !pending.is_empty() {
+                let pks: HashSet<(u16, u16)> = pending.iter().map(|(_, pk)| *pk).collect();
+                let notes = ExerciseRepository::select()
+                    .where_(Where::InMultiple(
+                        vec![
+                            exercise::entity::columns::CATEGORY,
+                            exercise::entity::columns::ID,
+                        ],
+                        pks.iter()
+                            .map(|(cat, id)| vec![(*cat).into(), (*id).into()])
+                            .collect(),
+                    ))
+                    .fetch_in(conn)?
+                    .into_iter()
+                    .filter_map(|e| Some(((e.category, e.id), e.notes?)))
+                    .collect::<HashMap<_, _>>();
+
+                for (idx, pk) in pending {
+                    if let Some(note) = notes.get(&pk) {
+                        wk.steps[idx].notes = Some(note.clone());
+                    }
+                }
+            }
+
             Ok(wk)
         })
     })
@@ -817,11 +852,7 @@ pub async fn get_registered_devices(app: AppHandle) -> Result<Vec<DeviceListItem
     })
     .await
     .map_err(|e| e.to_string())?
-    .into_iter()
-    .map(|d| DeviceListItem {
-        serial_number: d.serial,
-        manufacturer: "Garmin".to_string(),
-        model: d.model,
-    })
+    .iter()
+    .map(|d| DeviceListItem::from(d))
     .collect())
 }

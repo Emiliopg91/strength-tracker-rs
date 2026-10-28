@@ -50,6 +50,7 @@ pub fn session(date: u32) -> Session {
         additional_data: None,
         sub_sport_obj: None,
         workout_obj: None,
+        show_exercises_chart: true,
     }
 }
 

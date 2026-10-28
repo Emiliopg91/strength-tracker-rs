@@ -16,7 +16,7 @@ use crate::{
         session::{self, SessionRepository},
         set::{self, SetRepository},
         workout_device::{self, WorkoutDeviceRepository},
-        workout_step::{self, WorkoutStepRepository},
+        workout_step::{self, WorkoutStep, WorkoutStepRepository},
     },
     dto::{
         exercises::{ExerciseDetails, ExerciseListItem, ProgressionSuggestion},
@@ -78,6 +78,12 @@ pub async fn get_exercises(
                         .unwrap()
                         .unilateral,
                     progression: suggested_progressions.contains(&(pr.ex_cat, pr.ex_id)),
+                    notes: exercises
+                        .iter()
+                        .find(|e| e.category == pr.ex_cat && e.id == pr.ex_id)
+                        .unwrap()
+                        .notes
+                        .clone(),
                 })
                 .collect::<Vec<_>>())
         })
@@ -150,6 +156,24 @@ pub fn fetch_exercise_details(
         ]),
     )?;
 
+    let mut session_dates = HashSet::new();
+    for serie in &series {
+        session_dates.insert(serie.session);
+    }
+
+    let chart_session = SessionRepository::select()
+        .where_(Where::And(vec![
+            Where::In(
+                session::entity::columns::DATE,
+                session_dates.into_iter().map(|d| d.into()).collect(),
+            ),
+            Where::Eq(session::entity::columns::SHOW_EXERCISES_CHART, true.into()),
+        ]))
+        .fetch_in(conn)?
+        .iter()
+        .map(|s| s.date)
+        .collect();
+
     let pr = series.iter().find(|s| s.pr).unwrap();
     res.reps = pr.reps;
     res.weight = pr.weight;
@@ -204,6 +228,8 @@ pub fn fetch_exercise_details(
         let entry = res.series.entry(ex_str.clone()).or_default();
         entry.push(SessionSet::from(&serie));
     }
+
+    res.chart_session = chart_session;
 
     Ok(res)
 }
@@ -410,6 +436,37 @@ pub async fn set_exercise_progression_parameters(
 
 #[traced_command]
 #[tauri::command]
+pub async fn get_progression_status(
+    app: AppHandle,
+    category: u16,
+    id: u16,
+) -> Result<Option<ProgressionSuggestion>, String> {
+    run_blocking(app, move |database| {
+        database.run_in_connection(|conn| {
+            Ok(WorkoutStepRepository::select()
+                .columns(&[
+                    workout_step::entity::columns::REPS,
+                    workout_step::entity::columns::WEIGHT,
+                ])
+                .where_(Where::And(vec![
+                    Where::Eq(workout_step::entity::columns::EX_CAT, category.into()),
+                    Where::Eq(workout_step::entity::columns::EX_ID, id.into()),
+                ]))
+                .order_by(OrderBy::Desc(workout_step::entity::columns::WEIGHT))
+                .order_by(OrderBy::Desc(workout_step::entity::columns::REPS))
+                .fetch_one_in(conn)?
+                .map(|r| ProgressionSuggestion {
+                    reps: row_int(&r, workout_step::entity::columns::REPS.as_ref()) as u16,
+                    weight: row_f64(&r, workout_step::entity::columns::WEIGHT.as_ref()) as f32,
+                }))
+        })
+    })
+    .await
+    .map_err(|e: DatabaseError| e.to_string())
+}
+
+#[traced_command]
+#[tauri::command]
 pub async fn get_progression_suggestion(
     app: AppHandle,
     category: u16,
@@ -504,17 +561,28 @@ pub fn fetch_progression_suggestion(
             Where::Eq(workout_step::entity::columns::EX_CAT, category.into()),
             Where::Eq(workout_step::entity::columns::EX_ID, id.into()),
             Where::NotNull(workout_step::entity::columns::REPS),
-            Where::Or(vec![
-                Where::NotEq(
-                    workout_step::entity::columns::WEIGHT,
-                    suggestion.weight.into(),
-                ),
-                Where::NotEq(workout_step::entity::columns::REPS, suggestion.reps.into()),
-            ]),
+            below_suggestion(&suggestion),
         ]))
         .count_in(conn)?;
 
     Ok((pending > 0).then_some(suggestion))
+}
+
+/// Steps programmed below `suggestion`; steps already at or above it are never lowered.
+fn below_suggestion(suggestion: &ProgressionSuggestion) -> Where<WorkoutStep> {
+    Where::Or(vec![
+        Where::Lt(
+            workout_step::entity::columns::WEIGHT,
+            suggestion.weight.into(),
+        ),
+        Where::And(vec![
+            Where::Eq(
+                workout_step::entity::columns::WEIGHT,
+                suggestion.weight.into(),
+            ),
+            Where::Lt(workout_step::entity::columns::REPS, suggestion.reps.into()),
+        ]),
+    ])
 }
 
 #[traced_command]
@@ -529,7 +597,17 @@ pub async fn apply_progression_suggestion(
     let res = run_blocking(app.clone(), move |database| {
         database
             .run_in_transaction(|tx| {
+                // Reps go first: the weight update would otherwise change which steps are below
                 let mut modified = WorkoutStepRepository::update()
+                    .set(workout_step::entity::columns::REPS, suggestion.reps.into())
+                    .where_(Where::And(vec![
+                        Where::Eq(workout_step::entity::columns::EX_CAT, category.into()),
+                        Where::Eq(workout_step::entity::columns::EX_ID, id.into()),
+                        Where::NotNull(workout_step::entity::columns::REPS),
+                        below_suggestion(&suggestion),
+                    ]))
+                    .execute_in(tx)?;
+                modified += WorkoutStepRepository::update()
                     .set(
                         workout_step::entity::columns::WEIGHT,
                         suggestion.weight.into(),
@@ -537,15 +615,10 @@ pub async fn apply_progression_suggestion(
                     .where_(Where::And(vec![
                         Where::Eq(workout_step::entity::columns::EX_CAT, category.into()),
                         Where::Eq(workout_step::entity::columns::EX_ID, id.into()),
-                        Where::NotNull(workout_step::entity::columns::WEIGHT),
-                    ]))
-                    .execute_in(tx)?;
-                modified += WorkoutStepRepository::update()
-                    .set(workout_step::entity::columns::REPS, suggestion.reps.into())
-                    .where_(Where::And(vec![
-                        Where::Eq(workout_step::entity::columns::EX_CAT, category.into()),
-                        Where::Eq(workout_step::entity::columns::EX_ID, id.into()),
-                        Where::NotNull(workout_step::entity::columns::REPS),
+                        Where::Lt(
+                            workout_step::entity::columns::WEIGHT,
+                            suggestion.weight.into(),
+                        ),
                     ]))
                     .execute_in(tx)?;
 
@@ -590,4 +663,38 @@ pub async fn apply_progression_suggestion(
             "Error applying progression",
         )),
     }
+}
+
+#[traced_command]
+#[tauri::command]
+pub async fn save_exercise_notes(
+    app: AppHandle,
+    category: u16,
+    id: u16,
+    notes: &str,
+) -> Result<(), String> {
+    let notes = if notes.trim().is_empty() {
+        None
+    } else {
+        Some(notes.trim().to_string())
+    };
+
+    run_blocking(app, move |database| {
+        database
+            .run_in_transaction(|tx| {
+                ExerciseRepository::update()
+                    .set(exercise::entity::columns::NOTES, notes.clone().into())
+                    .where_(Where::And(vec![
+                        Where::Eq(exercise::entity::columns::CATEGORY, category.into()),
+                        Where::Eq(exercise::entity::columns::ID, id.into()),
+                    ]))
+                    .execute_in(tx)?;
+
+                Ok(())
+            })
+            .map_err(|e| e.to_string())?;
+
+        Ok(())
+    })
+    .await
 }

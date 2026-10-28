@@ -50,6 +50,7 @@ export default function WorkoutPrintView({
                 if (WorkoutUtils.isStepGroup(step)) {
                     return groupToHtml(
                         step,
+                        exercises,
                         unilaterals,
                         translate,
                         formatDuration,
@@ -61,6 +62,7 @@ export default function WorkoutPrintView({
                     return leafToHtml(
                         idx,
                         step,
+                        exercises,
                         unilaterals,
                         translate,
                         formatDuration,
@@ -76,6 +78,7 @@ export default function WorkoutPrintView({
 
 function groupToHtml(
     group: StepGroup,
+    exercises: ExerciseListItem[],
     unilaterals: ExerciseListItem[],
     translate: (lit: string) => string,
     formatDuration: (time: number) => string,
@@ -113,6 +116,7 @@ function groupToHtml(
                             leafToHtml(
                                 idx,
                                 leaf,
+                                exercises,
                                 unilaterals,
                                 translate,
                                 formatDuration,
@@ -131,6 +135,7 @@ function groupToHtml(
 function leafToHtml(
     idx: number,
     leaf: LeafStep,
+    exercises: ExerciseListItem[],
     unilaterals: ExerciseListItem[],
     translate: (lit: string) => string,
     formatDuration: (time: number) => string,
@@ -158,6 +163,12 @@ function leafToHtml(
             unilaterals.find(
                 (e) => e.category == leaf.ex_cat && e.id == leaf.ex_id,
             ) !== undefined;
+        const notes =
+            leaf.notes ||
+            exercises.find(
+                (e) => e.category == leaf.ex_cat && e.id == leaf.ex_id,
+            )?.notes;
+
         return (
             <tr key={idx}>
                 <td>
@@ -187,7 +198,7 @@ function leafToHtml(
                 <td className="centered">
                     {leaf.time !== null && <>{formatDuration(leaf.time)}</>}
                 </td>
-                <td>{leaf.notes !== null && <>{leaf.notes}</>}</td>
+                <td>{notes}</td>
             </tr>
         );
     }

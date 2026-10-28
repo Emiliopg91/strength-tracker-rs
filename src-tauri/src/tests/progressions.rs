@@ -163,9 +163,29 @@ fn sets_in_different_brackets_follow_the_weakest() {
     let db = common::test_db();
     configure(&db, BENCH, false, "8-10-12");
     log_session(&db, 1, BENCH, &[(12, 100.0), (12, 100.0), (9, 100.0)]);
-    program(&db, BENCH, 100.0, 12);
+    program(&db, BENCH, 100.0, 8);
 
     assert_eq!(suggestion(&db, BENCH), suggested(100.0, 10));
+}
+
+#[test]
+fn missed_programmed_target_does_not_lower_it() {
+    let db = common::test_db();
+    configure(&db, BENCH, false, "8-10-12");
+    log_session(&db, 1, BENCH, &[(12, 100.0), (12, 100.0), (9, 100.0)]);
+    program(&db, BENCH, 100.0, 12);
+
+    assert_eq!(suggestion(&db, BENCH), None);
+}
+
+#[test]
+fn heavier_programmed_weight_is_not_lowered() {
+    let db = common::test_db();
+    configure(&db, BENCH, false, "8-10-12");
+    log_session(&db, 1, BENCH, &[(12, 100.0), (12, 100.0)]);
+    program(&db, BENCH, 104.0, 6);
+
+    assert_eq!(suggestion(&db, BENCH), None);
 }
 
 #[test]

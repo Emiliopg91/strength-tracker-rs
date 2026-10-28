@@ -370,6 +370,10 @@ pub async fn save_workout(
             let mut steps = workout.steps.clone();
             for step in &mut steps {
                 step.workout = workout.name.clone();
+                // Empty notes are stored as NULL so the exercise notes fallback applies on upload
+                if step.notes.as_deref().is_some_and(str::is_empty) {
+                    step.notes = None;
+                }
                 insert = insert.item(step);
             }
             insert.execute_in(tx)?;

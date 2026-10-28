@@ -28,7 +28,11 @@ export function DeviceProvider({
     useEffect(() => {
         const unregisterConnection = BackendListener.onDeviceConnected(
             (device) => {
-                setAvailableDevices((prev) => [...prev, device]);
+                setAvailableDevices((prev) =>
+                    prev.some((d) => d.serial_number === device.serial_number)
+                        ? prev
+                        : [...prev, device],
+                );
 
                 setRegisteredDevices((prev) =>
                     prev.some((d) => d.serial_number === device.serial_number)

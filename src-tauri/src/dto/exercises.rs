@@ -13,6 +13,7 @@ pub struct ExerciseListItem {
     pub date: u32,
     pub unilateral: bool,
     pub progression: bool,
+    pub notes: Option<String>,
 }
 
 impl From<&Exercise> for ExerciseListItem {
@@ -25,6 +26,7 @@ impl From<&Exercise> for ExerciseListItem {
             date: 0,
             unilateral: value.unilateral,
             progression: false,
+            notes: value.notes.clone(),
         }
     }
 }
@@ -38,12 +40,14 @@ pub struct ExerciseDetails {
     pub unilateral: bool,
     pub workouts: Vec<String>,
     pub series: HashMap<String, Vec<SessionSet>>,
+    pub chart_session: Vec<u32>,
     pub pr_date: u32,
     pub progression: bool,
     pub reps_range: String,
     pub prog_weight: f32,
     pub primary_muscles: Vec<String>,
     pub secondary_muscles: Vec<String>,
+    pub notes: Option<String>,
 }
 
 impl From<&Exercise> for ExerciseDetails {
@@ -54,6 +58,7 @@ impl From<&Exercise> for ExerciseDetails {
             reps: 0,
             weight: 0_f32,
             workouts: Vec::new(),
+            chart_session: Vec::new(),
             series: HashMap::new(),
             pr_date: 0,
             unilateral: value.unilateral,
@@ -82,6 +87,7 @@ impl From<&Exercise> for ExerciseDetails {
                     }
                 })
                 .collect(),
+            notes: value.notes.clone(),
         }
     }
 }

@@ -10,7 +10,7 @@ use tauri_plugin_log::log::{debug, error, info};
 use tokio::{fs, sync::Mutex};
 
 use crate::{
-    dto::devices::DeviceListItem,
+    dao::device::Device,
     mtp::errors::{MtpError, Result},
     utils::constants,
 };
@@ -208,7 +208,7 @@ async fn upload_file(storage: &Storage, parent: ObjectHandle, src: &Path) -> Res
 
 impl MtpClient {
     /// Lists MTP devices currently connected over USB, filtered to Garmin ones.
-    pub async fn get_connected_devices(&self) -> Result<Vec<DeviceListItem>> {
+    pub async fn get_connected_devices(&self) -> Result<Vec<Device>> {
         let mut res = Vec::new();
 
         let devices = MtpDevice::list_devices().map_err(MtpError::ListDevices)?;
@@ -224,8 +224,8 @@ impl MtpClient {
                 .map_err(|e| MtpError::OpenDevice(device_info.location_id, e))?;
 
             let info = device.device_info();
-            if info.manufacturer.to_uppercase() == constants::MTP_GARMIN_MANUFACTURER {
-                res.push(DeviceListItem::from(info))
+            if let Some(device) = Device::try_from(info).ok() {
+                res.push(device)
             }
 
             let _ = device.close().await;
