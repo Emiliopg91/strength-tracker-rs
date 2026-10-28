@@ -160,13 +160,13 @@ async fn on_device_connected(
     let mut imported = 0;
     let serial = &device.serial;
 
-    if let Ok(i) = _import_from_device(&app, serial).await {
+    if let Ok(i) = _import_from_device(app, serial).await {
         imported += i;
     }
 
-    download_pending_workouts(&app, serial).await;
-    delete_pending_workouts(&app, serial).await;
-    push_pending_workouts(&app, serial).await;
+    download_pending_workouts(app, serial).await;
+    delete_pending_workouts(app, serial).await;
+    push_pending_workouts(app, serial).await;
 
     let _ = app.emit("finish_loading", ());
     if imported > 0 {
@@ -853,6 +853,6 @@ pub async fn get_registered_devices(app: AppHandle) -> Result<Vec<DeviceListItem
     .await
     .map_err(|e| e.to_string())?
     .iter()
-    .map(|d| DeviceListItem::from(d))
+    .map(DeviceListItem::from)
     .collect())
 }

@@ -850,10 +850,7 @@ pub fn merge_sessions(
 ) -> Result<(), DatabaseError> {
     let mut to = SessionRepository::select_by_id(database, to_date)
         .expect("Error on database query")
-        .expect(&format!(
-            "Could not find session with timestamp {}",
-            to_date
-        ));
+        .unwrap_or_else(|| panic!("Could not find session with timestamp {}", to_date));
     to.fetch_additional_data_relationship(database)
         .expect("Error on database query");
     to.fetch_laps_relationship(database)
@@ -863,10 +860,7 @@ pub fn merge_sessions(
 
     let mut from = SessionRepository::select_by_id(database, from_date)
         .expect("Error on database query")
-        .expect(&format!(
-            "Could not find session with timestamp {}",
-            from_date
-        ));
+        .unwrap_or_else(|| panic!("Could not find session with timestamp {}", from_date));
     from.fetch_additional_data_relationship(database)
         .expect("Error on database query");
     from.fetch_laps_relationship(database)

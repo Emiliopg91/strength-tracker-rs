@@ -224,7 +224,7 @@ impl MtpClient {
                 .map_err(|e| MtpError::OpenDevice(device_info.location_id, e))?;
 
             let info = device.device_info();
-            if let Some(device) = Device::try_from(info).ok() {
+            if let Ok(device) = Device::try_from(info) {
                 res.push(device)
             }
 

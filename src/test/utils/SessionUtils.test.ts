@@ -36,6 +36,7 @@ const makeDetails = (
     training_load: 0,
     primary_muscles: [],
     secondary_muscles: [],
+    show_exercises_chart: true,
     ...overrides,
 });
 
