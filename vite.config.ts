@@ -11,7 +11,7 @@ class PathSequencer extends BaseSequencer {
     }
 }
 
-// Vite injects its modulepreload polyfill into every HTML entry, so it always lands in the chunk shared by main and report
+// Vite injects its modulepreload polyfill into every HTML entry, so it always lands in the chunk shared by all entries
 function chunkFileNames(chunk: Rollup.PreRenderedChunk): string {
     return chunk.moduleIds.some((id) =>
         id.includes("vite/modulepreload-polyfill"),
@@ -37,12 +37,13 @@ export default defineConfig(async () => ({
         },
     },
 
-    // Second entry point, loaded by the hidden "print" window
+    // Extra entry points, loaded by the hidden "print" windows
     build: {
         rollupOptions: {
             input: {
                 main: path.resolve(__dirname, "index.html"),
                 report: path.resolve(__dirname, "report.html"),
+                workout: path.resolve(__dirname, "workout.html"),
             },
             output: {
                 chunkFileNames,
@@ -70,9 +71,9 @@ export default defineConfig(async () => ({
         port: 1420,
         strictPort: true,
         host: host || false,
-        // Pre-transform both entry points (and their imports) while cargo builds, as the React Compiler makes the first load slow
+        // Pre-transform all entry points (and their imports) while cargo builds, as the React Compiler makes the first load slow
         warmup: {
-            clientFiles: ["./src/main.tsx", "./src/report.tsx"],
+            clientFiles: ["./src/main.tsx", "./src/report.tsx", "./src/workout.tsx"],
         },
         hmr: host
             ? {
