@@ -613,3 +613,6 @@ primary_muscles:
 secondary_muscles:
   en: Secondary muscles
   es: Músculos secundarios
+current_progression:
+  en: Progression status
+  es: Estado de progresión
