@@ -9,7 +9,8 @@ use crate::utils::constants;
 pub struct Device {
     pub serial: String,
     pub model: String,
-    pub last_sync: Option<u32>,
+    pub last_activity_sync: Option<u32>,
+    pub last_body_metric_sync: Option<u32>,
 }
 
 impl TryFrom<&DeviceInfo> for Device {
@@ -23,7 +24,8 @@ impl TryFrom<&DeviceInfo> for Device {
         Ok(Device {
             serial: info.serial_number.clone(),
             model: info.model.clone(),
-            last_sync: None,
+            last_activity_sync: None,
+            last_body_metric_sync: None,
         })
     }
 }

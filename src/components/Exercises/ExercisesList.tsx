@@ -15,21 +15,55 @@ import { useLoadingTask } from "@/hooks/useLoadingTask";
 import "@/styles/Exercises/ExercisesList.css";
 import { Button } from "@mui/material";
 
+export type ExerciseListEntry = ExerciseListItem & { used: boolean };
+
 export function ExercisesList() {
     const loadingTask = useLoadingTask();
-    const { sessionsVersion } = useContext(AppContext);
+    const { sessionsVersion, exercisesCatalog } = useContext(AppContext);
     const { translate, formatDate } = useContext(I18nSettingsContext);
-    const [exercises, setExercises] = useBackendList<ExerciseListItem>(
+    const [exercises, setExercises] = useBackendList<ExerciseListEntry>(
         () =>
-            BackendClient.getExercises().then((data) =>
-                data.toSorted((a, b) => {
-                    return translate(
-                        "exercise_" + a.category + "_" + a.id,
-                    ).localeCompare(
-                        translate("exercise_" + b.category + "_" + b.id),
-                    );
-                }),
-            ),
+            BackendClient.getExercises().then((data) => {
+                const exercises = data
+                    .toSorted((a, b) => {
+                        return translate(
+                            "exercise_" + a.category + "_" + a.id,
+                        ).localeCompare(
+                            translate("exercise_" + b.category + "_" + b.id),
+                        );
+                    })
+                    .map((e) => ({ ...e, used: true }));
+
+                const used_keys = data.map((e) => e.category + "-" + e.id);
+                const unused_exercises: ExerciseListEntry[] = [];
+                exercisesCatalog.forEach((ec) => {
+                    const key = ec.ex_cat + "-" + ec.ex_id;
+                    if (!used_keys.includes(key)) {
+                        unused_exercises.push({
+                            category: ec.ex_cat,
+                            id: ec.ex_id,
+                            date: 0,
+                            notes: null,
+                            progression: false,
+                            reps: 0,
+                            unilateral: false,
+                            weight: 0,
+                            used: false,
+                        });
+                    }
+                });
+
+                return [
+                    ...exercises,
+                    ...unused_exercises.toSorted((a, b) => {
+                        return translate(
+                            "exercise_" + a.category + "_" + a.id,
+                        ).localeCompare(
+                            translate("exercise_" + b.category + "_" + b.id),
+                        );
+                    }),
+                ];
+            }),
         [sessionsVersion],
     );
     const [exerciseDetails, setExerciseDetails] = useState<

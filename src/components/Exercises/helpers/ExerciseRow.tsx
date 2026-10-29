@@ -1,12 +1,12 @@
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
-import { ExerciseListItem } from "@/utils/backend/models";
 import { SessionUtils } from "@/utils/SessionUtils";
 import { useContext } from "react";
 import PriorityHighIcon from "@mui/icons-material/PriorityHigh";
 import { Tooltip } from "@mui/material";
+import { ExerciseListEntry } from "../ExercisesList";
 
 type Props = {
-    exercise: ExerciseListItem;
+    exercise: ExerciseListEntry;
     onSelect: (category: number, id: number) => void;
 };
 
@@ -16,7 +16,7 @@ export function ExerciseRow({ exercise, onSelect }: Props) {
 
     return (
         <tr
-            className="clickable-row"
+            className={`clickable-row ${exercise.used ? "" : "unused-exercise"}`}
             onClick={() => onSelect(exercise.category, exercise.id)}
         >
             <td className="text-left" style={{ paddingLeft: "5px" }}>
@@ -28,27 +28,29 @@ export function ExerciseRow({ exercise, onSelect }: Props) {
                 {translate("exercise_" + exercise.category + "_" + exercise.id)}
             </td>
             <td>
-                {exercise.reps +
-                    "x" +
-                    formatNumber(fromKg(exercise.weight), 1) +
-                    " " +
-                    getWeightUnit()}
+                {exercise.used &&
+                    exercise.reps +
+                        "x" +
+                        formatNumber(fromKg(exercise.weight), 1) +
+                        " " +
+                        getWeightUnit()}
             </td>
             <td>
-                {formatNumber(
-                    fromKg(
-                        SessionUtils.estimate1rm(
-                            exercise.weight,
-                            exercise.reps,
-                            exercise.unilateral,
+                {exercise.used &&
+                    formatNumber(
+                        fromKg(
+                            SessionUtils.estimate1rm(
+                                exercise.weight,
+                                exercise.reps,
+                                exercise.unilateral,
+                            ),
                         ),
-                    ),
-                    0,
-                ) +
-                    " " +
-                    getWeightUnit()}
+                        0,
+                    ) +
+                        " " +
+                        getWeightUnit()}
             </td>
-            <td>{formatDate(exercise.date)}</td>
+            <td>{exercise.used && formatDate(exercise.date)}</td>
         </tr>
     );
 }

@@ -34,69 +34,71 @@ export function ImportSessionsMenu({ onImported }: Props) {
         });
     };
 
+    const importFromGarminConnect = () => {
+        withLoading(BackendClient.importFromConnect()).then((count) => {
+            if (count > 0) {
+                onImported();
+            }
+        });
+    };
+
     return (
         <>
-            {availableDevices.length == 0 && (
-                <Button
-                    id="import-file-toggle"
-                    variant="contained"
-                    className="full-width-button"
-                    onClick={importFromDisk}
+            <Button
+                id="import-file-toggle"
+                variant="contained"
+                className="full-width-button"
+                onClick={(e) =>
+                    setImportMenuAnchor({
+                        top: e.clientY,
+                        left: e.clientX,
+                    })
+                }
+            >
+                {translate("import_sessions")}
+            </Button>
+            <Menu
+                id="import-file-menu"
+                anchorReference="anchorPosition"
+                anchorPosition={importMenuAnchor ?? undefined}
+                open={Boolean(importMenuAnchor)}
+                onClose={() => setImportMenuAnchor(null)}
+                anchorOrigin={{ vertical: "top", horizontal: "left" }}
+                transformOrigin={{
+                    vertical: "bottom",
+                    horizontal: "left",
+                }}
+            >
+                <MenuItem
+                    onClick={() => {
+                        setImportMenuAnchor(null);
+                        importFromDisk();
+                    }}
                 >
                     {translate("import_from_disk")}
-                </Button>
-            )}
-            {availableDevices.length > 0 && (
-                <>
-                    <Button
-                        id="import-file-toggle"
-                        variant="contained"
-                        className="full-width-button"
-                        onClick={(e) =>
-                            setImportMenuAnchor({
-                                top: e.clientY,
-                                left: e.clientX,
-                            })
-                        }
-                    >
-                        {translate("import_sessions")}
-                    </Button>
-                    <Menu
-                        id="import-file-menu"
-                        anchorReference="anchorPosition"
-                        anchorPosition={importMenuAnchor ?? undefined}
-                        open={Boolean(importMenuAnchor)}
-                        onClose={() => setImportMenuAnchor(null)}
-                        anchorOrigin={{ vertical: "top", horizontal: "left" }}
-                        transformOrigin={{
-                            vertical: "bottom",
-                            horizontal: "left",
+                </MenuItem>
+                <MenuItem
+                    onClick={() => {
+                        setImportMenuAnchor(null);
+                        importFromGarminConnect();
+                    }}
+                >
+                    {translate("import_garmin_connect")}
+                </MenuItem>
+                {availableDevices.map((device, idx) => (
+                    <MenuItem
+                        key={"dev-" + idx}
+                        onClick={() => {
+                            setImportMenuAnchor(null);
+                            importDevice(device.serial_number);
                         }}
                     >
-                        <MenuItem
-                            onClick={() => {
-                                setImportMenuAnchor(null);
-                                importFromDisk();
-                            }}
-                        >
-                            {translate("import_from_disk")}
-                        </MenuItem>
-                        {availableDevices.map((device, idx) => (
-                            <MenuItem
-                                key={"dev-" + idx}
-                                onClick={() => {
-                                    setImportMenuAnchor(null);
-                                    importDevice(device.serial_number);
-                                }}
-                            >
-                                {translate("import_from_device", [
-                                    device.manufacturer + " " + device.model,
-                                ])}
-                            </MenuItem>
-                        ))}
-                    </Menu>
-                </>
-            )}
+                        {translate("import_from_device", [
+                            device.manufacturer + " " + device.model,
+                        ])}
+                    </MenuItem>
+                ))}
+            </Menu>
         </>
     );
 }

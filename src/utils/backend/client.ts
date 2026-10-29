@@ -14,7 +14,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/exercises.rs:590
+	// From src-tauri/src/logic/exercises.rs:592
 	public static applyProgressionSuggestion(category: number, id: number, suggestion: ProgressionSuggestion): Promise<void> {
 	  return BackendClient.inner_invoke("apply_progression_suggestion", { category, id, suggestion }); 
 	}
@@ -62,7 +62,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/exercises.rs:239
+	// From src-tauri/src/logic/exercises.rs:241
 	public static getExercisesCatalog(): Promise<Record<number, number[]>> {
 	  return BackendClient.inner_invoke("get_exercises_catalog"); 
 	}
@@ -74,13 +74,13 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/exercises.rs:439
+	// From src-tauri/src/logic/exercises.rs:441
 	public static getProgressionStatus(category: number, id: number): Promise<ProgressionSuggestion | null> {
 	  return BackendClient.inner_invoke("get_progression_status", { category, id }); 
 	}
 	
 
-	// From src-tauri/src/logic/exercises.rs:470
+	// From src-tauri/src/logic/exercises.rs:472
 	public static getProgressionSuggestion(category: number, id: number): Promise<ProgressionSuggestion | null> {
 	  return BackendClient.inner_invoke("get_progression_suggestion", { category, id }); 
 	}
@@ -134,6 +134,12 @@ export class BackendClient {
 	}
 	
 
+	// From src-tauri/src/logic/connect.rs:34
+	public static importFromConnect(): Promise<number> {
+	  return BackendClient.inner_invoke("import_from_connect"); 
+	}
+	
+
 	// From src-tauri/src/logic/devices.rs:727
 	public static importFromDevice(serial: string): Promise<number> {
 	  return BackendClient.inner_invoke("import_from_device", { serial }); 
@@ -143,6 +149,12 @@ export class BackendClient {
 	// From src-tauri/src/logic/sessions.rs:337
 	public static importFromFiles(): Promise<number> {
 	  return BackendClient.inner_invoke("import_from_files"); 
+	}
+	
+
+	// From src-tauri/src/logic/connect.rs:133
+	public static importWeightFromConnect(): Promise<void> {
+	  return BackendClient.inner_invoke("import_weight_from_connect"); 
 	}
 	
 
@@ -170,7 +182,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/exercises.rs:670
+	// From src-tauri/src/logic/exercises.rs:672
 	public static saveExerciseNotes(category: number, id: number, notes: string): Promise<void> {
 	  return BackendClient.inner_invoke("save_exercise_notes", { category, id, notes }); 
 	}
@@ -194,19 +206,19 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/exercises.rs:362
+	// From src-tauri/src/logic/exercises.rs:364
 	public static setExerciseProgression(category: number, id: number, value: boolean): Promise<void> {
 	  return BackendClient.inner_invoke("set_exercise_progression", { category, id, value }); 
 	}
 	
 
-	// From src-tauri/src/logic/exercises.rs:399
+	// From src-tauri/src/logic/exercises.rs:401
 	public static setExerciseProgressionParameters(category: number, id: number, reps: string, weight: number): Promise<void> {
 	  return BackendClient.inner_invoke("set_exercise_progression_parameters", { category, id, reps, weight }); 
 	}
 	
 
-	// From src-tauri/src/logic/exercises.rs:325
+	// From src-tauri/src/logic/exercises.rs:327
 	public static setExerciseUnilateral(category: number, id: number, value: boolean): Promise<void> {
 	  return BackendClient.inner_invoke("set_exercise_unilateral", { category, id, value }); 
 	}

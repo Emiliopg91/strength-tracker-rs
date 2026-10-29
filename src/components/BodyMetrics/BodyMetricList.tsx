@@ -9,6 +9,7 @@ import { BodyMetricsAddModal } from "./BodyMetricsAddModal";
 import { BodyMetricsChart } from "./helpers/BodyMetricsChart";
 import { BodyMetricRow } from "./helpers/BodyMetricRow";
 import { BodyMetricsCompareModal } from "./BodyMetricsCompareModal";
+import { AddBodyMetricMenu } from "./helpers/AddBodyMetricMenu";
 import "@/styles/BodyMetrics/BodyMetrics.css";
 
 export function BodyMetricList() {
@@ -135,16 +136,12 @@ export function BodyMetricList() {
                         {translate("compare")}
                     </Button>
                 )}
-                <Button
-                    id="add-measure-button"
-                    variant="contained"
-                    className="full-width-button"
-                    onClick={() => {
+                <AddBodyMetricMenu
+                    onAddManually={() => {
                         setAddingNew(true);
                     }}
-                >
-                    {translate("add_entry")}
-                </Button>
+                    onImported={refreshList}
+                />
             </div>
         </>
     );

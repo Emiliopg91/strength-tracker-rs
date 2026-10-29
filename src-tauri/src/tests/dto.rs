@@ -73,7 +73,8 @@ fn session_details_with_additional_data() {
     session.device_obj = Some(Device {
         serial: "123".to_string(),
         model: "Forerunner 265".to_string(),
-        last_sync: None,
+        last_activity_sync: None,
+        last_body_metric_sync: None,
     });
 
     let mut data = common::additional_data(1);

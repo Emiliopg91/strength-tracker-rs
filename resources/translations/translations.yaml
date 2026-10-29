@@ -616,3 +616,9 @@ secondary_muscles:
 current_progression:
   en: Progression status
   es: Estado de progresión
+import_garmin_connect:
+  en: From Garmin Connect
+  es: Desde Garmin Connect
+add_manually:
+  en: Manually
+  es: Manualmente

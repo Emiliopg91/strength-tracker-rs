@@ -233,73 +233,89 @@ export function ExerciseModal({
                                         )}
                                     </td>
                                 </tr>
-                                <tr>
-                                    <td>{translate("rm")}:</td>
-                                    <td>
-                                        {formatNumber(
-                                            fromKg(
-                                                SessionUtils.estimate1rm(
-                                                    exercise.weight,
-                                                    exercise.reps,
-                                                    unilateral,
-                                                ),
-                                            ),
-                                            0,
-                                        ) +
-                                            " " +
-                                            getWeightUnit()}
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td>{translate("personal_record")}:</td>
-                                    <td>
-                                        {exercise.reps +
-                                            "x" +
-                                            formatNumber(
-                                                fromKg(exercise.weight),
-                                                1,
-                                            ) +
-                                            " " +
-                                            getWeightUnit()}
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td>{translate("record_date")}:</td>
-                                    <td>{formatTimeDate(exercise.pr_date)}</td>
-                                </tr>
-                                <tr>
-                                    <td>{translate("unilateral")}:</td>
-                                    <td>
-                                        <Switch
-                                            checked={unilateral}
-                                            onChange={toggleUnilateral}
-                                            slotProps={{
-                                                input: {
-                                                    "aria-label":
-                                                        translate("unilateral"),
-                                                },
-                                            }}
-                                        />
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td>
-                                        {translate("progression_suggestion")}:
-                                    </td>
-                                    <td>
-                                        <Switch
-                                            checked={progression}
-                                            onChange={toggleProgression}
-                                            slotProps={{
-                                                input: {
-                                                    "aria-label": translate(
-                                                        "progression_suggestion",
+                                {Object.keys(exercise.series).length > 0 && (
+                                    <>
+                                        <tr>
+                                            <td>{translate("rm")}:</td>
+                                            <td>
+                                                {formatNumber(
+                                                    fromKg(
+                                                        SessionUtils.estimate1rm(
+                                                            exercise.weight,
+                                                            exercise.reps,
+                                                            unilateral,
+                                                        ),
                                                     ),
-                                                },
-                                            }}
-                                        />
-                                    </td>
-                                </tr>
+                                                    0,
+                                                ) +
+                                                    " " +
+                                                    getWeightUnit()}
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td>
+                                                {translate("personal_record")}:
+                                            </td>
+                                            <td>
+                                                {exercise.reps +
+                                                    "x" +
+                                                    formatNumber(
+                                                        fromKg(exercise.weight),
+                                                        1,
+                                                    ) +
+                                                    " " +
+                                                    getWeightUnit()}
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td>{translate("record_date")}:</td>
+                                            <td>
+                                                {formatTimeDate(
+                                                    exercise.pr_date,
+                                                )}
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td>{translate("unilateral")}:</td>
+                                            <td>
+                                                <Switch
+                                                    checked={unilateral}
+                                                    onChange={toggleUnilateral}
+                                                    slotProps={{
+                                                        input: {
+                                                            "aria-label":
+                                                                translate(
+                                                                    "unilateral",
+                                                                ),
+                                                        },
+                                                    }}
+                                                />
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td>
+                                                {translate(
+                                                    "progression_suggestion",
+                                                )}
+                                                :
+                                            </td>
+                                            <td>
+                                                <Switch
+                                                    checked={progression}
+                                                    onChange={toggleProgression}
+                                                    slotProps={{
+                                                        input: {
+                                                            "aria-label":
+                                                                translate(
+                                                                    "progression_suggestion",
+                                                                ),
+                                                        },
+                                                    }}
+                                                />
+                                            </td>
+                                        </tr>
+                                    </>
+                                )}
                             </tbody>
                         </table>
                     </div>
@@ -315,101 +331,116 @@ export function ExerciseModal({
                         )}
                     </div>
                 </div>
-                <table id="workout-details-table">
-                    <colgroup>
-                        <col className="col-180" />
-                        <col />
-                        <col />
-                    </colgroup>
-                    <tbody>
-                        {progression && (
-                            <>
-                                {progressionStatus && (
+                {Object.keys(exercise.series).length > 0 && (
+                    <table id="workout-details-table">
+                        <colgroup>
+                            <col className="col-180" />
+                            <col />
+                            <col />
+                        </colgroup>
+                        <tbody>
+                            {progression && (
+                                <>
+                                    {progressionStatus && (
+                                        <tr>
+                                            <td
+                                                style={{
+                                                    paddingBottom: "10px",
+                                                }}
+                                            >
+                                                {translate(
+                                                    "current_progression",
+                                                )}
+                                                :
+                                            </td>
+                                            <td
+                                                style={{
+                                                    paddingBottom: "10px",
+                                                }}
+                                            >
+                                                {(exercise.unilateral
+                                                    ? "2x" +
+                                                      progressionStatus.reps / 2
+                                                    : progressionStatus.reps) +
+                                                    "x" +
+                                                    fromKg(
+                                                        progressionStatus.weight,
+                                                    ) +
+                                                    " " +
+                                                    getWeightUnit()}
+                                            </td>
+                                        </tr>
+                                    )}
                                     <tr>
-                                        <td style={{ paddingBottom: "10px" }}>
-                                            {translate("current_progression")}:
-                                        </td>
-                                        <td style={{ paddingBottom: "10px" }}>
-                                            {(exercise.unilateral
-                                                ? "2x" +
-                                                  progressionStatus.reps / 2
-                                                : progressionStatus.reps) +
-                                                "x" +
-                                                fromKg(
-                                                    progressionStatus.weight,
-                                                ) +
-                                                " " +
-                                                getWeightUnit()}
+                                        <td>{translate("progression")}:</td>
+                                        <td>
+                                            <TextField
+                                                size="small"
+                                                error={parsedRange == null}
+                                                value={rangeInput}
+                                                placeholder="8-10-12"
+                                                sx={{ width: 150 }}
+                                                slotProps={{
+                                                    htmlInput: {
+                                                        inputMode: "numeric",
+                                                    },
+                                                }}
+                                                onChange={onRangeChange}
+                                                label={translate("reps_range")}
+                                            />
+                                            <WeightField
+                                                value={weightInput}
+                                                onChange={(weight) => {
+                                                    setWeightInput(weight!);
+                                                }}
+                                                sx={{ ml: 1, width: 100 }}
+                                                allowEmpty={false}
+                                            />
+                                            <Button
+                                                onClick={
+                                                    updateProgressionParameters
+                                                }
+                                                disabled={!parametersChanged}
+                                                variant="contained"
+                                                sx={{ ml: 1, mt: 0.25 }}
+                                            >
+                                                {translate("apply")}
+                                            </Button>
                                         </td>
                                     </tr>
-                                )}
-                                <tr>
-                                    <td>{translate("progression")}:</td>
-                                    <td>
-                                        <TextField
-                                            size="small"
-                                            error={parsedRange == null}
-                                            value={rangeInput}
-                                            placeholder="8-10-12"
-                                            sx={{ width: 150 }}
-                                            slotProps={{
-                                                htmlInput: {
-                                                    inputMode: "numeric",
-                                                },
-                                            }}
-                                            onChange={onRangeChange}
-                                            label={translate("reps_range")}
-                                        />
-                                        <WeightField
-                                            value={weightInput}
-                                            onChange={(weight) => {
-                                                setWeightInput(weight!);
-                                            }}
-                                            sx={{ ml: 1, width: 100 }}
-                                            allowEmpty={false}
-                                        />
-                                        <Button
-                                            onClick={
-                                                updateProgressionParameters
-                                            }
-                                            disabled={!parametersChanged}
-                                            variant="contained"
-                                            sx={{ ml: 1, mt: 0.25 }}
-                                        >
-                                            {translate("apply")}
-                                        </Button>
-                                    </td>
-                                </tr>
-                            </>
-                        )}
-                        <tr>
-                            <td colSpan={2}>
-                                <TextField
-                                    label={translate("notes")}
-                                    type="text"
-                                    maxRows={1}
-                                    size="small"
-                                    sx={{ width: 430 }}
-                                    value={notes ?? ""}
-                                    slotProps={{
-                                        htmlInput: {
-                                            maxLength: 200,
-                                        },
-                                    }}
-                                    onChange={(e) => setNotes(e.target.value)}
-                                />
-                                <Button
-                                    variant="contained"
-                                    sx={{ ml: 1, mt: 0.25 }}
-                                    disabled={originalNotes === notes}
-                                    onClick={saveNotes}
-                                >
-                                    {translate("save")}
-                                </Button>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+                                </>
+                            )}
+                            <tr>
+                                <td colSpan={2}>
+                                    <TextField
+                                        label={translate("notes")}
+                                        type="text"
+                                        maxRows={1}
+                                        size="small"
+                                        sx={{ width: 430 }}
+                                        value={notes ?? ""}
+                                        slotProps={{
+                                            htmlInput: {
+                                                maxLength: 200,
+                                            },
+                                        }}
+                                        onChange={(e) =>
+                                            setNotes(e.target.value)
+                                        }
+                                    />
+                                    <Button
+                                        variant="contained"
+                                        sx={{ ml: 1, mt: 0.25 }}
+                                        disabled={originalNotes === notes}
+                                        onClick={saveNotes}
+                                    >
+                                        {translate("save")}
+                                    </Button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                )}
                 {progression && suggestion && (
                     <>
                         <hr />
@@ -444,97 +475,100 @@ export function ExerciseModal({
                                 </tr>
                             </tbody>
                         </table>
-                    </>
-                )}
-                {Object.keys(exercise.workouts).length > 1 && (
-                    <>
+                        <>
+                            <hr />
+                            <ExerciseVolumeChart
+                                series={exercise.series}
+                                exercise={exercise}
+                            />
+                        </>
                         <hr />
-                        <ExerciseVolumeChart
-                            series={exercise.series}
-                            exercise={exercise}
-                        />
+                        <table className="full-width">
+                            <colgroup>
+                                <col className="col-350" />
+                                <col />
+                                <col />
+                            </colgroup>
+                            <thead>
+                                <tr>
+                                    <th>{translate("workout")}</th>
+                                    <th></th>
+                                    <th>{translate("series")}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {exercise.workouts.map((workout) => {
+                                    return exercise.series[workout].map(
+                                        (serie, idx) => (
+                                            <tr key={`${workout}-${idx}`}>
+                                                {idx === 0 && (
+                                                    <td
+                                                        className="divider-bottom"
+                                                        rowSpan={
+                                                            exercise.series[
+                                                                workout
+                                                            ].length
+                                                        }
+                                                    >
+                                                        {workout.split(
+                                                            "\n",
+                                                        )[0] +
+                                                            " @ " +
+                                                            formatTimeDate(
+                                                                parseInt(
+                                                                    workout.split(
+                                                                        "\n",
+                                                                    )[1],
+                                                                ),
+                                                            )}
+                                                    </td>
+                                                )}
+                                                <td
+                                                    className={
+                                                        idx ===
+                                                        exercise.series[workout]
+                                                            .length -
+                                                            1
+                                                            ? "divider-bottom"
+                                                            : ""
+                                                    }
+                                                    style={{
+                                                        textAlign: "right",
+                                                    }}
+                                                >
+                                                    {serie.pr && (
+                                                        <EmojiEventsIcon
+                                                            fontSize="small"
+                                                            className="trophy-icon"
+                                                        />
+                                                    )}
+                                                </td>
+                                                <td
+                                                    className={`text-center${
+                                                        idx ===
+                                                        exercise.series[workout]
+                                                            .length -
+                                                            1
+                                                            ? " divider-bottom"
+                                                            : ""
+                                                    }`}
+                                                >
+                                                    {serie.reps}x
+                                                    {formatNumber(
+                                                        fromKg(serie.weight),
+                                                        1,
+                                                    ) +
+                                                        " " +
+                                                        getWeightUnit()}
+                                                </td>
+                                            </tr>
+                                        ),
+                                    );
+                                })}
+                            </tbody>
+                        </table>
                     </>
                 )}
-                <hr />
-                <table className="full-width">
-                    <colgroup>
-                        <col className="col-350" />
-                        <col />
-                        <col />
-                    </colgroup>
-                    <thead>
-                        <tr>
-                            <th>{translate("workout")}</th>
-                            <th></th>
-                            <th>{translate("series")}</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {exercise.workouts.map((workout) => {
-                            return exercise.series[workout].map(
-                                (serie, idx) => (
-                                    <tr key={`${workout}-${idx}`}>
-                                        {idx === 0 && (
-                                            <td
-                                                className="divider-bottom"
-                                                rowSpan={
-                                                    exercise.series[workout]
-                                                        .length
-                                                }
-                                            >
-                                                {workout.split("\n")[0] +
-                                                    " @ " +
-                                                    formatTimeDate(
-                                                        parseInt(
-                                                            workout.split(
-                                                                "\n",
-                                                            )[1],
-                                                        ),
-                                                    )}
-                                            </td>
-                                        )}
-                                        <td
-                                            className={
-                                                idx ===
-                                                exercise.series[workout]
-                                                    .length -
-                                                    1
-                                                    ? "divider-bottom"
-                                                    : ""
-                                            }
-                                            style={{ textAlign: "right" }}
-                                        >
-                                            {serie.pr && (
-                                                <EmojiEventsIcon
-                                                    fontSize="small"
-                                                    className="trophy-icon"
-                                                />
-                                            )}
-                                        </td>
-                                        <td
-                                            className={`text-center${
-                                                idx ===
-                                                exercise.series[workout]
-                                                    .length -
-                                                    1
-                                                    ? " divider-bottom"
-                                                    : ""
-                                            }`}
-                                        >
-                                            {serie.reps}x
-                                            {formatNumber(
-                                                fromKg(serie.weight),
-                                                1,
-                                            ) +
-                                                " " +
-                                                getWeightUnit()}
-                                        </td>
-                                    </tr>
-                                ),
-                            );
-                        })}
-                    </tbody>
-                </table>
             </DialogContent>
         </Dialog>
     );
