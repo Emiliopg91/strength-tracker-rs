@@ -12,7 +12,7 @@ node:
   '@tauri-apps/plugin-opener': 2.7.2
   '@testing-library/react': 16.3.3
   '@types/leaflet': 1.9.22
-  '@types/node': 26.6.5
+  '@types/node': 26.6.6
   '@types/react': 19.3.0
   '@types/react-dom': 19.3.0
   '@vitejs/plugin-react': 4.7.0
@@ -30,11 +30,12 @@ node:
   react-leaflet: 5.0.0
   recharts: 3.10.1
   typescript: 5.8.3
-  typescript-eslint: 8.72.0
+  typescript-eslint: 8.72.1
   vite: 7.3.7
   vite-plugin-checker: 0.14.5
   vitest: 5.0.5
 rust:
+  base64: 0.23.1
   bytes: 1.12.1
   chrono: 0.4.45
   curl-rest: 0.6.0
@@ -43,19 +44,24 @@ rust:
   geo-types: 0.7.20
   gpx: 0.10.0
   gtk: 0.18.2
+  hmac: 0.13.0
+  keyring: 3.6.3
   libc: 0.2.191
-  mtp-rs: 0.35.0
+  mtp-rs: 0.36.0
   noyalib: 0.0.58
-  nusb: 0.2.9
   ouroboros: 0.18.5
+  percent-encoding: 2.3.2
   phf: 0.13.1
   phf_codegen: 0.13.1
+  rand: 0.10.3
   rayon: 1.12.0
+  reqwest: 0.13.5
   rusqlite_orm: 1.0.1
   rustyfit: 0.11.0
   semver: 1.0.28
   serde: 1.0.229
   serde_json: 1.0.154
+  sha1: 0.11.0
   strength-tracker-rs-macros: 0.1.0
   tauri: 2.12.5
   tauri-build: 2.7.4
@@ -67,4 +73,6 @@ rust:
   thiserror: 2.0.21
   tokio: 1.54.1
   tray-icon: 0.25.1
+  url: 2.5.8
   webkit2gtk: 2.0.2
+  zip: 9.1.3
