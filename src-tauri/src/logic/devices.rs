@@ -749,7 +749,7 @@ pub async fn _import_from_device(app: &AppHandle, serial: &str) -> Result<usize,
         .map_err(|e| e.to_string())
     }?;
 
-    if let Some(latest) = device.last_sync {
+    if let Some(latest) = device.last_activity_sync {
         let latest = Local.timestamp_opt(latest as i64, 0).unwrap();
         latest_date = format!(
             "{:04}-{:02}-{:02}-{:02}-{:02}-{:02}",
@@ -810,7 +810,7 @@ pub async fn _import_from_device(app: &AppHandle, serial: &str) -> Result<usize,
                     Ok(Vec::new())
                 }?;
 
-                device.last_sync = Some(Local::now().timestamp() as u32);
+                device.last_activity_sync = Some(Local::now().timestamp() as u32);
                 device.update_by_id_in(tx)?;
 
                 Ok(res)

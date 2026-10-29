@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::dao::body_metric::BodyMetric;
+use crate::{dao::body_metric::BodyMetric, utils::time::local_midnight};
 
 #[derive(Serialize, Deserialize)]
 pub struct BodyMetricListItem {
@@ -28,7 +28,7 @@ impl TryFrom<&BodyMetricListItem> for BodyMetric {
 
     fn try_from(value: &BodyMetricListItem) -> Result<Self, Self::Error> {
         Ok(Self {
-            date: value.date,
+            date: local_midnight(value.date as i64).unwrap(),
             weight: value.weight,
             fat_ratio: value.fat_ratio,
             lean_mass: value.lean_mass,

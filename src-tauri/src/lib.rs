@@ -1,3 +1,4 @@
+mod connect;
 mod dao;
 mod dto;
 mod fit;
@@ -30,6 +31,7 @@ use tauri_plugin_log::{
 };
 
 use crate::{
+    dao::body_metric::migration_21,
     dto::app::Settings,
     logic::{
         app::{
@@ -37,6 +39,7 @@ use crate::{
             notify_frontend_ready, show_main_window, update_settings_value,
         },
         body_metrics::{add_body_measures, delete_body_metric, get_body_measures},
+        connect::import_from_connect,
         devices::{get_registered_devices, import_from_device, send_to_device},
         exercises::{
             apply_progression_suggestion, get_exercise_details, get_exercises,
@@ -168,11 +171,12 @@ fn schema_ddls() -> Vec<DdlVersion> {
     let mut ddls = ddls!("../resources/ddl").to_vec();
     ddls.sort_by_key(|ddl| ddl.version);
 
-    /*for ddl in &mut ddls {
+    for ddl in &mut ddls {
         ddl.update_fn = match ddl.version {
+            21 => Some(|tx| migration_21(tx)),
             _ => None,
         };
-    }*/
+    }
 
     ddls
 }
@@ -394,7 +398,9 @@ pub fn run(log_level: LevelFilter) {
             export_gpx,
             //Report
             report_ready,
-            load_report
+            load_report,
+            //Connect
+            import_from_connect,
         ])
         .build(tauri::generate_context!())
         .unwrap_or_else(|e| {
