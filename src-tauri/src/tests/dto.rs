@@ -7,6 +7,7 @@ use crate::{
         sessions::{SessionDetails, SessionListItem, SessionSet},
     },
     tests::common,
+    utils::time::local_midnight,
 };
 
 const QUARTER_TURN: i32 = 1 << 30;
@@ -44,7 +45,7 @@ fn body_metric_roundtrip() {
     let item = BodyMetricListItem::from(&metric);
     let back = BodyMetric::try_from(&item).unwrap();
 
-    assert_eq!(back.date, metric.date);
+    assert_eq!(back.date, local_midnight(metric.date as i64).unwrap());
     assert_eq!(back.weight, metric.weight);
     assert_eq!(back.fat_ratio, metric.fat_ratio);
     assert_eq!(back.lean_mass, metric.lean_mass);

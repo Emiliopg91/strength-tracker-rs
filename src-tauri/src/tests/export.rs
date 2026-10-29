@@ -28,7 +28,6 @@ fn empty_database_export() {
     for key in [
         "body_metrics",
         "exercises",
-        "devices",
         "workouts",
         "sessions",
         "laps",
@@ -36,6 +35,11 @@ fn empty_database_export() {
         assert_eq!(json[key].as_array().unwrap().len(), 0, "{key}");
     }
     assert!(!json["settings"].as_array().unwrap().is_empty());
+
+    // Migration 021 seeds the Garmin Connect pseudo-device
+    let devices = json["devices"].as_array().unwrap();
+    assert_eq!(devices.len(), 1);
+    assert_eq!(devices[0]["serial"], "connect");
 }
 
 #[test]

@@ -37,7 +37,7 @@ fn schema_ddls_are_sorted_with_hooks_on_their_migration() {
         .filter(|d| d.update_fn.is_some())
         .map(|d| d.version)
         .collect();
-    assert!(with_hooks.is_empty());
+    assert_eq!(with_hooks, [21]);
 }
 
 #[test]
