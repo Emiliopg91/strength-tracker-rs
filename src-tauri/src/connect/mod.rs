@@ -11,6 +11,7 @@ use crate::{
         errors::{ConnectError, Result},
     },
     dao::body_metric::BodyMetric,
+    utils::constants,
 };
 use bytes::Bytes;
 use futures_util::stream::{self, TryStreamExt};
@@ -25,7 +26,6 @@ use tokio::sync::Mutex;
 
 use tauri_plugin_log::log::{error, info, warn};
 
-const KEYRING_SERVICE: &str = "com.emiliopg91.strength-tracker-rs";
 const KEYRING_OAUTH1: &str = "garmin-oauth1";
 const KEYRING_OAUTH2: &str = "garmin-oauth2";
 const DOWNLOAD_STEP: u8 = 100;
@@ -146,6 +146,8 @@ impl ConnectClient {
     where
         P: AsRef<Path>,
     {
+        info!("Listing activities...");
+
         self.refresh_token().await?;
 
         let (Some(oauth1), Some(oauth2)) = (&self.oauth1, &self.oauth2) else {
@@ -168,8 +170,8 @@ impl ConnectClient {
             .with_timezone(&chrono::Local)
             .format("%Y-%m-%d");
 
-        let mut activities = Vec::new();
-        loop {
+        let mut activities: Vec<ActivitySummary> = Vec::new();
+        'pages: loop {
             let path = format!(
                 "/activitylist-service/activities/search/activities?limit={}&start={}&startDate={}",
                 DOWNLOAD_STEP,
@@ -185,22 +187,47 @@ impl ConnectClient {
                     )
                 })?;
             let page_len = result.len();
-            activities.extend(result);
+
+            // Results come newest first: the first one older than `from` ends the listing
+            for activity in result {
+                let start = activity
+                    .start_time_local
+                    .as_deref()
+                    .and_then(|t| {
+                        chrono::NaiveDateTime::parse_from_str(t, "%Y-%m-%d %H:%M:%S").ok()
+                    })
+                    .and_then(|t| t.and_local_timezone(chrono::Local).earliest());
+                if let Some(start) = start
+                    && start.timestamp() < from as i64
+                {
+                    break 'pages;
+                }
+                activities.push(activity);
+            }
 
             if page_len < DOWNLOAD_STEP as usize {
                 break;
             }
         }
+        info!("Listed {} activities.", activities.len());
 
-        let dst_path = dst_path.as_ref();
-        stream::iter(activities.iter().map(Ok))
-            .try_for_each_concurrent(DOWNLOAD_CONCURRENCY, |activity| {
-                Self::download_activity(&client, oauth2, activity.activity_id, dst_path)
-            })
-            .await
+        if !activities.is_empty() {
+            info!("Downloading {} activities...", activities.len());
+            let dst_path = dst_path.as_ref();
+            stream::iter(activities.iter().map(Ok))
+                .try_for_each_concurrent(DOWNLOAD_CONCURRENCY, |activity| {
+                    Self::download_activity(&client, oauth2, activity.activity_id, dst_path)
+                })
+                .await?;
+            info!("Downloaded {} activities.", activities.len());
+        }
+
+        Ok(())
     }
 
     pub async fn list_weight(&mut self, from: Option<u32>) -> Result<Vec<BodyMetric>> {
+        info!("Listing weight entries...");
+
         self.refresh_token().await?;
 
         let (Some(oauth1), Some(oauth2)) = (&self.oauth1, &self.oauth2) else {
@@ -251,10 +278,17 @@ impl ConnectClient {
             }
         };
 
-        Ok(entries
+        let metrics: Vec<BodyMetric> = entries
             .iter()
             .filter_map(|w| BodyMetric::try_from(w).ok())
-            .collect())
+            .collect();
+        info!(
+            "Listed {} weight entries ({} valid).",
+            entries.len(),
+            metrics.len()
+        );
+
+        Ok(metrics)
     }
 
     async fn fetch_weight_range(
@@ -281,6 +315,7 @@ impl ConnectClient {
         id: u64,
         dst_path: &Path,
     ) -> Result<()> {
+        info!("Downloading activity {}...", id);
         let path = format!("/download-service/files/activity/{}", id);
         let zipped = with_retry(|| client.download(oauth2, &path))
             .await
@@ -379,7 +414,7 @@ impl ConnectClient {
     }
 
     fn keyring_entry(key: &str) -> Result<keyring::Entry> {
-        keyring::Entry::new(KEYRING_SERVICE, key).map_err(|e| {
+        keyring::Entry::new(&constants::APP_NAME, key).map_err(|e| {
             log_error(
                 &format!("Error opening keyring entry '{}'", key),
                 ConnectError::Keyring(e),

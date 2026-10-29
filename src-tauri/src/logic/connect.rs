@@ -15,7 +15,10 @@ use tauri_plugin_log::log::info;
 use crate::{
     SettingsLock,
     connect::CONNECT_CLIENT_INST,
-    dao::device::{self, DeviceRepository},
+    dao::{
+        body_metric::BodyMetricRepository,
+        device::{self, DeviceRepository},
+    },
     logic::{
         report_error, run_blocking,
         sessions::{import_file_list, update_pending_geolocation},
@@ -33,16 +36,7 @@ pub async fn import_from_connect(
     settings: State<'_, SettingsLock>,
 ) -> Result<usize, String> {
     let lang = settings.read().unwrap().language;
-    let lang_cl = lang.clone();
-
-    let mut device = run_blocking(app.clone(), |database| {
-        Ok(DeviceRepository::select()
-            .where_(Where::Eq(device::entity::columns::SERIAL, "connect".into()))
-            .fetch_one(database)?
-            .unwrap())
-    })
-    .map_err(|e: DatabaseError| e.to_string())
-    .await?;
+    let lang_cl = lang;
 
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
     let dst_path = std::env::temp_dir().join(format!(
@@ -50,54 +44,69 @@ pub async fn import_from_connect(
         constants::MTP_TMP_DIR_PREFIX,
         now.as_millis()
     ));
-    tokio::fs::create_dir_all(&dst_path)
-        .await
-        .map_err(|e| e.to_string())?;
 
-    CONNECT_CLIENT_INST
-        .lock()
-        .await
-        .download_activities(device.last_activity_sync.unwrap_or(MIN_DATE), &dst_path)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    let dst_path_cpy = dst_path.clone();
-    let activities = tokio::task::spawn_blocking(move || {
-        let mut files = Vec::new();
-        if let Ok(read_dir) = fs::read_dir(&dst_path_cpy) {
-            for entry in read_dir.flatten() {
-                files.push(entry.path());
-            }
-        };
-        files
-    })
-    .await
-    .map_err(|e| e.to_string())?;
-
-    let activities_cpy = activities.clone();
     let app_cpy = app.clone();
-    let res: Result<_, _> = tokio::task::spawn_blocking(move || {
-        let db = app_cpy.state::<DatabasePool>();
-        db.run_in_transaction(move |tx| {
-            let res = if !activities_cpy.is_empty() {
-                info!("Fetched {} activity files", activities_cpy.len());
-                import_file_list(tx, &activities_cpy, Some(device.clone()), lang_cl, true)
-            } else {
-                Ok(Vec::new())
-            }?;
-
-            device.last_activity_sync = Some(Local::now().timestamp() as u32);
-            device.update_by_id_in(tx)?;
-
-            Ok(res)
+    let dst_path_cpy = dst_path.clone();
+    let res: Result<_, String> = async {
+        let mut device = run_blocking(app.clone(), |database| {
+            Ok(DeviceRepository::select()
+                .where_(Where::Eq(device::entity::columns::SERIAL, "connect".into()))
+                .fetch_one(database)?
+                .unwrap())
         })
-    })
-    .await
-    .expect("blocking DB task panicked");
+        .map_err(|e: DatabaseError| e.to_string())
+        .await?;
+        tokio::fs::create_dir_all(&dst_path)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        CONNECT_CLIENT_INST
+            .lock()
+            .await
+            .download_activities(device.last_activity_sync.unwrap_or(MIN_DATE), &dst_path_cpy)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        let activities = tokio::task::spawn_blocking(move || {
+            let mut files = Vec::new();
+            if let Ok(read_dir) = fs::read_dir(&dst_path_cpy) {
+                for entry in read_dir.flatten() {
+                    files.push(entry.path());
+                }
+            };
+            files
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+        let total = activities.len();
+
+        let imported = tokio::task::spawn_blocking(move || {
+            let db = app_cpy.state::<DatabasePool>();
+            db.run_in_transaction(move |tx| {
+                let res = if !activities.is_empty() {
+                    info!("Fetched {} activity files", activities.len());
+                    import_file_list(tx, &activities, Some(device.clone()), lang_cl, true)
+                } else {
+                    Ok(Vec::new())
+                }?;
+
+                device.last_activity_sync = Some(Local::now().timestamp() as u32);
+                device.update_by_id_in(tx)?;
+
+                Ok(res)
+            })
+        })
+        .await
+        .expect("blocking DB task panicked")
+        .map_err(|e: DatabaseError| e.to_string())?;
+
+        Ok((imported, total))
+    }
+    .await;
 
     match res {
-        Ok(res) => {
-            if res.len() == activities.len() {
+        Ok((res, total)) => {
+            if res.len() == total {
                 let _ = fs::remove_dir_all(dst_path);
             }
 
@@ -115,6 +124,70 @@ pub async fn import_from_connect(
             lang,
             "error_import_sessions",
             "Error importing sessions",
+        )),
+    }
+}
+
+#[traced_command]
+#[tauri::command]
+pub async fn import_weight_from_connect(
+    app: AppHandle,
+    settings: State<'_, SettingsLock>,
+) -> Result<(), String> {
+    let lang = settings.read().unwrap().language;
+
+    let app_cpy = app.clone();
+
+    let res: Result<(), String> = async {
+        let mut device = run_blocking(app.clone(), |database| {
+            Ok(DeviceRepository::select()
+                .where_(Where::Eq(device::entity::columns::SERIAL, "connect".into()))
+                .fetch_one(database)?
+                .unwrap())
+        })
+        .map_err(|e: DatabaseError| e.to_string())
+        .await?;
+
+        let mut entries = CONNECT_CLIENT_INST
+            .lock()
+            .await
+            .list_weight(device.last_body_metric_sync)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        tokio::task::spawn_blocking(move || {
+            let db = app_cpy.state::<DatabasePool>();
+            db.run_in_transaction(move |tx| {
+                let mut insert = BodyMetricRepository::insert().or_replace();
+                for entry in &mut entries {
+                    insert = insert.item(entry);
+                }
+                insert.execute_in(tx)?;
+
+                device.last_body_metric_sync = Some(Local::now().timestamp() as u32);
+                device.update_by_id_in(tx)?;
+
+                Ok(())
+            })
+        })
+        .await
+        .expect("blocking DB task panicked")
+        .map_err(|e: DatabaseError| e.to_string())?;
+
+        Ok(())
+    }
+    .await;
+
+    match res {
+        Ok(_) => {
+            info!("Measures added succesfully");
+            Ok(())
+        }
+        Err(e) => Err(report_error(
+            e,
+            lang,
+            "error_adding_body_measures",
+            "Error adding measures",
         )),
     }
 }

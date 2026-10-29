@@ -39,7 +39,7 @@ use crate::{
             notify_frontend_ready, show_main_window, update_settings_value,
         },
         body_metrics::{add_body_measures, delete_body_metric, get_body_measures},
-        connect::import_from_connect,
+        connect::{import_from_connect, import_weight_from_connect},
         devices::{get_registered_devices, import_from_device, send_to_device},
         exercises::{
             apply_progression_suggestion, get_exercise_details, get_exercises,
@@ -401,6 +401,7 @@ pub fn run(log_level: LevelFilter) {
             load_report,
             //Connect
             import_from_connect,
+            import_weight_from_connect
         ])
         .build(tauri::generate_context!())
         .unwrap_or_else(|e| {

@@ -43,7 +43,7 @@ percent-encoding = "^2"
 phf = { version = "=0.11.3", features = ["macros"] }
 rand = "^0"
 rayon = "^1"
-reqwest = { version = "^0", features = ["cookies", "form", "json", "query"] }
+reqwest = { version = "^0", default-features = false, features = ["native-tls", "cookies", "form", "json", "query"] }
 #rusqlite_orm = { path = "../rusqlite_orm/orm", features = ["derive"] }
 rusqlite_orm = { version = "^1", features = ["derive"] }
 rustyfit = { version = "^0", features = ["serde"] }
@@ -73,7 +73,7 @@ webkit2gtk = "2.0"
 # Not used directly: enables tray-icon's KSNI backend through feature unification so
 # left-click events reach the app on Linux. Must match the version tauri depends on.
 tray-icon = { version = "0.25", default-features = false, features = ["ksni"] }
-zip = "^9"
+zip = { version = "^9", default-features = false, features = ["deflate"] }
 
 [profile.release]
 lto = "fat"

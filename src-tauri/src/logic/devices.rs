@@ -853,6 +853,12 @@ pub async fn get_registered_devices(app: AppHandle) -> Result<Vec<DeviceListItem
     .await
     .map_err(|e| e.to_string())?
     .iter()
-    .map(DeviceListItem::from)
+    .filter_map(|d| {
+        if d.serial != "connect" {
+            Some(DeviceListItem::from(d))
+        } else {
+            None
+        }
+    })
     .collect())
 }

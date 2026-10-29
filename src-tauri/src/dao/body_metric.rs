@@ -27,9 +27,10 @@ impl TryFrom<&WeightEntry> for BodyMetric {
                 .and_then(|ms| local_midnight(ms.div_euclid(1000)))
                 .ok_or(())?,
             weight: (value.weight.ok_or(())? as f32) / 1000_f32,
-            fat_ratio: value.body_fat.ok_or(())? as f32,
-            lean_mass: (value.muscle_mass.ok_or(())? as f32) / 1000_f32,
-            water_ratio: value.body_water.ok_or(())? as f32,
+            // Weight-only entries (plain scales, manual input) lack body composition
+            fat_ratio: value.body_fat.unwrap_or(0.0) as f32,
+            lean_mass: (value.muscle_mass.unwrap_or(0.0) as f32) / 1000_f32,
+            water_ratio: value.body_water.unwrap_or(0.0) as f32,
         })
     }
 }

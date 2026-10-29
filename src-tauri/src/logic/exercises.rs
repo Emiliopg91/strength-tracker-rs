@@ -156,80 +156,82 @@ pub fn fetch_exercise_details(
         ]),
     )?;
 
-    let mut session_dates = HashSet::new();
-    for serie in &series {
-        session_dates.insert(serie.session);
-    }
-
-    let chart_session = SessionRepository::select()
-        .where_(Where::And(vec![
-            Where::In(
-                session::entity::columns::DATE,
-                session_dates.into_iter().map(|d| d.into()).collect(),
-            ),
-            Where::Eq(session::entity::columns::SHOW_EXERCISES_CHART, true.into()),
-        ]))
-        .fetch_in(conn)?
-        .iter()
-        .map(|s| s.date)
-        .collect();
-
-    let pr = series.iter().find(|s| s.pr).unwrap();
-    res.reps = pr.reps;
-    res.weight = pr.weight;
-    res.pr_date = pr.session;
-
-    let mut conditions = Vec::new();
-    conditions.push(Where::InSub(
-        session::entity::columns::DATE,
-        SetRepository::select()
-            .distinct(&[set::entity::columns::SESSION])
-            .where_(Where::And(vec![
-                Where::Eq(set::entity::columns::EX_CAT, category.into()),
-                Where::Eq(set::entity::columns::EX_ID, id.into()),
-            ]))
-            .to_subquery(),
-    ));
-
-    if let Some((from, to)) = from_to {
-        conditions.push(Where::Gte(session::entity::columns::DATE, from.into()));
-        conditions.push(Where::Lte(session::entity::columns::DATE, to.into()));
-    }
-
-    let workouts: HashMap<_, _> = SessionRepository::select()
-        .columns(&[
-            session::entity::columns::DATE,
-            session::entity::columns::NAME,
-        ])
-        .where_(Where::And(conditions))
-        .fetch_in(conn)?
-        .iter()
-        .map(|s| {
-            (
-                row_int(s, session::entity::columns::DATE.as_ref()) as u32,
-                row_text(s, session::entity::columns::NAME.as_ref()),
-            )
-        })
-        .collect();
-
-    let mut last_session = None;
-    let mut ex_str = String::new();
-    for serie in series {
-        // Sessions outside the range aren't in `workouts`: their sets are skipped
-        let Some(workout) = workouts.get(&serie.session) else {
-            continue;
-        };
-        if last_session != Some(serie.session) {
-            ex_str = format!("{}\n{}", workout, serie.session);
-            res.workouts.push(ex_str.clone());
-            last_session = Some(serie.session);
+    if !series.is_empty() {
+        let mut session_dates = HashSet::new();
+        for serie in &series {
+            session_dates.insert(serie.session);
         }
 
-        let entry = res.series.entry(ex_str.clone()).or_default();
-        entry.push(SessionSet::from(&serie));
-    }
+        let chart_session = SessionRepository::select()
+            .where_(Where::And(vec![
+                Where::In(
+                    session::entity::columns::DATE,
+                    session_dates.into_iter().map(|d| d.into()).collect(),
+                ),
+                Where::Eq(session::entity::columns::SHOW_EXERCISES_CHART, true.into()),
+            ]))
+            .fetch_in(conn)?
+            .iter()
+            .map(|s| s.date)
+            .collect();
 
-    res.chart_session = chart_session;
+        let pr = series.iter().find(|s| s.pr).unwrap();
+        res.reps = pr.reps;
+        res.weight = pr.weight;
+        res.pr_date = pr.session;
+
+        let mut conditions = Vec::new();
+        conditions.push(Where::InSub(
+            session::entity::columns::DATE,
+            SetRepository::select()
+                .distinct(&[set::entity::columns::SESSION])
+                .where_(Where::And(vec![
+                    Where::Eq(set::entity::columns::EX_CAT, category.into()),
+                    Where::Eq(set::entity::columns::EX_ID, id.into()),
+                ]))
+                .to_subquery(),
+        ));
+
+        if let Some((from, to)) = from_to {
+            conditions.push(Where::Gte(session::entity::columns::DATE, from.into()));
+            conditions.push(Where::Lte(session::entity::columns::DATE, to.into()));
+        }
+
+        let workouts: HashMap<_, _> = SessionRepository::select()
+            .columns(&[
+                session::entity::columns::DATE,
+                session::entity::columns::NAME,
+            ])
+            .where_(Where::And(conditions))
+            .fetch_in(conn)?
+            .iter()
+            .map(|s| {
+                (
+                    row_int(s, session::entity::columns::DATE.as_ref()) as u32,
+                    row_text(s, session::entity::columns::NAME.as_ref()),
+                )
+            })
+            .collect();
+
+        let mut last_session = None;
+        let mut ex_str = String::new();
+        for serie in series {
+            // Sessions outside the range aren't in `workouts`: their sets are skipped
+            let Some(workout) = workouts.get(&serie.session) else {
+                continue;
+            };
+            if last_session != Some(serie.session) {
+                ex_str = format!("{}\n{}", workout, serie.session);
+                res.workouts.push(ex_str.clone());
+                last_session = Some(serie.session);
+            }
+
+            let entry = res.series.entry(ex_str.clone()).or_default();
+            entry.push(SessionSet::from(&serie));
+        }
+
+        res.chart_session = chart_session;
+    }
 
     Ok(res)
 }
