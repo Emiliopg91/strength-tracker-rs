@@ -34,7 +34,7 @@ futures-util = "^0"
 strength-tracker-rs-macros = { path = "../src-tauri-macros" }
 geo-types = "^0"
 gpx = "^0"
-hmac = "^0"
+hmac = "^0.13"
 keyring = { version = "^3", features = ["sync-secret-service", "crypto-rust"] }
 libc = "^0"
 mtp-rs = "^0"
@@ -50,7 +50,7 @@ rustyfit = { version = "^0", features = ["serde"] }
 semver = "^1"
 serde = { version = "^1", features = ["derive"] }
 serde_json = "^1"
-sha1 = "^0"
+sha1 = "^0.11"
 tauri = { version = "^2", features = ["tray-icon"] }
 tauri-plugin-autostart = "^2"
 tauri-plugin-log = "^2"
