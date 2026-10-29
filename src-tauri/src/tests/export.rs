@@ -25,13 +25,7 @@ fn empty_database_export() {
     let db = common::test_db();
     let json = export_json(&db);
 
-    for key in [
-        "body_metrics",
-        "exercises",
-        "workouts",
-        "sessions",
-        "laps",
-    ] {
+    for key in ["body_metrics", "exercises", "workouts", "sessions", "laps"] {
         assert_eq!(json[key].as_array().unwrap().len(), 0, "{key}");
     }
     assert!(!json["settings"].as_array().unwrap().is_empty());
