@@ -6,7 +6,7 @@
 
 Your Garmin watch records every set you lift, but Garmin Connect does little with it: exercises get misdetected, sets are tedious to fix, and nothing tells you when it's time to add weight. Strength Tracker is a Linux desktop app that takes over from there. Plug in your watch, and your sessions are imported, analyzed and turned into your next workout — which goes straight back to the watch.
 
-No account, no cloud, no Garmin Express (which doesn't exist on Linux anyway). Just a USB cable and a SQLite database you own.
+No account required, no cloud, no Garmin Express (which doesn't exist on Linux anyway). Just a USB cable and a SQLite database you own — with optional Garmin Connect import for when the cable isn't at hand.
 
 ## Screenshots
 
@@ -44,7 +44,7 @@ No account, no cloud, no Garmin Express (which doesn't exist on Linux anyway). J
 
 - **Cardio activities** — Heart-rate chart with time-in-zone breakdown, speed and laps.
 - **GPS routes** — Interactive map with a speed-colored track, satellite/street toggle, reverse-geocoded naming and GPX export with elevation.
-- **Body measurements** — Log, compare and chart them over time with 7-day averages.
+- **Body measurements** — Log them manually or import them from Garmin Connect, then compare and chart them over time with 7-day averages.
 
 ## Device sync
 
@@ -53,10 +53,12 @@ No account, no cloud, no Garmin Express (which doesn't exist on Linux anyway). J
 - **Workout import** — Import workout steps back from the device.
 - **Print workouts** — Print a workout or save it as PDF to take to the gym.
 - **Manual `.FIT` import** — Import activity files from disk.
+- **Garmin Connect import** — Optional, on-demand download of new activities and weigh-ins (including body composition from smart scales) since the last sync. Sign in once through a `zenity` dialog; the session is kept in the system keyring and refreshed automatically.
 
 ## Your data, your machine
 
 - **Local SQLite database** — Versioned migrations, applied automatically.
+- **Credentials stay in your keyring** — Garmin Connect session tokens live in the system keyring (Secret Service), not in the database, and your password is never saved.
 - **JSON export** — Full database export for backup or your own analysis.
 - **Cloud backup, if you want it** — One-click upload to OneDrive or Dropbox via `rclone`.
 
