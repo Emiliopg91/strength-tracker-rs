@@ -6,7 +6,7 @@
 
 Your Garmin watch records every set you lift, but Garmin Connect does little with it: exercises get misdetected, sets are tedious to fix, and nothing tells you when it's time to add weight. Strength Tracker is a Linux desktop app that takes over from there. Plug in your watch, and your sessions are imported, analyzed and turned into your next workout — which goes straight back to the watch.
 
-No account required, no cloud, no Garmin Express (which doesn't exist on Linux anyway). Just a USB cable and a SQLite database you own — with optional Garmin Connect import for when the cable isn't at hand.
+No account required, no cloud, no Garmin Express (which doesn't exist on Linux anyway). Just a USB cable and a SQLite database you own — with optional Garmin Connect sync for when the cable isn't at hand.
 
 ## Screenshots
 
@@ -20,14 +20,14 @@ No account required, no cloud, no Garmin Express (which doesn't exist on Linux a
 1. **Plan** — Build strength workouts in the app and send them to your watch.
 2. **Train** — Follow the workout on the watch as usual.
 3. **Sync** — Plug the watch in. The app can launch itself on connect and imports new activities automatically.
-4. **Progress** — Strength Tracker checks each exercise against its rep range and suggests your next target. Apply the suggestion and the affected workouts are updated and queued for your watch, ready for the next session.
+4. **Progress** — Strength Tracker checks each exercise against its rep range and suggests your next target. Apply the suggestion and the affected workouts are updated, queued for your watch and, if you're signed in, synced to Garmin Connect, ready for the next session.
 
 ## Progression, done for you
 
 - **Double progression per exercise** — Set a rep range such as `8-10-12` and a weight increment. Your weakest set sets the pace: once every set reaches the top of the range, the app suggests adding the increment and starting again from the bottom; otherwise it moves you to the next rep step.
 - **Only when it's earned** — No suggestion while any set is below the range or sets were done at mixed weights. Progression can be turned off per exercise.
 - **Unilateral aware** — Rep ranges count per side for single-arm or single-leg exercises.
-- **One click to apply** — Accepted suggestions update your workouts and are pushed to the watch on its next connection.
+- **One click to apply** — Accepted suggestions update your workouts, which are pushed to the watch on its next connection and to Garmin Connect right away.
 
 ## Strength analysis
 
@@ -54,6 +54,7 @@ No account required, no cloud, no Garmin Express (which doesn't exist on Linux a
 - **Print workouts** — Print a workout or save it as PDF to take to the gym.
 - **Manual `.FIT` import** — Import activity files from disk.
 - **Garmin Connect import** — Optional, on-demand download of new activities and weigh-ins (including body composition from smart scales) since the last sync. Sign in once through a `zenity` dialog; the session is kept in the system keyring and refreshed automatically.
+- **Garmin Connect workout sync** — While signed in, saving a workout or applying a progression creates or updates it in Garmin Connect. Workouts already in Connect are matched by name instead of duplicated.
 
 ## Your data, your machine
 
