@@ -1,7 +1,4 @@
-use std::{
-    fs,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::collections::BTreeSet;
 
 use chrono::Local;
 use futures_util::TryFutureExt;
@@ -13,103 +10,89 @@ use tauri::{AppHandle, Manager, State};
 use tauri_plugin_log::log::info;
 
 use crate::{
-    SettingsLock,
-    connect::CONNECT_CLIENT_INST,
+    ConnectLock, SettingsLock,
     dao::{
         body_metric::BodyMetricRepository,
         device::{self, DeviceRepository},
+        session::{self, SessionRepository},
     },
     logic::{
-        report_error, run_blocking,
-        sessions::{import_file_list, update_pending_geolocation},
+        new_pending_dir, report_error, row_int, run_blocking,
+        sessions::{import_pending_sessions, update_pending_geolocation},
     },
     utils::constants,
 };
 
 //31-aug-2026 UTC
 const MIN_DATE: u32 = 1788134400;
+//1 day
+const SYNC_OVERLAP: u32 = 86_400;
 
 #[traced_command]
 #[tauri::command]
 pub async fn import_from_connect(
     app: AppHandle,
     settings: State<'_, SettingsLock>,
+    connect: State<'_, ConnectLock>,
 ) -> Result<usize, String> {
     let lang = settings.read().unwrap().language;
     let lang_cl = lang;
 
-    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-    let dst_path = std::env::temp_dir().join(format!(
-        "{}-{}",
-        constants::MTP_TMP_DIR_PREFIX,
-        now.as_millis()
-    ));
-
     let app_cpy = app.clone();
-    let dst_path_cpy = dst_path.clone();
     let res: Result<_, String> = async {
-        let mut device = run_blocking(app.clone(), |database| {
-            Ok(DeviceRepository::select()
+        let (mut device, from_date, existing) = run_blocking(app.clone(), |database| {
+            let device = DeviceRepository::select()
                 .where_(Where::Eq(device::entity::columns::SERIAL, "connect".into()))
                 .fetch_one(database)?
-                .unwrap())
+                .unwrap();
+
+            // Overlap covers activities uploaded out of order; those already stored are skipped
+            let mark = device.last_activity_sync.unwrap_or(MIN_DATE);
+            let from_date = mark.saturating_sub(SYNC_OVERLAP).max(MIN_DATE);
+
+            let existing: BTreeSet<u32> = database.run_in_connection(|conn| {
+                Ok(SessionRepository::select()
+                    .columns(&[session::entity::columns::DATE])
+                    .where_(Where::Gte(session::entity::columns::DATE, from_date.into()))
+                    .fetch_in(conn)?
+                    .iter()
+                    .map(|row| row_int(row, session::entity::columns::DATE.as_ref()) as u32)
+                    .collect())
+            })?;
+
+            Ok((device, from_date, existing))
         })
         .map_err(|e: DatabaseError| e.to_string())
         .await?;
-        tokio::fs::create_dir_all(&dst_path)
+
+        let dst_dir = new_pending_dir(&constants::PENDING_DOWNLOAD_SESSIONS_FOLDER, &device.serial);
+        tokio::fs::create_dir_all(&dst_dir)
             .await
             .map_err(|e| e.to_string())?;
 
-        CONNECT_CLIENT_INST
+        let newest = connect
             .lock()
             .await
-            .download_activities(device.last_activity_sync.unwrap_or(MIN_DATE), &dst_path_cpy)
+            .download_activities(from_date, &existing, &dst_dir)
             .await
             .map_err(|e| e.to_string())?;
 
-        let activities = tokio::task::spawn_blocking(move || {
-            let mut files = Vec::new();
-            if let Ok(read_dir) = fs::read_dir(&dst_path_cpy) {
-                for entry in read_dir.flatten() {
-                    files.push(entry.path());
-                }
-            };
-            files
-        })
-        .await
-        .map_err(|e| e.to_string())?;
-        let total = activities.len();
-
-        let imported = tokio::task::spawn_blocking(move || {
+        // The mark only follows what Connect has listed, so activities uploaded late are not missed
+        let sync_mark = newest.filter(|&newest| Some(newest) > device.last_activity_sync);
+        let imported_sessions = tokio::task::spawn_blocking(move || {
             let db = app_cpy.state::<DatabasePool>();
-            db.run_in_transaction(move |tx| {
-                let res = if !activities.is_empty() {
-                    info!("Fetched {} activity files", activities.len());
-                    import_file_list(tx, &activities, Some(device.clone()), lang_cl, true)
-                } else {
-                    Ok(Vec::new())
-                }?;
-
-                device.last_activity_sync = Some(Local::now().timestamp() as u32);
-                device.update_by_id_in(tx)?;
-
-                Ok(res)
-            })
+            import_pending_sessions(&db, &dst_dir, &mut device, lang_cl, sync_mark)
         })
         .await
         .expect("blocking DB task panicked")
         .map_err(|e: DatabaseError| e.to_string())?;
 
-        Ok((imported, total))
+        Ok(imported_sessions)
     }
     .await;
 
     match res {
-        Ok((res, total)) => {
-            if res.len() == total {
-                let _ = fs::remove_dir_all(dst_path);
-            }
-
+        Ok(res) => {
             if !res.is_empty() {
                 let app = app.clone();
                 std::thread::spawn(move || {
@@ -133,6 +116,7 @@ pub async fn import_from_connect(
 pub async fn import_weight_from_connect(
     app: AppHandle,
     settings: State<'_, SettingsLock>,
+    connect: State<'_, ConnectLock>,
 ) -> Result<(), String> {
     let lang = settings.read().unwrap().language;
 
@@ -148,7 +132,7 @@ pub async fn import_weight_from_connect(
         .map_err(|e: DatabaseError| e.to_string())
         .await?;
 
-        let mut entries = CONNECT_CLIENT_INST
+        let mut entries = connect
             .lock()
             .await
             .list_weight(device.last_body_metric_sync)
@@ -190,4 +174,28 @@ pub async fn import_weight_from_connect(
             "Error adding measures",
         )),
     }
+}
+
+#[traced_command]
+#[tauri::command]
+pub async fn connect_logged_user(
+    connect: State<'_, ConnectLock>,
+) -> Result<Option<String>, String> {
+    Ok(connect.lock().await.logged_user())
+}
+
+#[traced_command]
+#[tauri::command]
+pub async fn connect_login(connect: State<'_, ConnectLock>) -> Result<Option<String>, String> {
+    let mut connect = connect.lock().await;
+
+    connect.prompt_login().await.map_err(|e| e.to_string())?;
+
+    Ok(connect.logged_user())
+}
+
+#[traced_command]
+#[tauri::command]
+pub async fn connect_logout(connect: State<'_, ConnectLock>) -> Result<(), String> {
+    connect.lock().await.disconnect().map_err(|e| e.to_string())
 }

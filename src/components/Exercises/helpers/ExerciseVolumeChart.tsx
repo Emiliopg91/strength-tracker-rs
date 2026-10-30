@@ -79,9 +79,10 @@ export function ExerciseVolumeChart({ series, exercise }: Props) {
     const dates = chartData.map(({ date }) => date);
     const minDate = Math.min(...dates);
     const maxDate = Math.max(...dates);
-    const minWeight = Math.min(...chartData.map(({ weight }) => weight));
-    const maxWeight = Math.max(...chartData.map(({ weight }) => weight));
-    const maxReps = Math.max(...chartData.map(({ reps }) => reps));
+    const minWeight = Math.min(...chartData.map(({ weight }) => weight)) / 1.3;
+    const maxWeight = Math.max(...chartData.map(({ weight }) => weight)) * 1.1;
+    const maxReps = Math.max(...chartData.map(({ reps }) => reps)) * 1.1;
+    const minReps = Math.min(...chartData.map(({ reps }) => reps)) / 1.3;
 
     return (
         <div className="chart-container">
@@ -109,7 +110,7 @@ export function ExerciseVolumeChart({ series, exercise }: Props) {
                     <YAxis
                         yAxisId="right"
                         stroke="#fff"
-                        domain={[parseInt(exercise.reps_range) / 1.3, maxReps]}
+                        domain={[minReps, maxReps]}
                         width={0}
                         tick={false}
                     />{" "}

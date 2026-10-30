@@ -13,6 +13,7 @@ interface AppContexType {
     sessionsVersion: number;
     // Empty until loaded, or if loading failed
     exercisesCatalog: ExerciseOption[];
+    connectUser: string | null;
 }
 
 const defaultValue: AppContexType = {
@@ -20,6 +21,7 @@ const defaultValue: AppContexType = {
     environment: AppEnvironment.Release,
     sessionsVersion: 0,
     exercisesCatalog: [],
+    connectUser: null,
 };
 
 export const AppContext = createContext(defaultValue);

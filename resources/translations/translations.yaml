@@ -622,3 +622,9 @@ import_garmin_connect:
 add_manually:
   en: Manually
   es: Manualmente
+login:
+  en: Log in
+  es: Iniciar sesión
+logout:
+  en: Log out
+  es: Cerrar sesión

@@ -1,8 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
-    fs,
-    sync::atomic::{AtomicU64, Ordering},
-    time::{SystemTime, UNIX_EPOCH},
+    path::Path,
 };
 
 use chrono::{Datelike, Local, TimeZone, Timelike};
@@ -36,9 +34,11 @@ use crate::{
     },
     fit::{parser::FitParser, writer::FitWriter},
     logic::{
+        list_fit_files, new_pending_dir,
         notifications::show_notification,
         report_error, run_blocking,
-        sessions::{import_file_list, update_pending_geolocation},
+        sessions::{import_pending_sessions, update_pending_geolocation},
+        settle_pending_files,
     },
     mtp::MTP_CLIENT_INST,
     utils::{
@@ -156,18 +156,24 @@ async fn on_device_connected(
     let payload: DeviceListItem = DeviceListItem::from(&device.clone());
     let _ = app.emit("device_connected", payload);
 
-    let _ = app.emit("start_loading", ());
-    let mut imported = 0;
     let serial = &device.serial;
+    with_loading(app, async {
+        let imported = _import_from_device(app, serial).await.unwrap_or(0);
 
-    if let Ok(i) = _import_from_device(app, serial).await {
-        imported += i;
-    }
+        download_pending_workouts(app, serial).await;
+        delete_pending_workouts(app, serial).await;
+        push_pending_workouts(app, serial).await;
 
-    download_pending_workouts(app, serial).await;
-    delete_pending_workouts(app, serial).await;
-    push_pending_workouts(app, serial).await;
+        imported
+    })
+    .await;
+}
 
+/// Runs a sync between `start_loading` and `finish_loading`, then emits `sessions_added` if it
+/// imported any session. Each event is emitted only here, as the TS listener is generated per call.
+async fn with_loading(app: &AppHandle, sync: impl Future<Output = usize>) {
+    let _ = app.emit("start_loading", ());
+    let imported = sync.await;
     let _ = app.emit("finish_loading", ());
     if imported > 0 {
         let _ = app.emit("sessions_added", ());
@@ -204,9 +210,6 @@ pub async fn delete_pending_from_connected(app: &AppHandle) {
 
 /// Serializes pending pushes so concurrent triggers don't upload the same queue twice.
 static PUSH_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
-
-/// Gives every upload its own temp dir, so concurrent sends of the same workout don't share a file.
-static UPLOAD_SEQ: AtomicU64 = AtomicU64::new(0);
 
 /// Uploads to `device` the workouts queued while it was disconnected, removing each queue entry once sent.
 async fn push_pending_workouts(app: &AppHandle, serial: &str) {
@@ -395,11 +398,13 @@ async fn delete_pending_workouts(app: &AppHandle, serial: &str) {
     }
 }
 
-/// Downloads from `device` the step definitions of workouts that have sessions recorded on it but no steps stored yet.
-async fn download_pending_workouts(app: &AppHandle, serial: &str) {
-    let serial = serial.to_string();
-    let serial_q = serial.clone();
-    let pending_workouts = match run_blocking(app.clone(), move |db| {
+/// Lists the workouts recorded in sessions of `serial` that have no steps stored yet.
+async fn list_pending_workouts(
+    app: &AppHandle,
+    serial: &str,
+) -> Result<Vec<String>, DatabaseError> {
+    let serial_q = serial.to_string();
+    let rows = run_blocking(app.clone(), move |db| {
         db.run_in_connection(|conn| {
             let rows = WorkoutRepository::select()
                 .columns(&[workout::entity::columns::NAME])
@@ -425,15 +430,92 @@ async fn download_pending_workouts(app: &AppHandle, serial: &str) {
             Ok(rows)
         })
     })
-    .await
-    {
-        Ok(rows) => rows
-            .iter()
-            .filter_map(|r| match r.get(workout::entity::columns::NAME.as_ref()) {
-                Some(Value::Text(name)) => Some(name.clone()),
-                _ => unreachable!(),
-            })
-            .collect::<Vec<_>>(),
+    .await?;
+
+    Ok(rows
+        .iter()
+        .filter_map(|r| match r.get(workout::entity::columns::NAME.as_ref()) {
+            Some(Value::Text(name)) => Some(name.clone()),
+            _ => unreachable!(),
+        })
+        .collect())
+}
+
+/// Stores the steps of the `pending_workouts` found among the `.fit` files waiting in `dir`,
+/// settling them afterwards.
+fn store_pending_workouts(
+    app: &AppHandle,
+    db: &DatabasePool,
+    dir: &Path,
+    serial: &str,
+    pending_workouts: &[String],
+) {
+    // Every workout on the device gets downloaded; those not pending are just discarded
+    let mut done = Vec::new();
+    let mut failed = Vec::new();
+    let mut workouts_to_insert = Vec::new();
+    for file in list_fit_files(dir) {
+        match FitParser::from_file(&file).and_then(Workout::try_from) {
+            Ok(workout)
+                if !workout.steps.is_empty() && pending_workouts.contains(&workout.name) =>
+            {
+                workouts_to_insert.push((workout, file))
+            }
+            Ok(_) => done.push(file),
+            Err(e) => {
+                error!("Error parsing workout file {}: {e}", file.display());
+                failed.push(file);
+            }
+        }
+    }
+
+    let mut workout_names: Vec<String> = Vec::new();
+    for (mut workout, file) in workouts_to_insert {
+        let res = db.run_in_transaction(|tx| {
+            WorkoutRepository::update()
+                .set(
+                    workout::entity::columns::NOTES,
+                    workout.notes.clone().into(),
+                )
+                .where_(Where::Eq(
+                    workout::entity::columns::NAME,
+                    workout.name.clone().into(),
+                ))
+                .execute_in(tx)?;
+
+            let mut insert = WorkoutStepRepository::insert();
+            for step in &mut workout.steps {
+                insert = insert.item(step);
+            }
+
+            insert.execute_in(tx)?;
+
+            Ok(())
+        });
+
+        if let Err(e) = res {
+            error!(
+                "Error storing workout {} from {}: {}",
+                workout.name, serial, e
+            );
+            failed.push(file);
+        } else {
+            workout_names.push(workout.name.clone());
+            done.push(file);
+        }
+    }
+
+    settle_pending_files(dir, &done, &failed);
+
+    if !workout_names.is_empty() {
+        let _ = app.emit("added_workout_steps", workout_names);
+    }
+}
+
+/// Downloads from `device` the step definitions of workouts that have sessions recorded on it but no steps stored yet.
+async fn download_pending_workouts(app: &AppHandle, serial: &str) {
+    let pending_workouts = match list_pending_workouts(app, serial).await {
+        Ok(pending) => pending,
         Err(e) => {
             error!("Error listing pending workouts for {}: {e}", serial);
             return;
@@ -444,84 +526,26 @@ async fn download_pending_workouts(app: &AppHandle, serial: &str) {
         return;
     }
 
-    let dst_dir = std::env::temp_dir().join(format!(
-        "{}-{}",
-        constants::MTP_TMP_DIR_PREFIX,
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_millis()
-    ));
+    let dst_dir = new_pending_dir(&constants::PENDING_DOWNLOAD_WORKOUTS_FOLDER, serial);
 
     // Locked only for the download, so a concurrent sync is not held back by DB work.
     let downloaded = MTP_CLIENT_INST
         .lock()
         .await
-        .download_workouts(&serial, dst_dir.clone())
+        .download_workouts(serial, dst_dir.clone())
         .await;
 
     match downloaded {
         Ok(()) => {
-            let src_dir = dst_dir.clone();
-            let app_cl: AppHandle = app.clone();
+            let app_cl = app.clone();
+            let serial = serial.to_string();
             run_blocking(app.clone(), move |db| {
-                let mut workouts_to_insert = Vec::new();
-                if let Ok(read_dir) = fs::read_dir(&src_dir) {
-                    for entry in read_dir.flatten() {
-                        if let Ok(parser) = FitParser::from_file(entry.path())
-                            && let Ok(workout) = Workout::try_from(parser)
-                            && !workout.steps.is_empty()
-                            && pending_workouts.contains(&workout.name)
-                        {
-                            workouts_to_insert.push(workout);
-                        }
-                    }
-                }
-
-                let mut workout_names: Vec<String> = Vec::new();
-                for workout in &mut workouts_to_insert {
-                    let res = db.run_in_transaction(|tx| {
-                        WorkoutRepository::update()
-                            .set(
-                                workout::entity::columns::NOTES,
-                                workout.notes.clone().into(),
-                            )
-                            .where_(Where::Eq(
-                                workout::entity::columns::NAME,
-                                workout.name.clone().into(),
-                            ))
-                            .execute_in(tx)?;
-
-                        let mut insert = WorkoutStepRepository::insert();
-                        for step in &mut workout.steps {
-                            insert = insert.item(step);
-                        }
-
-                        insert.execute_in(tx)?;
-
-                        Ok(())
-                    });
-
-                    if let Err(e) = res {
-                        error!(
-                            "Error storing workout {} from {}: {}",
-                            workout.name, serial, e
-                        );
-                    } else {
-                        workout_names.push(workout.name.clone());
-                    }
-                }
-
-                if !workout_names.is_empty() {
-                    let _ = app_cl.emit("added_workout_steps", workout_names);
-                }
+                store_pending_workouts(&app_cl, db, &dst_dir, &serial, &pending_workouts)
             })
             .await;
         }
         Err(e) => error!("Error downloading workouts from {}: {e}", serial),
     }
-
-    let _ = fs::remove_dir_all(&dst_dir);
 }
 
 #[traced_command]
@@ -684,12 +708,7 @@ async fn send_workout_to_device(
     .await
     .map_err(|e| e.to_string())?;
 
-    let dir = std::env::temp_dir().join(format!(
-        "{}-upload-{}-{}",
-        constants::MTP_TMP_DIR_PREFIX,
-        std::process::id(),
-        UPLOAD_SEQ.fetch_add(1, Ordering::Relaxed)
-    ));
+    let dir = new_pending_dir(&constants::PENDING_UPLOAD_WORKOUTS_FOLDER, serial);
     tokio::fs::create_dir_all(&dir)
         .await
         .map_err(|e| e.to_string())?;
@@ -767,54 +786,20 @@ pub async fn _import_from_device(app: &AppHandle, serial: &str) -> Result<usize,
         latest_date
     );
     let mut res: Result<Vec<u32>, DatabaseError> = Ok(Vec::new());
-    let mut activities = Vec::new();
-
+    let dst_dir = new_pending_dir(&constants::PENDING_DOWNLOAD_SESSIONS_FOLDER, serial);
     let mtp_client = MTP_CLIENT_INST.lock().await;
 
-    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-    let src_dir = std::env::temp_dir().join(format!(
-        "{}-{}",
-        constants::MTP_TMP_DIR_PREFIX,
-        now.as_millis()
-    ));
-
-    let activities_folder = src_dir.join("Activities");
-
     if mtp_client
-        .download_activities_since(serial, latest_date, activities_folder.clone())
+        .download_activities_since(serial, latest_date, dst_dir.clone())
         .await
         .is_ok()
     {
-        activities = tokio::task::spawn_blocking(move || {
-            let mut files = Vec::new();
-            if let Ok(read_dir) = fs::read_dir(&activities_folder) {
-                for entry in read_dir.flatten() {
-                    files.push(entry.path());
-                }
-            };
-            files
-        })
-        .await
-        .map_err(|e| e.to_string())?;
-
         drop(mtp_client);
-        let activities_cpy = activities.clone();
         let app_cpy = app.clone();
         res = tokio::task::spawn_blocking(move || {
             let db = app_cpy.state::<DatabasePool>();
-            db.run_in_transaction(move |tx| {
-                let res = if !activities_cpy.is_empty() {
-                    info!("Fetched {} activity files", activities_cpy.len());
-                    import_file_list(tx, &activities_cpy, Some(device.clone()), lang, true)
-                } else {
-                    Ok(Vec::new())
-                }?;
-
-                device.last_activity_sync = Some(Local::now().timestamp() as u32);
-                device.update_by_id_in(tx)?;
-
-                Ok(res)
-            })
+            let now = Local::now().timestamp() as u32;
+            import_pending_sessions(&db, &dst_dir, &mut device, lang, Some(now))
         })
         .await
         .expect("blocking DB task panicked");
@@ -822,10 +807,6 @@ pub async fn _import_from_device(app: &AppHandle, serial: &str) -> Result<usize,
 
     match res {
         Ok(res) => {
-            if res.len() == activities.len() {
-                let _ = fs::remove_dir_all(src_dir);
-            }
-
             if !res.is_empty() {
                 let app = app.clone();
                 std::thread::spawn(move || {

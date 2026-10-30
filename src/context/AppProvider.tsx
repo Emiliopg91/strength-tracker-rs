@@ -15,6 +15,7 @@ export function AppProvider({
     notifyBackend?: boolean;
 }): JSX.Element {
     const { i18nReady, translate } = useContext(I18nSettingsContext);
+    const [connectUser, setConnectUser] = useState<string | null>(null);
     const [environment, setEnvironment] = useState(AppEnvironment.Release);
     const [backendReady, setBackendReady] = useState(false);
     const [backendNotified, setBackendNotified] = useState(false);
@@ -37,6 +38,10 @@ export function AppProvider({
             withLoading(BackendClient.getExercisesCatalog())
                 .then(setRawCatalog)
                 .catch(() => console.warn("Could not load exercises catalog")),
+
+            withLoading(BackendClient.connectLoggedUser())
+                .then(setConnectUser)
+                .catch(() => console.warn("Could not get Garmin Connect user")),
         ]).then(() => {
             setBackendReady(true);
         });
@@ -52,11 +57,14 @@ export function AppProvider({
         const unregisterSessionsAdded = BackendListener.onSessionsAdded(() => {
             setSessionsVersion((previous) => previous + 1);
         });
+        const unregisterConnectLogged =
+            BackendListener.onConnectLogged(setConnectUser);
 
         loadBackendData();
 
         return () => {
             unregisterSessionsAdded();
+            unregisterConnectLogged();
         };
     }, []);
 
@@ -97,6 +105,7 @@ export function AppProvider({
         environment,
         sessionsVersion,
         exercisesCatalog,
+        connectUser,
     };
 
     return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

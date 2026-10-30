@@ -9,6 +9,10 @@ export class BackendListener {
 	  return BackendListener.inner_listen<string[]>("added_workout_steps", callback);
 	}
 
+	public static onConnectLogged(callback: (payload: string | null) => void): () => void {
+	  return BackendListener.inner_listen<string | null>("connect_logged", callback);
+	}
+
 	public static onDeviceConnected(callback: (payload: DeviceListItem) => void): () => void {
 	  return BackendListener.inner_listen<DeviceListItem>("device_connected", callback);
 	}

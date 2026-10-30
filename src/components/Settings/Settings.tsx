@@ -26,7 +26,7 @@ type Props = {
 };
 
 export function Settings({ onClose }: Props) {
-    const { environment } = useContext(AppContext);
+    const { environment, connectUser } = useContext(AppContext);
     const withLoading = useLoadingTask();
     const { settings, updateSettings, translate, refreshTranslations } =
         useContext(I18nSettingsContext);
@@ -121,6 +121,14 @@ export function Settings({ onClose }: Props) {
 
     const exportDatabase = () => {
         withLoading(BackendClient.exportDatabase());
+    };
+
+    const connectLogin = () => {
+        withLoading(BackendClient.connectLogin());
+    };
+
+    const connectLogout = () => {
+        withLoading(BackendClient.connectLogout());
     };
 
     return (
@@ -348,7 +356,65 @@ export function Settings({ onClose }: Props) {
                                     </td>
                                 </tr>
                                 <tr>
-                                    <td>{translate("database_operations")}</td>
+                                    <td style={{ verticalAlign: "top" }}>
+                                        Garmin Connect
+                                    </td>
+                                    <td>
+                                        <table style={{ width: "100%" }}>
+                                            <tbody>
+                                                {connectUser && (
+                                                    <>
+                                                        <tr>
+                                                            <td>
+                                                                {connectUser}
+                                                            </td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td>
+                                                                <Button
+                                                                    id="add-measure-button"
+                                                                    variant="contained"
+                                                                    className="full-width-button"
+                                                                    onClick={
+                                                                        connectLogout
+                                                                    }
+                                                                >
+                                                                    {translate(
+                                                                        "logout",
+                                                                    )}
+                                                                </Button>
+                                                            </td>
+                                                        </tr>
+                                                    </>
+                                                )}
+                                                {!connectUser && (
+                                                    <>
+                                                        <tr>
+                                                            <td>
+                                                                <Button
+                                                                    id="add-measure-button"
+                                                                    variant="contained"
+                                                                    className="full-width-button"
+                                                                    onClick={
+                                                                        connectLogin
+                                                                    }
+                                                                >
+                                                                    {translate(
+                                                                        "login",
+                                                                    )}
+                                                                </Button>
+                                                            </td>
+                                                        </tr>
+                                                    </>
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style={{ verticalAlign: "top" }}>
+                                        {translate("database_operations")}
+                                    </td>
                                     <td>
                                         <table style={{ width: "100%" }}>
                                             <tbody>

@@ -24,14 +24,14 @@ use crate::{
     },
     fit::parser::FitParser,
     logic::{
-        exercises::update_prs, notifications::show_notification, report_error, row_int,
-        run_blocking,
+        exercises::update_prs, list_fit_files, notifications::show_notification, report_error,
+        row_int, run_blocking, settle_pending_files,
     },
     utils::translations::{Languages, translate, translate_and_replace},
 };
 use chrono::{Datelike, Days, Local, Months, TimeZone, offset::LocalResult};
 use curl_rest::StatusCode;
-use rayon::prelude::*;
+use rayon::{iter::Either, prelude::*};
 use rusqlite_orm::{
     dao::Repository,
     database::DatabasePool,
@@ -376,7 +376,7 @@ pub fn _import_from_files(app: AppHandle, files: &[PathBuf]) -> Result<usize, St
     let lang = app.state::<SettingsLock>().read().unwrap().language;
     let database = app.state::<DatabasePool>();
     let res = database
-        .run_in_transaction(|tx| Ok(import_file_list(tx, files, None, lang, false)?))
+        .run_in_transaction(|tx| Ok(import_file_list(tx, files, None, lang)?.sessions))
         .map_err(|e| e.to_string());
 
     match res {
@@ -399,55 +399,95 @@ pub fn _import_from_files(app: AppHandle, files: &[PathBuf]) -> Result<usize, St
     }
 }
 
+/// Imports as sessions of `device` the `.fit` files waiting in `dir`, settling them once the
+/// transaction is over (a rollback fails them all). With `sync_mark`, the
+/// device's last activity sync is moved to it in the same transaction.
+pub fn import_pending_sessions(
+    db: &DatabasePool,
+    dir: &Path,
+    device: &mut Device,
+    lang: Languages,
+    sync_mark: Option<u32>,
+) -> Result<Vec<u32>, DatabaseError> {
+    let activities = list_fit_files(dir);
+    let res = db.run_in_transaction(|tx| {
+        let res = if !activities.is_empty() {
+            info!("Fetched {} activity files", activities.len());
+            import_file_list(tx, &activities, Some(device.clone()), lang)?
+        } else {
+            ImportedFiles::default()
+        };
+
+        if let Some(mark) = sync_mark {
+            device.last_activity_sync = Some(mark);
+            device.update_by_id_in(tx)?;
+        }
+
+        Ok(res)
+    });
+
+    match &res {
+        Ok(imported) => settle_pending_files(dir, &imported.done, &imported.failed),
+        Err(_) => settle_pending_files(dir, &[], &activities),
+    }
+
+    res.map(|imported| imported.sessions)
+}
+
+/// Outcome of `import_file_list`. Files are left untouched, so the caller decides what to do with
+/// them once the transaction is settled.
+#[derive(Default)]
+pub struct ImportedFiles {
+    /// Dates of the sessions inserted.
+    pub sessions: Vec<u32>,
+    /// Files whose session was inserted or was already stored.
+    pub done: Vec<PathBuf>,
+    /// Files that could not be parsed.
+    pub failed: Vec<PathBuf>,
+}
+
 /// Parses a batch of `.FIT` files in parallel and inserts each new session (plus its exercises/series/heart rate/GPS/speeds) in the given transaction, then refreshes personal records.
 pub fn import_file_list<F>(
     tx: &mut rusqlite_orm::rusqlite::Transaction,
     files: &[F],
     device: Option<Device>,
     lang: Languages,
-    delete: bool,
-) -> Result<Vec<u32>, DatabaseError>
+) -> Result<ImportedFiles, DatabaseError>
 where
     F: AsRef<Path> + Sync,
 {
     let mut success = Vec::new();
+    let mut done = Vec::new();
     let mut handled_exercises = HashSet::new();
 
-    let mut sessions: Vec<_> = files
-        .par_iter()
-        .filter_map(|file| {
-            info!("Parsing session file {}", file.as_ref().display());
-            let res = match FitParser::from_file(file) {
-                Ok(parser) => match Session::try_from(parser) {
-                    Ok(session) => Ok((session, file)),
-                    Err(e) => Err(e),
-                },
+    let (mut sessions, failed): (Vec<_>, Vec<_>) = files.par_iter().partition_map(|file| {
+        info!("Parsing session file {}", file.as_ref().display());
+        let res = match FitParser::from_file(file) {
+            Ok(parser) => match Session::try_from(parser) {
+                Ok(session) => Ok((session, file)),
                 Err(e) => Err(e),
-            };
-            match res {
-                Ok(result) => Some(result),
-                Err(e) => {
-                    error!(
-                        "Error parsing session file {}: {}",
-                        file.as_ref().display(),
-                        e
-                    );
+            },
+            Err(e) => Err(e),
+        };
+        match res {
+            Ok(result) => Either::Left(result),
+            Err(e) => {
+                error!(
+                    "Error parsing session file {}: {}",
+                    file.as_ref().display(),
+                    e
+                );
 
-                    show_notification(NotificationDefinition {
-                        title: format!("{}", file.as_ref().file_name().unwrap().display()),
-                        body: translate_and_replace(
-                            "error_parsing_session",
-                            &[&e.to_string()],
-                            lang,
-                        ),
-                        kind: NotificationKind::Persistant,
-                    });
+                show_notification(NotificationDefinition {
+                    title: format!("{}", file.as_ref().file_name().unwrap().display()),
+                    body: translate_and_replace("error_parsing_session", &[&e.to_string()], lang),
+                    kind: NotificationKind::Persistant,
+                });
 
-                    None
-                }
+                Either::Right(file.as_ref().to_path_buf())
             }
-        })
-        .collect();
+        }
+    });
 
     sessions.sort_by_key(|s| s.0.date);
 
@@ -478,6 +518,7 @@ where
             let added = if existing_sessions.contains(&session.date) {
                 let msg = format!("Session with date {} already exists", session.date);
                 warn!("{}", msg);
+                done.push(file.as_ref().to_path_buf());
                 false
             } else {
                 if let Some(ref device) = device {
@@ -492,10 +533,7 @@ where
                 let date = session.date;
                 existing_sessions.insert(date);
                 success.push(date);
-
-                if delete {
-                    let _ = fs::remove_file(&file);
-                }
+                done.push(file.as_ref().to_path_buf());
                 #[cfg(debug_assertions)]
                 {
                     use std::path::PathBuf;
@@ -530,7 +568,11 @@ where
         update_prs(tx, handled_exercises, &success, Some(lang))?;
     }
 
-    Ok(success)
+    Ok(ImportedFiles {
+        sessions: success,
+        done,
+        failed,
+    })
 }
 
 /// Stores the notes of a single session, creating its additional data row if needed. Blank notes are stored as `NULL`.

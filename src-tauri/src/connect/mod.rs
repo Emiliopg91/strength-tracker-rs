@@ -17,17 +17,19 @@ use bytes::Bytes;
 use futures_util::stream::{self, TryStreamExt};
 use serde::{Serialize, de::DeserializeOwned};
 use std::{
+    collections::BTreeSet,
     io::{Cursor, Read},
     path::Path,
-    sync::LazyLock,
     time::Duration,
 };
-use tokio::sync::Mutex;
+use tauri::{AppHandle, Emitter};
 
 use tauri_plugin_log::log::{error, info, warn};
 
+const KEYRING_EMAIL: &str = "garmin-email";
 const KEYRING_OAUTH1: &str = "garmin-oauth1";
 const KEYRING_OAUTH2: &str = "garmin-oauth2";
+
 const DOWNLOAD_STEP: u8 = 100;
 const DOWNLOAD_CONCURRENCY: usize = 6;
 const WEIGHT_CHUNK_MONTHS: u32 = 12;
@@ -35,21 +37,41 @@ const WEIGHT_EMPTY_CHUNKS_STOP: u32 = 2;
 const RETRY_ATTEMPTS: u32 = 4;
 const RETRY_BASE_DELAY: Duration = Duration::from_secs(2);
 const TOKEN_EXPIRY_MARGIN_SECS: i64 = 300;
-
-pub static CONNECT_CLIENT_INST: LazyLock<Mutex<ConnectClient>> =
-    LazyLock::new(|| Mutex::new(ConnectClient::new().unwrap()));
+/// Max gap between the end of a listed activity and the date of a stored session to match them.
+const SKIP_TOLERANCE_SECS: u32 = 60;
 
 pub struct ConnectClient {
+    app: AppHandle,
+    email: Option<String>,
     oauth1: Option<OAuth1Token>,
     oauth2: Option<OAuth2Token>,
 }
 
 impl ConnectClient {
-    pub fn new() -> Result<Self> {
-        Ok(Self {
-            oauth1: Self::load_token(KEYRING_OAUTH1)?,
-            oauth2: Self::load_token(KEYRING_OAUTH2)?,
-        })
+    pub fn new(app: AppHandle) -> Self {
+        Self {
+            app,
+            email: Self::read_keyring(KEYRING_EMAIL).unwrap_or(None),
+            oauth1: Self::read_keyring(KEYRING_OAUTH1).unwrap_or(None),
+            oauth2: Self::read_keyring(KEYRING_OAUTH2).unwrap_or(None),
+        }
+    }
+
+    pub fn logged_user(&self) -> Option<String> {
+        self.email.clone()
+    }
+
+    pub fn disconnect(&mut self) -> Result<()> {
+        Self::delete_keyring(KEYRING_OAUTH2)?;
+        self.oauth2 = None;
+        Self::delete_keyring(KEYRING_OAUTH1)?;
+        self.oauth1 = None;
+        Self::delete_keyring(KEYRING_EMAIL)?;
+        self.email = None;
+
+        let _ = self.app.emit("connect_logged", None::<String>);
+
+        Ok(())
     }
 
     pub async fn login(&mut self, email: &str, password: &str) -> Result<()> {
@@ -62,42 +84,63 @@ impl ConnectClient {
             .await
             .map_err(|e| log_error("Error logging in", ConnectError::Login(e)))?;
 
-        Self::store_token(KEYRING_OAUTH1, &oauth1)?;
-        Self::store_token(KEYRING_OAUTH2, &oauth2)?;
+        Self::write_keyring(KEYRING_EMAIL, &email.to_string())?;
+        Self::write_keyring(KEYRING_OAUTH1, &oauth1)?;
+        Self::write_keyring(KEYRING_OAUTH2, &oauth2)?;
+        self.email = Some(email.to_string());
         self.oauth1 = Some(oauth1);
         self.oauth2 = Some(oauth2);
 
         info!("Logged in succesfully");
+        let email: Option<String> = Some(email.to_string());
+        let app: AppHandle = self.app.clone();
+        let _ = app.emit("connect_logged", email);
 
         Ok(())
     }
 
-    pub async fn prompt_login(&mut self) -> Result<bool> {
-        let output = tokio::process::Command::new("zenity")
-            .args([
-                "--forms",
-                "--title=Garmin Connect",
-                "--text=Sign in to Garmin Connect",
-                "--add-entry=Email",
-                "--add-password=Password",
-                "--separator=\n",
-            ])
-            .output()
-            .await
-            .map_err(|e| log_error("Error launching zenity", ConnectError::CredentialsPrompt(e)))?;
+    pub async fn prompt_login(&mut self) -> Result<()> {
+        let mut text = String::from("Sign in to Garmin Connect");
+        loop {
+            let output = tokio::process::Command::new("zenity")
+                .args([
+                    "--forms",
+                    "--title=Garmin Connect",
+                    &format!("--text={}", text),
+                    "--add-entry=Email",
+                    "--add-password=Password",
+                    "--separator=\n",
+                ])
+                .output()
+                .await
+                .map_err(|e| {
+                    log_error("Error launching zenity", ConnectError::CredentialsPrompt(e))
+                })?;
 
-        // Cancelled by the user
-        if !output.status.success() {
-            info!("Garmin Connect login cancelled by the user");
-            return Ok(false);
+            // Cancelled by the user
+            if !output.status.success() {
+                warn!("Garmin Connect login cancelled by the user");
+                return Err(ConnectError::LoginCancelledByUser());
+            }
+
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stdout = stdout.strip_suffix('\n').unwrap_or(&stdout);
+            let (email, password) = stdout.split_once('\n').unwrap_or((stdout, ""));
+
+            match self.login(email, password).await {
+                Ok(()) => return Ok(()),
+                // Shown on the next prompt, escaped as zenity parses the text as Pango markup
+                Err(e) => {
+                    text = format!(
+                        "Sign in to Garmin Connect\n\nLogin failed: {}",
+                        e.to_string()
+                            .replace('&', "&amp;")
+                            .replace('<', "&lt;")
+                            .replace('>', "&gt;")
+                    )
+                }
+            }
         }
-
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let stdout = stdout.strip_suffix('\n').unwrap_or(&stdout);
-        let (email, password) = stdout.split_once('\n').unwrap_or((stdout, ""));
-
-        self.login(email, password).await?;
-        Ok(true)
     }
 
     pub async fn refresh_token(&mut self) -> Result<()> {
@@ -115,7 +158,7 @@ impl ConnectClient {
             })?;
             match with_retry(|| sso.refresh_oauth2(oauth1)).await {
                 Ok(oauth2) => {
-                    Self::store_token(KEYRING_OAUTH2, &oauth2)?;
+                    Self::write_keyring(KEYRING_OAUTH2, &oauth2)?;
                     self.oauth2 = Some(oauth2);
 
                     info!("Token refreshed successfully");
@@ -137,12 +180,21 @@ impl ConnectClient {
         }
 
         match self.prompt_login().await {
-            Ok(true) => Ok(()),
-            _ => Err(ConnectError::LoginRequired()),
+            Ok(_) => Ok(()),
+            Err(_) => Err(ConnectError::LoginRequired()),
         }
     }
 
-    pub async fn download_activities<P>(&mut self, from: u32, dst_path: P) -> Result<()>
+    /// Downloads the activities started since `from`, except those already stored as a session in
+    /// `skip`. Sessions are dated at their end, so an activity matches the session dated at its
+    /// start plus its elapsed duration, give or take `SKIP_TOLERANCE_SECS`.
+    /// Returns the start of the newest activity listed, skipped ones included.
+    pub async fn download_activities<P>(
+        &mut self,
+        from: u32,
+        skip: &BTreeSet<u32>,
+        dst_path: P,
+    ) -> Result<Option<u32>>
     where
         P: AsRef<Path>,
     {
@@ -170,7 +222,7 @@ impl ConnectClient {
             .with_timezone(&chrono::Local)
             .format("%Y-%m-%d");
 
-        let mut activities: Vec<ActivitySummary> = Vec::new();
+        let mut activities: Vec<(ActivitySummary, Option<u32>, Option<u32>)> = Vec::new();
         'pages: loop {
             let path = format!(
                 "/activitylist-service/activities/search/activities?limit={}&start={}&startDate={}",
@@ -190,19 +242,23 @@ impl ConnectClient {
 
             // Results come newest first: the first one older than `from` ends the listing
             for activity in result {
+                // GMT, as the local start is in the timezone where the activity was recorded
                 let start = activity
-                    .start_time_local
+                    .start_time_gmt
                     .as_deref()
                     .and_then(|t| {
                         chrono::NaiveDateTime::parse_from_str(t, "%Y-%m-%d %H:%M:%S").ok()
                     })
-                    .and_then(|t| t.and_local_timezone(chrono::Local).earliest());
+                    .map(|t| t.and_utc().timestamp() as u32);
                 if let Some(start) = start
-                    && start.timestamp() < from as i64
+                    && start < from
                 {
                     break 'pages;
                 }
-                activities.push(activity);
+                let end = start
+                    .zip(activity.elapsed_duration.or(activity.duration))
+                    .map(|(start, duration)| start + duration.round() as u32);
+                activities.push((activity, start, end));
             }
 
             if page_len < DOWNLOAD_STEP as usize {
@@ -210,6 +266,19 @@ impl ConnectClient {
             }
         }
         info!("Listed {} activities.", activities.len());
+
+        let newest = activities.iter().filter_map(|(_, start, _)| *start).max();
+        let activities: Vec<ActivitySummary> = activities
+            .into_iter()
+            .filter(|(_, _, end)| {
+                !end.is_some_and(|end| {
+                    skip.range(end.saturating_sub(SKIP_TOLERANCE_SECS)..=end + SKIP_TOLERANCE_SECS)
+                        .next()
+                        .is_some()
+                })
+            })
+            .map(|(activity, _, _)| activity)
+            .collect();
 
         if !activities.is_empty() {
             info!("Downloading {} activities...", activities.len());
@@ -220,9 +289,11 @@ impl ConnectClient {
                 })
                 .await?;
             info!("Downloaded {} activities.", activities.len());
+        } else {
+            info!("Activities up to date");
         }
 
-        Ok(())
+        Ok(newest)
     }
 
     pub async fn list_weight(&mut self, from: Option<u32>) -> Result<Vec<BodyMetric>> {
@@ -381,7 +452,7 @@ impl ConnectClient {
         Ok(())
     }
 
-    fn load_token<T: DeserializeOwned>(key: &str) -> Result<Option<T>> {
+    fn read_keyring<T: DeserializeOwned>(key: &str) -> Result<Option<T>> {
         let entry = Self::keyring_entry(key)?;
         match entry.get_password() {
             Ok(json) => Ok(Some(serde_json::from_str(&json).map_err(|e| {
@@ -398,19 +469,29 @@ impl ConnectClient {
         }
     }
 
-    fn store_token<T: Serialize>(key: &str, token: &T) -> Result<()> {
-        let json = serde_json::to_string(token).map_err(|e| {
+    fn write_keyring<T: Serialize>(key: &str, value: &T) -> Result<()> {
+        let json = serde_json::to_string(value).map_err(|e| {
             log_error(
-                &format!("Error serializing token '{}'", key),
+                &format!("Error serializing key '{}'", key),
                 ConnectError::Serialization(e),
             )
         })?;
         Self::keyring_entry(key)?.set_password(&json).map_err(|e| {
             log_error(
-                &format!("Error writing token '{}' to keyring", key),
+                &format!("Error writing key '{}' to keyring", key),
                 ConnectError::Keyring(e),
             )
         })
+    }
+
+    fn delete_keyring(key: &str) -> Result<()> {
+        match Self::keyring_entry(key)?.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+            Err(e) => Err(log_error(
+                &format!("Error deleting key '{}' from keyring", key),
+                ConnectError::Keyring(e),
+            )),
+        }
     }
 
     fn keyring_entry(key: &str) -> Result<keyring::Entry> {

@@ -32,7 +32,6 @@ pub static MTP_GARMIN_ROOT_FOLDER: &str = "GARMIN";
 pub static MTP_GARMIN_ACTIVITY_FOLDER: &str = "Activity";
 pub static MTP_GARMIN_WORKOUTS_FOLDER: &str = "Workouts";
 pub static MTP_GARMIN_NEW_FILES_FOLDER: &str = "NewFiles";
-pub static MTP_TMP_DIR_PREFIX: &str = "strength-tracker-rs";
 
 // Languages block
 pub static DEFAULT_LANGUAGE: Languages = Languages::English;
@@ -75,6 +74,16 @@ pub static LOG_FILE_ROTATION_STRATEGY: RotationStrategy = RotationStrategy::Keep
 pub static RCLONE_CONFIG_NAME: LazyLock<String> = LazyLock::new(|| APP_NAME.to_string());
 pub static RCLONE_CONFIG_FILE: LazyLock<PathBuf> =
     LazyLock::new(|| HOME_DIR.join(".config").join("rclone").join("rclone.conf"));
+
+// Pending files block: every transfer gets its own subfolder under one per source (named after its serial)
+pub static PENDING_FOLDER: LazyLock<PathBuf> = LazyLock::new(|| DATA_LOCAL_DIR.join("pending"));
+pub static PENDING_UPLOAD_WORKOUTS_FOLDER: LazyLock<PathBuf> =
+    LazyLock::new(|| PENDING_FOLDER.join("upload").join("workouts"));
+pub static PENDING_DOWNLOAD_SESSIONS_FOLDER: LazyLock<PathBuf> =
+    LazyLock::new(|| PENDING_FOLDER.join("download").join("sessions"));
+pub static PENDING_DOWNLOAD_WORKOUTS_FOLDER: LazyLock<PathBuf> =
+    LazyLock::new(|| PENDING_FOLDER.join("download").join("workouts"));
+pub static FAILED_FILE_SUFFIX: &str = ".failed";
 
 #[repr(i32)]
 pub enum ExitCodes {

@@ -8,6 +8,8 @@ pub enum ConnectError {
     CredentialsPrompt(#[source] std::io::Error),
     #[error("Login required")]
     LoginRequired(),
+    #[error("Login Cancelled by user")]
+    LoginCancelledByUser(),
     #[error("OAuth error: {0}")]
     OAuthRefresh(#[source] crate::connect::client::GarminError),
     #[error("Keyring error: {0}")]

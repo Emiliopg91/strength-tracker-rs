@@ -31,6 +31,7 @@ use tauri_plugin_log::{
 };
 
 use crate::{
+    connect::ConnectClient,
     dao::body_metric::migration_21,
     dto::app::Settings,
     logic::{
@@ -39,7 +40,10 @@ use crate::{
             notify_frontend_ready, show_main_window, update_settings_value,
         },
         body_metrics::{add_body_measures, delete_body_metric, get_body_measures},
-        connect::{import_from_connect, import_weight_from_connect},
+        connect::{
+            connect_logged_user, connect_login, connect_logout, import_from_connect,
+            import_weight_from_connect,
+        },
         devices::{get_registered_devices, import_from_device, send_to_device},
         exercises::{
             apply_progression_suggestion, get_exercise_details, get_exercises,
@@ -128,8 +132,9 @@ pub fn force_write_mtp_rules(auto_run: bool) -> crate::udev::errors::Result<()> 
 }
 
 pub type SettingsLock = RwLock<Settings>;
+pub type ConnectLock = tokio::sync::Mutex<ConnectClient>;
 
-fn initialize() -> (DatabasePool, Settings) {
+fn initialize(app: &AppHandle) -> (DatabasePool, Settings, ConnectClient) {
     debug!("Initializing database...");
     let builder = DatabaseConnectionBuilder::default()
         .location(constants::DB_FILE.clone())
@@ -155,9 +160,11 @@ fn initialize() -> (DatabasePool, Settings) {
             )
             .unwrap();
 
+            let connect_client = ConnectClient::new(app.clone());
+
             //merge_sessions(&database, _, _);
 
-            (database, settings)
+            (database, settings, connect_client)
         }
         Err(e) => {
             error!("Could not open database: {}", e);
@@ -269,7 +276,7 @@ pub fn run(log_level: LevelFilter) {
                 exit(constants::ExitCodes::UdevError.into())
             }
 
-            let (database, settings) = initialize();
+            let (database, settings, connect) = initialize(app.handle());
 
             listen_for_signals(app.handle());
 
@@ -348,6 +355,7 @@ pub fn run(log_level: LevelFilter) {
 
             app.manage(database);
             app.manage(SettingsLock::new(settings));
+            app.manage(ConnectLock::new(connect));
 
             debug!("Setup finished");
             Ok(())
@@ -401,7 +409,10 @@ pub fn run(log_level: LevelFilter) {
             load_report,
             //Connect
             import_from_connect,
-            import_weight_from_connect
+            import_weight_from_connect,
+            connect_logged_user,
+            connect_logout,
+            connect_login
         ])
         .build(tauri::generate_context!())
         .unwrap_or_else(|e| {

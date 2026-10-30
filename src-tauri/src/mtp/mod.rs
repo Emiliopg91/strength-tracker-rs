@@ -244,7 +244,7 @@ impl MtpClient {
             .any(|d| d.serial_number.as_deref() == Some(serial)))
     }
 
-    /// Downloads `.FIT` activity files newer than `date` from the device's `GARMIN/Activity` folder into a temp directory, returning their local paths.
+    /// Downloads `.FIT` activity files newer than `date` from the device's `GARMIN/Activity` folder into `dst_dir`.
     pub async fn download_activities_since(
         &self,
         serial: &str,

@@ -9,6 +9,14 @@ pub mod report;
 pub mod sessions;
 pub mod workouts;
 
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    sync::atomic::{AtomicU64, Ordering},
+};
+
+use chrono::Local;
+
 use rusqlite_orm::{
     database::DatabasePool,
     types::{row::Row, value::Value},
@@ -19,7 +27,10 @@ use tauri_plugin_log::log::error;
 use crate::{
     dto::notifications::{NotificationDefinition, NotificationKind},
     logic::notifications::show_notification,
-    utils::translations::{Languages, translate},
+    utils::{
+        constants,
+        translations::{Languages, translate},
+    },
 };
 
 /// Logs `e` (prefixed by `log_msg`), fires a persistent desktop notification titled by the
@@ -50,6 +61,53 @@ where
     tokio::task::spawn_blocking(move || f(&app.state::<DatabasePool>()))
         .await
         .expect("blocking DB task panicked")
+}
+
+/// Lists the `.fit` files directly inside `dir`, which leaves out those already marked as failed.
+pub(crate) fn list_fit_files(dir: &Path) -> Vec<PathBuf> {
+    fs::read_dir(dir)
+        .map(|read_dir| {
+            read_dir
+                .flatten()
+                .map(|entry| entry.path())
+                .filter(|path| {
+                    path.extension()
+                        .is_some_and(|ext| ext.eq_ignore_ascii_case("fit"))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Gives every transfer its own dir, so concurrent syncs of the same source don't share files.
+static PENDING_DIR_SEQ: AtomicU64 = AtomicU64::new(0);
+
+/// Returns a new dir under `root` for a single transfer of `serial`. The timestamp keeps it apart
+/// from those left by previous runs, and the sequence from concurrent transfers.
+pub(crate) fn new_pending_dir(root: &Path, serial: &str) -> PathBuf {
+    root.join(serial).join(format!(
+        "{}-{}",
+        Local::now().timestamp_millis(),
+        PENDING_DIR_SEQ.fetch_add(1, Ordering::Relaxed)
+    ))
+}
+
+/// Settles pending downloads once their import is over: `done` files are removed and `failed` ones
+/// get the `.failed` suffix, so they are kept for debugging but not picked up again. `dir` is
+/// removed once left empty.
+pub(crate) fn settle_pending_files(dir: &Path, done: &[PathBuf], failed: &[PathBuf]) {
+    for file in done {
+        let _ = fs::remove_file(file);
+    }
+    for file in failed {
+        let mut dst = file.clone().into_os_string();
+        dst.push(constants::FAILED_FILE_SUFFIX);
+        if let Err(e) = fs::rename(file, &dst) {
+            error!("Error marking {} as failed: {e}", file.display());
+        }
+    }
+    // Fails while anything is left in it
+    let _ = fs::remove_dir(dir);
 }
 
 /// Reads an integer column from a non-mapped select row.

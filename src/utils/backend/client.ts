@@ -20,6 +20,24 @@ export class BackendClient {
 	}
 	
 
+	// From src-tauri/src/logic/connect.rs:181
+	public static connectLoggedUser(): Promise<string | null> {
+	  return BackendClient.inner_invoke("connect_logged_user"); 
+	}
+	
+
+	// From src-tauri/src/logic/connect.rs:189
+	public static connectLogin(): Promise<string | null> {
+	  return BackendClient.inner_invoke("connect_login"); 
+	}
+	
+
+	// From src-tauri/src/logic/connect.rs:199
+	public static connectLogout(): Promise<void> {
+	  return BackendClient.inner_invoke("connect_logout"); 
+	}
+	
+
 	// From src-tauri/src/logic/body_metrics.rs:109
 	public static deleteBodyMetric(date: number): Promise<void> {
 	  return BackendClient.inner_invoke("delete_body_metric", { date }); 
@@ -68,7 +86,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/sessions.rs:785
+	// From src-tauri/src/logic/sessions.rs:827
 	public static getHeatmapData(): Promise<[number, number][][]> {
 	  return BackendClient.inner_invoke("get_heatmap_data"); 
 	}
@@ -86,7 +104,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/devices.rs:849
+	// From src-tauri/src/logic/devices.rs:830
 	public static getRegisteredDevices(): Promise<DeviceListItem[]> {
 	  return BackendClient.inner_invoke("get_registered_devices"); 
 	}
@@ -134,13 +152,13 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/connect.rs:34
+	// From src-tauri/src/logic/connect.rs:33
 	public static importFromConnect(): Promise<number> {
 	  return BackendClient.inner_invoke("import_from_connect"); 
 	}
 	
 
-	// From src-tauri/src/logic/devices.rs:727
+	// From src-tauri/src/logic/devices.rs:746
 	public static importFromDevice(serial: string): Promise<number> {
 	  return BackendClient.inner_invoke("import_from_device", { serial }); 
 	}
@@ -152,7 +170,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/connect.rs:133
+	// From src-tauri/src/logic/connect.rs:116
 	public static importWeightFromConnect(): Promise<void> {
 	  return BackendClient.inner_invoke("import_weight_from_connect"); 
 	}
@@ -200,7 +218,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/devices.rs:529
+	// From src-tauri/src/logic/devices.rs:553
 	public static sendToDevice(workout: string, serial: string): Promise<void> {
 	  return BackendClient.inner_invoke("send_to_device", { workout, serial }); 
 	}

@@ -3,6 +3,7 @@ import { useLoadingTask } from "@/hooks/useLoadingTask";
 import { BackendClient } from "@/utils/backend/client";
 import { useContext, useState } from "react";
 import { Button, Menu, MenuItem } from "@mui/material";
+import { AppContext } from "@/context/AppContext";
 
 type Props = {
     onAddManually: () => void;
@@ -12,6 +13,7 @@ type Props = {
 export function AddBodyMetricMenu({ onAddManually, onImported }: Props) {
     const withLoading = useLoadingTask();
     const { translate } = useContext(I18nSettingsContext);
+    const { connectUser } = useContext(AppContext);
     const [menuAnchor, setMenuAnchor] = useState<{
         top: number;
         left: number;
@@ -30,10 +32,12 @@ export function AddBodyMetricMenu({ onAddManually, onImported }: Props) {
                 variant="contained"
                 className="full-width-button"
                 onClick={(e) =>
-                    setMenuAnchor({
-                        top: e.clientY,
-                        left: e.clientX,
-                    })
+                    connectUser
+                        ? setMenuAnchor({
+                              top: e.clientY,
+                              left: e.clientX,
+                          })
+                        : onAddManually()
                 }
             >
                 {translate("add_entry")}

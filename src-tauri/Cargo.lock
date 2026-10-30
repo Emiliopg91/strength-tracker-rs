@@ -4531,7 +4531,7 @@ checksum = "ff7589a1859b09232522bb9edf076ca7fcf14ded96685d3fa629db73023ffbb7"
 
 [[package]]
 name = "strength-tracker-rs"
-version = "3.8.0"
+version = "3.8.1"
 dependencies = [
  "base64 0.23.1",
  "bytes",
@@ -4953,9 +4953,9 @@ dependencies = [
 
 [[package]]
 name = "tauri-rs-ts-ipc"
-version = "0.1.20"
+version = "0.1.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "947fc635126634efb802e3a02f7fb6f5f4e22396b6a048aead78de0a2526d5d0"
+checksum = "99eb1e8d79c587df2526052a19ac8e15312168ea4fc048cf9bc2732651d99c83"
 dependencies = [
  "proc-macro2",
  "quote",

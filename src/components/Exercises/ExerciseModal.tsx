@@ -475,13 +475,15 @@ export function ExerciseModal({
                                 </tr>
                             </tbody>
                         </table>
-                        <>
-                            <hr />
-                            <ExerciseVolumeChart
-                                series={exercise.series}
-                                exercise={exercise}
-                            />
-                        </>
+                    </>
+                )}
+                {Object.keys(exercise.series).length > 0 && (
+                    <>
+                        <hr />
+                        <ExerciseVolumeChart
+                            series={exercise.series}
+                            exercise={exercise}
+                        />
                         <hr />
                         <table className="full-width">
                             <colgroup>
