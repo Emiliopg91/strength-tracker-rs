@@ -71,6 +71,7 @@ export function WorkoutStepsModal({ workout, isEdit, onClose }: Props) {
                 name,
                 steps: WorkoutUtils.toWorkoutSteps(steps, name, toKg),
                 notes,
+                connect_id: null,
             };
             withLoading(BackendClient.saveWorkout(isEdit, newWorkout)).then(
                 () => {

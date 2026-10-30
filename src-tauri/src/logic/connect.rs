@@ -211,7 +211,7 @@ pub async fn send_workout_connect(
     let weight_unit = settings.read().unwrap().weight_unit;
 
     let id = workout.to_string();
-    let mut workout = run_blocking(&app, move |database| {
+    let mut workout = run_blocking(app, move |database| {
         database.run_in_connection(move |conn| {
             let Some(mut workout) = WorkoutRepository::select_by_id_in(conn, &id)? else {
                 return Ok(None);
@@ -266,7 +266,7 @@ pub async fn send_workout_connect(
     drop(client);
 
     if workout.connect_id != original_id {
-        run_blocking(&app, |database| {
+        run_blocking(app, |database| {
             database.run_in_transaction(move |tx| Ok(workout.update_by_id_in(tx)?))
         })
         .await

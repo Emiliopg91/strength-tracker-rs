@@ -42,7 +42,7 @@ use crate::{
         body_metrics::{add_body_measures, delete_body_metric, get_body_measures},
         connect::{
             connect_logged_user, connect_login, connect_logout, import_from_connect,
-            import_weight_from_connect, send_workout_connect,
+            import_weight_from_connect,
         },
         devices::{get_registered_devices, import_from_device, send_to_device},
         exercises::{
