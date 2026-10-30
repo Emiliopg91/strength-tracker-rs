@@ -52,6 +52,9 @@ error_workout_save:
 error_workout_send:
   en: Error sending workout to device
   es: Error enviando el entrenamiento al dispositivo
+error_workout_send_connect:
+  en: Error sending workout to Garmin Connect
+  es: Error enviando el entrenamiento a Garmin Connect
 error_report_data:
   en: Error gathering report data
   es: Error obteniendo los datos del informe

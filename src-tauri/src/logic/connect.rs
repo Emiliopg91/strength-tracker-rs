@@ -202,7 +202,27 @@ pub async fn connect_logout(connect: State<'_, ConnectLock>) -> Result<(), Strin
     connect.lock().await.disconnect().map_err(|e| e.to_string())
 }
 
+/// Uploads `workout` to Connect, notifying the user if it fails.
 pub async fn send_workout_connect(
+    app: &AppHandle,
+    connect: &State<'_, ConnectLock>,
+    settings: &State<'_, SettingsLock>,
+    workout: &str,
+) -> Result<(), String> {
+    let lang = settings.read().unwrap().language;
+    upload_workout_connect(app, connect, settings, workout)
+        .await
+        .map_err(|e| {
+            report_error(
+                format!("{workout}: {e}"),
+                lang,
+                "error_workout_send_connect",
+                "Error sending workout to Garmin Connect",
+            )
+        })
+}
+
+async fn upload_workout_connect(
     app: &AppHandle,
     connect: &State<'_, ConnectLock>,
     settings: &State<'_, SettingsLock>,
