@@ -62,7 +62,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/app.rs:97
+	// From src-tauri/src/logic/app.rs:93
 	public static getEnvironment(): Promise<AppEnvironment> {
 	  return BackendClient.inner_invoke("get_environment"); 
 	}
@@ -86,7 +86,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/sessions.rs:832
+	// From src-tauri/src/logic/sessions.rs:828
 	public static getHeatmapData(): Promise<[number, number][][]> {
 	  return BackendClient.inner_invoke("get_heatmap_data"); 
 	}
@@ -116,25 +116,25 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/sessions.rs:162
+	// From src-tauri/src/logic/sessions.rs:159
 	public static getSessionDetails(timestamp: number): Promise<SessionDetails> {
 	  return BackendClient.inner_invoke("get_session_details", { timestamp }); 
 	}
 	
 
-	// From src-tauri/src/logic/sessions.rs:52
+	// From src-tauri/src/logic/sessions.rs:49
 	public static getSessions(limit: number | null): Promise<SessionListItem[]> {
 	  return BackendClient.inner_invoke("get_sessions", { limit }); 
 	}
 	
 
-	// From src-tauri/src/logic/app.rs:36
+	// From src-tauri/src/logic/app.rs:32
 	public static getSettings(): Promise<Settings> {
 	  return BackendClient.inner_invoke("get_settings"); 
 	}
 	
 
-	// From src-tauri/src/logic/app.rs:200
+	// From src-tauri/src/logic/app.rs:196
 	public static getTranslations(): Promise<Record<string, string>> {
 	  return BackendClient.inner_invoke("get_translations"); 
 	}
@@ -164,7 +164,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/sessions.rs:340
+	// From src-tauri/src/logic/sessions.rs:337
 	public static importFromFiles(): Promise<number> {
 	  return BackendClient.inner_invoke("import_from_files"); 
 	}
@@ -188,7 +188,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/app.rs:43
+	// From src-tauri/src/logic/app.rs:39
 	public static notifyFrontendReady(): Promise<void> {
 	  return BackendClient.inner_invoke("notify_frontend_ready"); 
 	}
@@ -206,7 +206,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/sessions.rs:259
+	// From src-tauri/src/logic/sessions.rs:256
 	public static saveSessionChanges(details: SessionSetsUpdate): Promise<void> {
 	  return BackendClient.inner_invoke("save_session_changes", { details }); 
 	}
@@ -248,7 +248,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/app.rs:108
+	// From src-tauri/src/logic/app.rs:104
 	public static updateSettingsValue(name: string, value: string): Promise<void> {
 	  return BackendClient.inner_invoke("update_settings_value", { name, value }); 
 	}

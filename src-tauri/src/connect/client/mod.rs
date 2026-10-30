@@ -6,6 +6,7 @@
 
 pub mod api;
 pub mod error;
+mod http;
 pub mod models;
 pub mod oauth1;
 pub mod sso;

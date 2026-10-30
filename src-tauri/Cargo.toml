@@ -28,6 +28,7 @@ noyalib = "^0"
 base64 = "^0"
 bytes = "^1"
 chrono = { version = "^0", features = ["serde"] }
+curl-rest = "^0"
 embedded-io-adapters = { version = "^0", features = ["std"] }
 futures-util = "^0"
 strength-tracker-rs-macros = { path = "../src-tauri-macros" }
@@ -42,14 +43,6 @@ percent-encoding = "^2"
 phf = { version = "=0.11.3", features = ["macros"] }
 rand = "^0"
 rayon = "^1"
-reqwest = { version = "^0", default-features = false, features = [
-    "native-tls",
-    "blocking",
-    "cookies",
-    "form",
-    "json",
-    "query",
-] }
 #rusqlite_orm = { path = "../rusqlite_orm/orm", features = ["derive"] }
 rusqlite_orm = { version = "^1", features = ["derive"] }
 rustyfit = { version = "^0", features = ["serde"] }

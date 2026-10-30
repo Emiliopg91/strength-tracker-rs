@@ -654,7 +654,9 @@ fn is_retryable(err: &GarminError) -> bool {
     match err {
         GarminError::RateLimited => true,
         GarminError::Api { status, .. } => *status >= 500,
-        GarminError::Http(e) => e.is_timeout() || e.is_connect(),
+        GarminError::Http(curl_rest::Error::Client(e)) => {
+            e.is_operation_timedout() || e.is_couldnt_connect() || e.is_couldnt_resolve_host()
+        }
         _ => false,
     }
 }

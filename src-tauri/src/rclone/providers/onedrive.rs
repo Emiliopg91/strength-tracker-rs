@@ -1,9 +1,6 @@
 use std::ffi::OsStr;
 
-use reqwest::{
-    StatusCode,
-    header::{ACCEPT, AUTHORIZATION},
-};
+use curl_rest::StatusCode;
 use serde_json::Value;
 use tauri_plugin_log::log::info;
 
@@ -41,24 +38,25 @@ impl RCloneTrait for RCloneClient<OneDrive> {
             .to_string();
 
         info!("Getting available drives...");
-        let resp = reqwest::Client::new()
-            .get("https://graph.microsoft.com/v1.0/me/drives")
-            .header(AUTHORIZATION, format!("Bearer {bearer_token}"))
-            .header(ACCEPT, "application/json")
-            .send()
-            .await
-            .map_err(RCloneError::ErrorGettingDrives)?;
+        let resp = tokio::task::spawn_blocking(move || {
+            curl_rest::Client::default()
+                .get()
+                .header(curl_rest::Header::Authorization(
+                    format!("Bearer {bearer_token}").into(),
+                ))
+                .header(curl_rest::Header::Accept("application/json".into()))
+                .send("https://graph.microsoft.com/v1.0/me/drives")
+        })
+        .await
+        .map_err(RCloneError::TaskError)?
+        .map_err(RCloneError::ErrorGettingDrives)?;
 
-        if resp.status() != StatusCode::OK {
-            return Err(RCloneError::BadResponseStatus(resp.status()));
+        if resp.status != StatusCode::Ok {
+            return Err(RCloneError::BadResponseStatus(resp.status));
         }
 
-        let body = resp
-            .bytes()
-            .await
-            .map_err(RCloneError::ErrorGettingDrives)?;
-        let json_obj =
-            serde_json::from_slice::<Value>(&body).map_err(RCloneError::BadJsonFormat)?;
+        let json_obj = serde_json::from_slice::<Value>(resp.body.as_slice())
+            .map_err(RCloneError::BadJsonFormat)?;
         let drive = json_obj
             .get("value")
             .and_then(|v| v.as_array())

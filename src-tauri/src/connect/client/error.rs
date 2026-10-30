@@ -21,7 +21,10 @@ pub enum GarminError {
     Api { status: u16, message: String },
 
     #[error("HTTP error: {0}")]
-    Http(#[from] reqwest::Error),
+    Http(#[from] curl_rest::Error),
+
+    #[error("Error waiting for HTTP task: {0}")]
+    Task(#[from] tokio::task::JoinError),
 
     #[error("Invalid response: {0}")]
     InvalidResponse(String),

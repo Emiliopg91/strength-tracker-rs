@@ -1,11 +1,11 @@
 //! Authenticated Garmin Connect API client (OAuth2 bearer tokens).
 
 use bytes::Bytes;
-use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue, USER_AGENT};
-use reqwest::{Client, Response, StatusCode};
+use curl_rest::{Client, Header, Response, StatusCode};
 use serde::{Serialize, de::DeserializeOwned};
 
 use super::error::{GarminError, Result};
+use super::http;
 use super::models::{ActivityDetails, ActivitySummary};
 use super::tokens::OAuth2Token;
 
@@ -14,7 +14,6 @@ const API_USER_AGENT: &str = "GCM-iOS-5.7.2.1";
 
 #[derive(Clone)]
 pub struct GarminClient {
-    client: Client,
     base_url: String,
 }
 
@@ -22,9 +21,6 @@ impl GarminClient {
     /// Create an API client for the given Garmin domain (`garmin.com` or `garmin.cn`).
     pub fn new(domain: &str) -> Result<Self> {
         Ok(Self {
-            client: Client::builder()
-                .timeout(std::time::Duration::from_secs(30))
-                .build()?,
             base_url: format!("https://connectapi.{}", domain),
         })
     }
@@ -54,26 +50,8 @@ impl GarminClient {
         token: &OAuth2Token,
         path: &str,
     ) -> Result<T> {
-        let response = self
-            .client
-            .get(format!("{}{}", self.base_url, path))
-            .headers(Self::build_headers(token)?)
-            .send()
-            .await?;
-
-        let response = Self::handle_response_status(response).await?;
-        let status = response.status();
-        let text = response.text().await?;
-
-        serde_json::from_str(&text).map_err(|e| {
-            GarminError::invalid_response(format!(
-                "Failed to parse JSON response from {} (status {}): {}; body preview: {}",
-                path,
-                status,
-                e,
-                response_preview(&text)
-            ))
-        })
+        let response = self.send(Self::request(token).get(), path).await?;
+        Self::parse_json(path, &response)
     }
 
     /// Make an authenticated POST request with a JSON body and deserialize the JSON response
@@ -83,27 +61,9 @@ impl GarminClient {
         path: &str,
         body: &B,
     ) -> Result<T> {
-        let response = self
-            .client
-            .post(format!("{}{}", self.base_url, path))
-            .headers(Self::build_headers(token)?)
-            .json(body)
-            .send()
-            .await?;
-
-        let response = Self::handle_response_status(response).await?;
-        let status = response.status();
-        let text = response.text().await?;
-
-        serde_json::from_str(&text).map_err(|e| {
-            GarminError::invalid_response(format!(
-                "Failed to parse JSON response from {} (status {}): {}; body preview: {}",
-                path,
-                status,
-                e,
-                response_preview(&text)
-            ))
-        })
+        let request = Self::request(token).post().body_json(Self::to_json(body)?);
+        let response = self.send(request, path).await?;
+        Self::parse_json(path, &response)
     }
 
     /// Make an authenticated PUT request with a JSON body, discarding the response body
@@ -113,69 +73,61 @@ impl GarminClient {
         path: &str,
         body: &B,
     ) -> Result<()> {
-        let response = self
-            .client
-            .put(format!("{}{}", self.base_url, path))
-            .headers(Self::build_headers(token)?)
-            .json(body)
-            .send()
-            .await?;
-
-        Self::handle_response_status(response).await?;
+        let request = Self::request(token).put().body_json(Self::to_json(body)?);
+        self.send(request, path).await?;
         Ok(())
     }
 
     /// Make an authenticated DELETE request, discarding the response body
     pub async fn delete(&self, token: &OAuth2Token, path: &str) -> Result<()> {
-        let response = self
-            .client
-            .delete(format!("{}{}", self.base_url, path))
-            .headers(Self::build_headers(token)?)
-            .send()
-            .await?;
-
-        Self::handle_response_status(response).await?;
+        self.send(Self::request(token).delete(), path).await?;
         Ok(())
     }
 
     /// Make an authenticated GET request and return raw bytes (for file downloads)
     pub async fn download(&self, token: &OAuth2Token, path: &str) -> Result<Bytes> {
-        let response = self
-            .client
-            .get(format!("{}{}", self.base_url, path))
-            .headers(Self::build_headers(token)?)
-            .send()
-            .await?;
-
-        let response = Self::handle_response_status(response).await?;
-        Ok(response.bytes().await?)
+        let response = self.send(Self::request(token).get(), path).await?;
+        Ok(Bytes::from(response.body))
     }
 
-    fn build_headers(token: &OAuth2Token) -> Result<HeaderMap> {
-        let mut headers = HeaderMap::new();
-        headers.insert(USER_AGENT, HeaderValue::from_static(API_USER_AGENT));
-        headers.insert(
-            AUTHORIZATION,
-            HeaderValue::from_str(&token.authorization_header())
-                .map_err(|_| GarminError::config("Invalid authorization header"))?,
-        );
-        Ok(headers)
+    fn request(token: &OAuth2Token) -> Client<'static> {
+        Client::new()
+            .header(Header::UserAgent(API_USER_AGENT.into()))
+            .header(Header::Authorization(token.authorization_header().into()))
     }
 
-    async fn handle_response_status(response: Response) -> Result<Response> {
-        let status = response.status();
+    fn to_json<B: Serialize + ?Sized>(body: &B) -> Result<String> {
+        serde_json::to_string(body)
+            .map_err(|e| GarminError::config(format!("Failed to serialize request body: {}", e)))
+    }
 
-        match status {
+    fn parse_json<T: DeserializeOwned>(path: &str, response: &Response) -> Result<T> {
+        serde_json::from_slice(&response.body).map_err(|e| {
+            GarminError::invalid_response(format!(
+                "Failed to parse JSON response from {} (status {}): {}; body preview: {}",
+                path,
+                response.status,
+                e,
+                response_preview(&http::body_text(response))
+            ))
+        })
+    }
+
+    async fn send(&self, request: Client<'static>, path: &str) -> Result<Response> {
+        let url = format!("{}{}", self.base_url, path);
+        let response = http::send(request, url.clone()).await?;
+
+        match response.status {
             StatusCode::OK
             | StatusCode::CREATED
             | StatusCode::ACCEPTED
             | StatusCode::NO_CONTENT => Ok(response),
             StatusCode::UNAUTHORIZED => Err(GarminError::NotAuthenticated),
             StatusCode::TOO_MANY_REQUESTS => Err(GarminError::RateLimited),
-            StatusCode::NOT_FOUND => Err(GarminError::NotFound(response.url().to_string())),
-            _ => Err(GarminError::Api {
+            StatusCode::NOT_FOUND => Err(GarminError::NotFound(url)),
+            status => Err(GarminError::Api {
                 status: status.as_u16(),
-                message: response.text().await.unwrap_or_default(),
+                message: http::body_text(&response),
             }),
         }
     }
