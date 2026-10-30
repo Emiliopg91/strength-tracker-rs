@@ -32,6 +32,12 @@ pub enum ConnectError {
     ExtractTask(u64, #[source] tokio::task::JoinError),
     #[error("Error writing activity '{0}': {1}")]
     WriteActivity(u64, #[source] std::io::Error),
+    #[error("Error fetching workouts: {0}")]
+    FetchWorkouts(#[source] crate::connect::client::GarminError),
+    #[error("Error creating workout: {0}")]
+    CreateWorkout(#[source] crate::connect::client::GarminError),
+    #[error("Error updating workout '{0}': {1}")]
+    UpdateWorkout(u64, #[source] crate::connect::client::GarminError),
 }
 
 pub type Result<T> = std::result::Result<T, ConnectError>;

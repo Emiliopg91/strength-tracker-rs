@@ -23,20 +23,12 @@ use self::errors::WriteFitFileError;
 pub trait ToFitMessages {
     fn file_type(&self) -> typedef::File;
     /// Key that tells this file apart from others of the same type; it seeds the `file_id` serial number.
-    fn file_key(&self) -> &str;
+    fn file_key(&self) -> u32;
     fn to_fit_messages(
         &self,
         lang: Languages,
         weight_unit: WeightUnit,
     ) -> errors::Result<Vec<Message>>;
-}
-
-/// FNV-1a hash of `key`, stable across builds and never 0 (an invalid `uint32z`).
-fn file_serial(key: &str) -> u32 {
-    let hash = key.bytes().fold(0x811c_9dc5_u32, |h, b| {
-        (h ^ b as u32).wrapping_mul(0x0100_0193)
-    });
-    hash.max(1)
 }
 
 pub struct FitWriter<'a, T>
@@ -60,7 +52,7 @@ where
         id.manufacturer = Manufacturer::DEVELOPMENT;
         id.product_name = constants::APP_NAME.clone().into();
         // Devices dedupe files by file_id; without a serial, files created in the same second collide
-        id.serial_number = file_serial(self.obj.file_key());
+        id.serial_number = self.obj.file_key();
         id.time_created = DateTime::from_unix_timestamp(chrono::Utc::now().timestamp());
         id.into()
     }

@@ -3,7 +3,7 @@
 use bytes::Bytes;
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue, USER_AGENT};
 use reqwest::{Client, Response, StatusCode};
-use serde::de::DeserializeOwned;
+use serde::{Serialize, de::DeserializeOwned};
 
 use super::error::{GarminError, Result};
 use super::models::{ActivityDetails, ActivitySummary};
@@ -74,6 +74,68 @@ impl GarminClient {
                 response_preview(&text)
             ))
         })
+    }
+
+    /// Make an authenticated POST request with a JSON body and deserialize the JSON response
+    pub async fn post_json<B: Serialize + ?Sized, T: DeserializeOwned>(
+        &self,
+        token: &OAuth2Token,
+        path: &str,
+        body: &B,
+    ) -> Result<T> {
+        let response = self
+            .client
+            .post(format!("{}{}", self.base_url, path))
+            .headers(Self::build_headers(token)?)
+            .json(body)
+            .send()
+            .await?;
+
+        let response = Self::handle_response_status(response).await?;
+        let status = response.status();
+        let text = response.text().await?;
+
+        serde_json::from_str(&text).map_err(|e| {
+            GarminError::invalid_response(format!(
+                "Failed to parse JSON response from {} (status {}): {}; body preview: {}",
+                path,
+                status,
+                e,
+                response_preview(&text)
+            ))
+        })
+    }
+
+    /// Make an authenticated PUT request with a JSON body, discarding the response body
+    pub async fn put_json<B: Serialize + ?Sized>(
+        &self,
+        token: &OAuth2Token,
+        path: &str,
+        body: &B,
+    ) -> Result<()> {
+        let response = self
+            .client
+            .put(format!("{}{}", self.base_url, path))
+            .headers(Self::build_headers(token)?)
+            .json(body)
+            .send()
+            .await?;
+
+        Self::handle_response_status(response).await?;
+        Ok(())
+    }
+
+    /// Make an authenticated DELETE request, discarding the response body
+    pub async fn delete(&self, token: &OAuth2Token, path: &str) -> Result<()> {
+        let response = self
+            .client
+            .delete(format!("{}{}", self.base_url, path))
+            .headers(Self::build_headers(token)?)
+            .send()
+            .await?;
+
+        Self::handle_response_status(response).await?;
+        Ok(())
     }
 
     /// Make an authenticated GET request and return raw bytes (for file downloads)

@@ -15,7 +15,7 @@ use crate::{
 };
 use bytes::Bytes;
 use futures_util::stream::{self, TryStreamExt};
-use serde::{Serialize, de::DeserializeOwned};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::{
     collections::BTreeSet,
     io::{Cursor, Read},
@@ -32,6 +32,7 @@ const KEYRING_OAUTH2: &str = "garmin-oauth2";
 
 const DOWNLOAD_STEP: u8 = 100;
 const DOWNLOAD_CONCURRENCY: usize = 6;
+const WORKOUT_LIST_STEP: u8 = 100;
 const WEIGHT_CHUNK_MONTHS: u32 = 12;
 const WEIGHT_EMPTY_CHUNKS_STOP: u32 = 2;
 const RETRY_ATTEMPTS: u32 = 4;
@@ -39,6 +40,14 @@ const RETRY_BASE_DELAY: Duration = Duration::from_secs(2);
 const TOKEN_EXPIRY_MARGIN_SECS: i64 = 300;
 /// Max gap between the end of a listed activity and the date of a stored session to match them.
 const SKIP_TOLERANCE_SECS: u32 = 60;
+
+/// Workout entry returned from the workout list and create endpoints
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkoutSummary {
+    pub workout_id: u64,
+    pub workout_name: String,
+}
 
 pub struct ConnectClient {
     app: AppHandle,
@@ -296,6 +305,90 @@ impl ConnectClient {
         Ok(newest)
     }
 
+    /// Lists every workout stored in Connect.
+    pub async fn list_workouts(&mut self) -> Result<Vec<WorkoutSummary>> {
+        info!("Listing workouts...");
+
+        self.refresh_token().await?;
+
+        let (Some(oauth1), Some(oauth2)) = (&self.oauth1, &self.oauth2) else {
+            return Err(ConnectError::LoginRequired());
+        };
+
+        let client = GarminClient::new(&oauth1.domain).map_err(|e| {
+            log_error(
+                "Error creating Garmin client",
+                ConnectError::FetchWorkouts(e),
+            )
+        })?;
+
+        let workouts = Self::fetch_workouts(&client, oauth2).await?;
+        info!("Listed {} workouts.", workouts.len());
+
+        Ok(workouts)
+    }
+
+    /// Creates `workout` in Connect, returning the entry assigned to it.
+    pub async fn create_workout<T: Serialize>(&mut self, workout: &T) -> Result<WorkoutSummary> {
+        info!("Creating workout...");
+
+        self.refresh_token().await?;
+
+        let (Some(oauth1), Some(oauth2)) = (&self.oauth1, &self.oauth2) else {
+            return Err(ConnectError::LoginRequired());
+        };
+
+        let client = GarminClient::new(&oauth1.domain).map_err(|e| {
+            log_error(
+                "Error creating Garmin client",
+                ConnectError::CreateWorkout(e),
+            )
+        })?;
+
+        // Not retried: a request that timed out after reaching Connect would duplicate the workout
+        let created: WorkoutSummary = client
+            .post_json(oauth2, "/workout-service/workout", workout)
+            .await
+            .map_err(|e| log_error("Error creating workout", ConnectError::CreateWorkout(e)))?;
+        info!(
+            "Created workout '{}' with id {}.",
+            created.workout_name, created.workout_id
+        );
+
+        Ok(created)
+    }
+
+    /// Replaces the Connect workout `id` with `workout`, whose `workoutId` is set to `id`.
+    pub async fn update_workout<T: Serialize>(&mut self, id: u64, workout: &T) -> Result<()> {
+        info!("Updating workout {}...", id);
+
+        let mut body = serde_json::to_value(workout)?;
+        if let Some(fields) = body.as_object_mut() {
+            fields.insert("workoutId".to_string(), id.into());
+        }
+
+        self.refresh_token().await?;
+
+        let (Some(oauth1), Some(oauth2)) = (&self.oauth1, &self.oauth2) else {
+            return Err(ConnectError::LoginRequired());
+        };
+
+        let client = GarminClient::new(&oauth1.domain).map_err(|e| {
+            log_error(
+                "Error creating Garmin client",
+                ConnectError::UpdateWorkout(id, e),
+            )
+        })?;
+
+        let path = format!("/workout-service/workout/{}", id);
+        with_retry(|| client.put_json(oauth2, &path, &body))
+            .await
+            .map_err(|e| log_error("Error updating workout", ConnectError::UpdateWorkout(id, e)))?;
+        info!("Updated workout {}.", id);
+
+        Ok(())
+    }
+
     pub async fn list_weight(&mut self, from: Option<u32>) -> Result<Vec<BodyMetric>> {
         info!("Listing weight entries...");
 
@@ -406,6 +499,36 @@ impl ConnectClient {
                     ConnectError::ExtractTask(id, e),
                 )
             })?
+    }
+
+    async fn fetch_workouts(
+        client: &GarminClient,
+        oauth2: &OAuth2Token,
+    ) -> Result<Vec<WorkoutSummary>> {
+        let mut workouts = Vec::new();
+        loop {
+            let path = format!(
+                "/workout-service/workouts?start={}&limit={}",
+                workouts.len(),
+                WORKOUT_LIST_STEP
+            );
+            let result: Vec<WorkoutSummary> = with_retry(|| client.get_json(oauth2, &path))
+                .await
+                .map_err(|e| {
+                log_error(
+                    "Error fetching workout page",
+                    ConnectError::FetchWorkouts(e),
+                )
+            })?;
+            let page_len = result.len();
+            workouts.extend(result);
+
+            if page_len < WORKOUT_LIST_STEP as usize {
+                break;
+            }
+        }
+
+        Ok(workouts)
     }
 
     fn extract_activity(id: u64, zipped: Bytes, dst_path: &Path) -> Result<()> {

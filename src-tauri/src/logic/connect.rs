@@ -15,7 +15,9 @@ use crate::{
         body_metric::BodyMetricRepository,
         device::{self, DeviceRepository},
         session::{self, SessionRepository},
+        workout::WorkoutRepository,
     },
+    dto::connect::ConnectWorkout,
     logic::{
         new_pending_dir, report_error, row_int, run_blocking,
         sessions::{import_pending_sessions, update_pending_geolocation},
@@ -198,4 +200,78 @@ pub async fn connect_login(connect: State<'_, ConnectLock>) -> Result<Option<Str
 #[tauri::command]
 pub async fn connect_logout(connect: State<'_, ConnectLock>) -> Result<(), String> {
     connect.lock().await.disconnect().map_err(|e| e.to_string())
+}
+
+pub async fn send_workout_connect(
+    app: &AppHandle,
+    connect: &State<'_, ConnectLock>,
+    settings: &State<'_, SettingsLock>,
+    workout: &str,
+) -> Result<(), String> {
+    let weight_unit = settings.read().unwrap().weight_unit;
+
+    let id = workout.to_string();
+    let mut workout = run_blocking(&app, move |database| {
+        database.run_in_connection(move |conn| {
+            let Some(mut workout) = WorkoutRepository::select_by_id_in(conn, &id)? else {
+                return Ok(None);
+            };
+            workout.fetch_steps_relationship_in(conn)?;
+            workout.steps.sort_by_key(|s| s.idx);
+            for step in &mut workout.steps {
+                step.fetch_exercise_relationship_in(conn)?;
+                if let Some(exercise) = &mut step.exercise {
+                    exercise.fetch_exercise_category_relationship_in(conn)?;
+                }
+            }
+            Ok(Some(workout))
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .ok_or_else(|| format!("Workout {workout} not found"))?;
+
+    let mut client = connect.lock().await;
+    let original_id = workout.connect_id.clone();
+
+    if workout.connect_id.is_none() {
+        workout.connect_id = client
+            .list_workouts()
+            .await
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .find(|w| w.workout_name == workout.name)
+            .map(|w| w.workout_id.to_string());
+    }
+
+    let payload = ConnectWorkout::from(&workout, weight_unit);
+    match workout.connect_id.as_deref() {
+        Some(id) => {
+            let id = id
+                .parse::<u64>()
+                .map_err(|e| format!("Invalid Connect workout id '{id}': {e}"))?;
+            client
+                .update_workout(id, &payload)
+                .await
+                .map_err(|e| e.to_string())?;
+        }
+        None => {
+            let created = client
+                .create_workout(&payload)
+                .await
+                .map_err(|e| e.to_string())?;
+            workout.connect_id = Some(created.workout_id.to_string());
+        }
+    }
+    drop(client);
+
+    if workout.connect_id != original_id {
+        run_blocking(&app, |database| {
+            database.run_in_transaction(move |tx| Ok(workout.update_by_id_in(tx)?))
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
 }

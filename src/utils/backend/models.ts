@@ -34,6 +34,26 @@ export enum DistanceUnit {
 	Miles = "Miles",
 }
 
+// From src-tauri/src/dao/exercise.rs:12
+export interface Exercise {
+  category: number;
+  exercise_category: ExerciseCategory | null;
+  id: number;
+  muscles: MuscleExercise[];
+  name: string;
+  notes: string | null;
+  progression: boolean;
+  reps: string;
+  unilateral: boolean;
+  weight: number;
+}
+
+// From src-tauri/src/dao/exercise_category.rs:7
+export interface ExerciseCategory {
+  id: number;
+  name: string;
+}
+
 // From src-tauri/src/dto/exercises.rs:35
 export interface ExerciseDetails {
   category: number;
@@ -69,6 +89,20 @@ export interface ExerciseListItem {
 export enum Languages {
 	Spanish = "Spanish",
 	English = "English",
+}
+
+// From src-tauri/src/dao/muscle.rs:5
+export interface Muscle {
+  name: string;
+}
+
+// From src-tauri/src/dao/muscle_exercise.rs:8
+export interface MuscleExercise {
+  ex_cat: number;
+  ex_id: number;
+  is_primary: boolean;
+  muscle: string;
+  muscle_obj: Muscle | null;
 }
 
 // From src-tauri/src/dto/exercises.rs:96
@@ -165,7 +199,7 @@ export interface Settings {
   weight_unit: WeightUnit;
 }
 
-// From src-tauri/src/dao/workout_step.rs:40
+// From src-tauri/src/dao/workout_step.rs:45
 export enum StepType {
 	Exercise = "Exercise",
 	Rest = "Rest",
@@ -180,6 +214,7 @@ export enum WeightUnit {
 
 // From src-tauri/src/dao/workout.rs:8
 export interface Workout {
+  connect_id: string | null;
   enabled: boolean;
   name: string;
   notes: string | null;
@@ -219,11 +254,12 @@ export interface WorkoutSession {
   volume: number;
 }
 
-// From src-tauri/src/dao/workout_step.rs:16
+// From src-tauri/src/dao/workout_step.rs:18
 export interface WorkoutStep {
   begin_idx: number | null;
   ex_cat: number | null;
   ex_id: number | null;
+  exercise: Exercise | null;
   idx: number;
   kind: StepType;
   notes: string | null;

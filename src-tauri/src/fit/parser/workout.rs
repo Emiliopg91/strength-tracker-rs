@@ -155,6 +155,7 @@ impl WorkoutAccumulator {
             enabled: true,
             steps: self.steps,
             notes: self.notes,
+            connect_id: None,
         })
     }
 }

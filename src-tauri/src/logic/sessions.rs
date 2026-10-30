@@ -610,6 +610,7 @@ pub fn insert_session(
                     enabled: true,
                     notes: workout.notes.clone(),
                     steps: Vec::new(),
+                    connect_id: None,
                 })
                 .execute_in(tx)?;
         }

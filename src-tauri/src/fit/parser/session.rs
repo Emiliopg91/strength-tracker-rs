@@ -225,6 +225,7 @@ fn handle_step_message(msg: &mesgdef::WorkoutStep, exercises: &mut Vec<Option<Ex
             weight: 0_f32,
             muscles: vec![],
             notes: None,
+            name: "".to_string(),
         }))
     } else {
         exercises.push(None)

@@ -17,6 +17,7 @@ pub struct Exercise {
     pub reps: String,
     pub weight: f32,
     pub notes: Option<String>,
+    pub name: String,
 
     #[relationship((category, exercise_category::entity::columns::ID))]
     pub exercise_category: Option<ExerciseCategory>,

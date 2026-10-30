@@ -6,4 +6,5 @@ use serde::{Deserialize, Serialize};
 #[primary_key(id)]
 pub struct ExerciseCategory {
     pub id: u16,
+    pub name: String,
 }

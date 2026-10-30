@@ -13,7 +13,7 @@ use tauri::{AppHandle, Manager, State, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_log::log::{error, info};
 
 use crate::{
-    SettingsLock,
+    ConnectLock, SettingsLock,
     dao::{
         exercise::{self, ExerciseRepository},
         session::{self, SessionRepository, entity},
@@ -27,6 +27,7 @@ use crate::{
         workouts::{WorkoutDetails, WorkoutListItem, WorkoutSession},
     },
     logic::{
+        connect::send_workout_connect,
         devices::{delete_pending_from_connected, push_pending_to_connected},
         notifications::show_notification,
         report_error, row_f64, row_int, row_text, run_blocking,
@@ -321,10 +322,12 @@ pub async fn set_workout_status(app: AppHandle, workout: &str, status: bool) -> 
 pub async fn save_workout(
     app: AppHandle,
     settings: State<'_, SettingsLock>,
+    connect: State<'_, ConnectLock>,
     edit: bool,
     workout: Workout,
 ) -> Result<(), String> {
     let name = workout.name.clone();
+    let name_cl = workout.name.clone();
     let res = run_blocking(&app, move |database| {
         database.run_in_transaction(|tx| {
             if edit && WorkoutRepository::select_by_id_in(tx, &workout.name)?.is_some() {
@@ -392,6 +395,9 @@ pub async fn save_workout(
                 body: translate("ok_workout_save", lang),
                 kind: NotificationKind::Temporal,
             });
+            if connect.lock().await.logged_user().is_some() {
+                let _ = send_workout_connect(&app, &connect, &settings, &name_cl).await;
+            }
             if edit {
                 push_pending_to_connected(&app).await;
             }

@@ -3,14 +3,14 @@ use std::collections::{HashMap, HashSet};
 use rusqlite_orm::{
     dao::Repository,
     errors::DatabaseError,
-    types::{order_by::OrderBy, where_clause::Where},
+    types::{order_by::OrderBy, value::Value, where_clause::Where},
 };
 use strength_tracker_rs_macros::traced_command;
 use tauri::{AppHandle, State};
 use tauri_plugin_log::log::info;
 
 use crate::{
-    SettingsLock,
+    ConnectLock, SettingsLock,
     dao::{
         exercise::{self, ExerciseRepository},
         session::{self, SessionRepository},
@@ -24,8 +24,8 @@ use crate::{
         sessions::SessionSet,
     },
     logic::{
-        devices::push_pending_to_connected, notifications::show_notification, report_error,
-        row_f64, row_int, row_text, run_blocking,
+        connect::send_workout_connect, devices::push_pending_to_connected,
+        notifications::show_notification, report_error, row_f64, row_int, row_text, run_blocking,
     },
     utils::translations::{Languages, translate},
 };
@@ -592,6 +592,7 @@ fn below_suggestion(suggestion: &ProgressionSuggestion) -> Where<WorkoutStep> {
 pub async fn apply_progression_suggestion(
     app: AppHandle,
     settings: State<'_, SettingsLock>,
+    connect: State<'_, ConnectLock>,
     category: u16,
     id: u16,
     suggestion: ProgressionSuggestion,
@@ -624,7 +625,23 @@ pub async fn apply_progression_suggestion(
                     ]))
                     .execute_in(tx)?;
 
+                let mut workouts = Vec::new();
                 if modified > 0 {
+                    workouts = WorkoutStepRepository::select()
+                        .distinct(&[workout_step::entity::columns::WORKOUT])
+                        .where_(Where::And(vec![
+                            Where::Eq(workout_step::entity::columns::EX_CAT, category.into()),
+                            Where::Eq(workout_step::entity::columns::EX_ID, id.into()),
+                        ]))
+                        .fetch_in(tx)?
+                        .iter()
+                        .filter_map(|r| {
+                            match r.get(workout_step::entity::columns::WORKOUT.as_ref()) {
+                                Some(Value::Text(name)) => Some(name.clone()),
+                                _ => None,
+                            }
+                        })
+                        .collect();
                     WorkoutDeviceRepository::update()
                         .set(workout_device::entity::columns::PENDING, true.into())
                         .where_(Where::InSub(
@@ -643,7 +660,7 @@ pub async fn apply_progression_suggestion(
                         .execute_in(tx)?;
                 }
 
-                Ok(modified > 0)
+                Ok((modified > 0, workouts))
             })
             .map_err(|e| e.to_string())
     })
@@ -651,8 +668,13 @@ pub async fn apply_progression_suggestion(
 
     let lang = settings.read().unwrap().language;
     match res {
-        Ok(modified) => {
+        Ok((modified, workouts)) => {
             info!("Applied suggested progression");
+            if connect.lock().await.logged_user().is_some() {
+                for wkt in &workouts {
+                    let _ = send_workout_connect(&app, &connect, &settings, wkt).await;
+                }
+            }
             if modified {
                 push_pending_to_connected(&app).await;
             }

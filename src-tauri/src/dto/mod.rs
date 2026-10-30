@@ -1,5 +1,6 @@
 pub mod app;
 pub mod body_metrics;
+pub mod connect;
 pub mod devices;
 pub mod exercises;
 pub mod export;

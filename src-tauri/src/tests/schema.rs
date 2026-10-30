@@ -66,6 +66,7 @@ fn session_roundtrip_with_relationships() {
                 enabled: true,
                 notes: Some("".to_string()),
                 steps: Vec::new(),
+                connect_id: None,
             })
             .execute_in(tx)?;
         common::insert_session(tx, session.clone());

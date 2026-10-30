@@ -79,6 +79,9 @@ exercise_0_25:
 exercise_0_26:
   en: Alternating dumbbell chest press
   es: Press de pecho alterno con mancuernas
+exercise_0_27:
+  en: Decline barbell bench press
+  es: Press de banca declinado con barra
 exercise_1_0:
   en: 3-Way calf raise
   es: Levantamiento de gemelos tres formas
@@ -898,6 +901,9 @@ exercise_6_84:
 exercise_6_86:
   en: Leg climb crunch
   es: Encogimiento abdominal con subida por la pierna
+exercise_6_87:
+  en: Ruck flutter kicks
+  es: Tijeras cortas con mochila
 exercise_7_0:
   en: Alternating dumbbell biceps curl
   es: Curl de bíceps alterno con mancuerna
@@ -1123,6 +1129,9 @@ exercise_8_24:
 exercise_8_25:
   en: Straight-leg deadlift
   es: Peso muerto con pierna estirada
+exercise_8_26:
+  en: Ruck deadlift
+  es: Peso muerto con mochila
 exercise_9_0:
   en: Cable crossover
   es: Crossover con polea
@@ -2044,6 +2053,12 @@ exercise_17_89:
 exercise_17_90:
   en: Weighted side lunge jump off
   es: Zancada lateral lastrada con salto
+exercise_17_91:
+  en: Ruck overhead lunge
+  es: Zancada con mochila sobre la cabeza
+exercise_17_92:
+  en: Ruck back lunge
+  es: Zancada con mochila a la espalda
 exercise_18_0:
   en: Barbell hang power clean
   es: Cargada de potencia desde colgante con barra
@@ -2131,6 +2146,15 @@ exercise_18_27:
 exercise_18_28:
   en: Snatch
   es: Arrancada
+exercise_18_30:
+  en: Barbell power snatch from blocks
+  es: Arrancada de potencia desde bloques
+exercise_18_31:
+  en: Barbell high pull from blocks
+  es: Remo vertical con bloques
+exercise_18_32:
+  en: Trap bar high pull
+  es: Remo vertical con barra hexagonal
 exercise_19_0:
   en: 45-Degree plank
   es: Plancha a 45 grados
@@ -2653,6 +2677,12 @@ exercise_20_36:
 exercise_20_37:
   en: Jump squat
   es: Sentadilla con salto
+exercise_20_38:
+  en: Trap bar jump
+  es: Salto con barra hexagonal
+exercise_20_39:
+  en: Barbell split jump
+  es: Zancadas con salto con barra
 exercise_21_0:
   en: Banded pull-ups (progression)
   es: Dominadas con cinta (progresión)
@@ -3223,6 +3253,12 @@ exercise_23_51:
 exercise_23_52:
   en: Dumbbell row
   es: Remo con mancuernas
+exercise_23_53:
+  en: Barbell bench pull
+  es: Remo en banco
+exercise_23_54:
+  en: Ruck bent-over row
+  es: Remo inclinado con mochila
 exercise_24_0:
   en: Alternating dumbbell shoulder press
   es: Press de hombros alterno con mancuernas
@@ -3316,6 +3352,15 @@ exercise_24_30:
 exercise_24_31:
   en: Overhead dumbbell press
   es: Press con mancuernas sobre la cabeza
+exercise_24_32:
+  en: Kneeling landmine press
+  es: Press landmine de rodillas
+exercise_24_33:
+  en: Standing landmine press
+  es: Press landmine de pie
+exercise_24_34:
+  en: Ruck press
+  es: Press con mochila
 exercise_25_0:
   en: 90-Degree cable external rotation
   es: Rotación externa de 90 grados con polea
@@ -3922,6 +3967,24 @@ exercise_28_101:
 exercise_28_102:
   en: Overhead barbell squat
   es: Sentadilla con barra en alto
+exercise_28_103:
+  en: Barbell half squat
+  es: Media sentadilla con barra
+exercise_28_104:
+  en: Belt squat
+  es: Sentadilla con cinturón
+exercise_28_105:
+  en: Safety bar squat
+  es: Sentadilla con barra de seguridad
+exercise_28_106:
+  en: Ruck back squat
+  es: Sentadilla con mochila a la espalda
+exercise_28_107:
+  en: Ruck overhead squat
+  es: Sentadilla con mochila sobre la cabeza
+exercise_28_108:
+  en: Ruck front squat
+  es: Sentadilla con mochila al frente
 exercise_29_0:
   en: Burpee
   es: Burpee

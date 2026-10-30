@@ -69,6 +69,7 @@ fn program(db: &DatabasePool, exercise: (u16, u16), weight: f32, reps: u16) {
                 enabled: true,
                 notes: None,
                 steps: Vec::new(),
+                connect_id: None,
             })
             .execute_in(tx)?;
 

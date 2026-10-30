@@ -96,8 +96,19 @@ impl ToFitMessages for Workout {
         typedef::File::WORKOUT
     }
 
-    fn file_key(&self) -> &str {
-        &self.name
+    fn file_key(&self) -> u32 {
+        // Without a Connect id, derive a stable serial from the name above the ids Connect has handed out so far
+        self.connect_id
+            .as_deref()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or_else(|| {
+                const BASE: u32 = 1_746_147_457;
+                // FNV-1a, stable across builds
+                let hash = self.name.bytes().fold(0x811c_9dc5_u32, |h, b| {
+                    (h ^ b as u32).wrapping_mul(0x0100_0193)
+                });
+                BASE + 1 + hash % (u32::MAX - BASE)
+            })
     }
 
     fn to_fit_messages(

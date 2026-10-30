@@ -8,7 +8,9 @@ use rusqlite_orm::{
 };
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Serialize, Deserialize, Entity)]
+use crate::dao::exercise::{self, Exercise};
+
+#[derive(Clone, Serialize, Deserialize, Entity)]
 #[entity("workout_step")]
 #[primary_key(workout, idx)]
 #[index("workout",(workout))]
@@ -34,6 +36,9 @@ pub struct WorkoutStep {
     pub begin_idx: Option<u16>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub notes: Option<String>,
+
+    #[relationship((ex_cat, exercise::entity::columns::CATEGORY),(ex_id, exercise::entity::columns::ID))]
+    pub exercise: Option<Exercise>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -92,6 +97,7 @@ impl WorkoutStep {
             time: None,
             weight: None,
             notes: None,
+            exercise: None,
         }
     }
     pub fn rest(workout: &str, idx: u16, time: Option<u32>, notes: Option<String>) -> Self {

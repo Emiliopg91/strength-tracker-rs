@@ -9,6 +9,7 @@ pub struct Workout {
     pub name: String,
     pub enabled: bool,
     pub notes: Option<String>,
+    pub connect_id: Option<String>,
 
     #[relationship((name, workout_step::entity::columns::WORKOUT))]
     pub steps: Vec<WorkoutStep>,
