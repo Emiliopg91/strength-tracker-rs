@@ -1,6 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
-    fs::{self},
+    fs,
     path::{Path, PathBuf},
     sync::Mutex,
     time::Duration,
