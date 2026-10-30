@@ -53,11 +53,12 @@ pub fn report_error<E: std::fmt::Display>(
 
 /// Runs `f` with the database pool on tokio's blocking thread pool, so synchronous DB and file
 /// work never stalls an async worker thread.
-pub async fn run_blocking<T, F>(app: AppHandle, f: F) -> T
+pub async fn run_blocking<T, F>(app: &AppHandle, f: F) -> T
 where
     F: FnOnce(&DatabasePool) -> T + Send + 'static,
     T: Send + 'static,
 {
+    let app = app.clone();
     tokio::task::spawn_blocking(move || f(&app.state::<DatabasePool>()))
         .await
         .expect("blocking DB task panicked")

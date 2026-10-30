@@ -52,7 +52,7 @@ pub async fn get_sessions(
     limit: Option<i32>,
 ) -> Result<Vec<SessionListItem>, String> {
     info!("Getting sessions list...");
-    let res = run_blocking(app, move |database| {
+    let res = run_blocking(&app, move |database| {
         database.run_in_connection(|conn| Ok(fetch_sessions(conn, limit, None, None, None)?))
     })
     .await;
@@ -169,7 +169,7 @@ pub async fn get_session_details(
             .to_rfc3339()
     );
 
-    let res = run_blocking(app, move |database| {
+    let res = run_blocking(&app, move |database| {
         database.run_in_connection(|conn| Ok(fetch_session_details(conn, timestamp, true, true)?))
     })
     .await;
@@ -267,7 +267,7 @@ pub async fn save_session_changes(
     );
     let lang = settings.read().unwrap().language;
 
-    let res = run_blocking(app, move |database| {
+    let res = run_blocking(&app, move |database| {
         database.run_in_transaction(|tx| {
             update_session_notes(tx, details.timestamp, details.notes.as_deref())?;
 
@@ -362,7 +362,7 @@ pub async fn import_from_files(
     };
 
     if !files.is_empty() {
-        let res = tokio::task::spawn_blocking(move || _import_from_files(app, files.as_slice()))
+        let res = tokio::task::spawn_blocking(move || _import_from_files(&app, files.as_slice()))
             .await
             .map_err(|e| e.to_string())
             .flatten();
@@ -372,7 +372,7 @@ pub async fn import_from_files(
     Ok(0)
 }
 
-pub fn _import_from_files(app: AppHandle, files: &[PathBuf]) -> Result<usize, String> {
+pub fn _import_from_files(app: &AppHandle, files: &[PathBuf]) -> Result<usize, String> {
     let lang = app.state::<SettingsLock>().read().unwrap().language;
     let database = app.state::<DatabasePool>();
     let res = database
@@ -825,7 +825,7 @@ pub fn update_pending_geolocation(app: &AppHandle, db: &DatabasePool) {
 #[traced_command]
 #[tauri::command]
 pub async fn get_heatmap_data(app: AppHandle) -> Result<Vec<Vec<(u32, u16)>>, String> {
-    run_blocking(app, heatmap_data).await
+    run_blocking(&app, heatmap_data).await
 }
 
 pub fn heatmap_data(database: &DatabasePool) -> Result<Vec<Vec<(u32, u16)>>, String> {

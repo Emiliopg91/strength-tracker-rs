@@ -40,7 +40,7 @@ pub async fn import_from_connect(
 
     let app_cpy = app.clone();
     let res: Result<_, String> = async {
-        let (mut device, from_date, existing) = run_blocking(app.clone(), |database| {
+        let (mut device, from_date, existing) = run_blocking(&app, |database| {
             let device = DeviceRepository::select()
                 .where_(Where::Eq(device::entity::columns::SERIAL, "connect".into()))
                 .fetch_one(database)?
@@ -123,7 +123,7 @@ pub async fn import_weight_from_connect(
     let app_cpy = app.clone();
 
     let res: Result<(), String> = async {
-        let mut device = run_blocking(app.clone(), |database| {
+        let mut device = run_blocking(&app, |database| {
             Ok(DeviceRepository::select()
                 .where_(Where::Eq(device::entity::columns::SERIAL, "connect".into()))
                 .fetch_one(database)?

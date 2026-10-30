@@ -146,7 +146,7 @@ pub async fn export_database(
 
     let export_path = path.clone();
     let export_lang = settings.read().unwrap().language;
-    let res = run_blocking(app, move |database| {
+    let res = run_blocking(&app, move |database| {
         Export::from_database(database, export_lang)
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
             .and_then(|export| {

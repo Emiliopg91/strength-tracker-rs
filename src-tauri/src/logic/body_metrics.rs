@@ -27,7 +27,7 @@ pub async fn get_body_measures(
 ) -> Result<Vec<BodyMetricListItem>, String> {
     info!("Getting body measures list...");
 
-    let res = run_blocking(app, move |database| {
+    let res = run_blocking(&app, move |database| {
         database.run_in_connection(|conn| Ok(fetch_body_measures(conn, None)?))
     })
     .await;
@@ -78,7 +78,7 @@ pub async fn add_body_measures(
 ) -> Result<(), String> {
     info!("Adding body measures list...");
 
-    let res = run_blocking(app, move |database| {
+    let res = run_blocking(&app, move |database| {
         database.run_in_transaction(|tx| {
             BodyMetricRepository::insert()
                 .item(&mut BodyMetric::try_from(&measures).map_err(DatabaseError::Transaction)?)
@@ -111,7 +111,7 @@ pub async fn delete_body_metric(
     settings: State<'_, SettingsLock>,
     date: u32,
 ) -> Result<(), String> {
-    let res = run_blocking(app, move |database| {
+    let res = run_blocking(&app, move |database| {
         database.run_in_transaction(|tx| {
             BodyMetricRepository::delete()
                 .where_(Where::Eq(body_metric::entity::columns::DATE, date.into()))

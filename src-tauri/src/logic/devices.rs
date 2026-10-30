@@ -18,7 +18,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_log::log::{error, info};
 
 use crate::{
-    SettingsLock,
+    MtpLock, SettingsLock,
     dao::{
         device::{Device, DeviceRepository},
         exercise::{self, ExerciseRepository},
@@ -40,7 +40,6 @@ use crate::{
         sessions::{import_pending_sessions, update_pending_geolocation},
         settle_pending_files,
     },
-    mtp::MTP_CLIENT_INST,
     utils::{
         constants,
         translations::{Languages, translate, translate_and_replace},
@@ -48,8 +47,9 @@ use crate::{
 };
 
 /// Spawns a background task that watches USB hotplug events and keeps the device list/DB/frontend in sync.
-pub fn start_device_watcher(app: AppHandle) {
+pub fn start_device_watcher(app: &AppHandle) {
     info!("Starting device monitor...");
+    let app = app.clone();
     tauri::async_runtime::spawn(async move {
         match mtp_rs::mtp::watch_devices() {
             Ok(w) => {
@@ -182,8 +182,9 @@ async fn with_loading(app: &AppHandle, sync: impl Future<Output = usize>) {
 
 /// Uploads the pending workouts of every currently connected device.
 pub async fn push_pending_to_connected(app: &AppHandle) {
+    let mtp_client = app.state::<MtpLock>();
     // Bound in its own statement so the MTP lock is released before pushing
-    let connected = MTP_CLIENT_INST.lock().await.get_connected_devices().await;
+    let connected = mtp_client.lock().await.get_connected_devices().await;
     match connected {
         Ok(devices) => {
             for device in devices {
@@ -196,8 +197,9 @@ pub async fn push_pending_to_connected(app: &AppHandle) {
 
 /// Delete the pending workouts of every currently connected device.
 pub async fn delete_pending_from_connected(app: &AppHandle) {
+    let mtp_client = app.state::<MtpLock>();
     // Bound in its own statement so the MTP lock is released before pushing
-    let connected = MTP_CLIENT_INST.lock().await.get_connected_devices().await;
+    let connected = mtp_client.lock().await.get_connected_devices().await;
     match connected {
         Ok(devices) => {
             for device in devices {
@@ -217,7 +219,7 @@ async fn push_pending_workouts(app: &AppHandle, serial: &str) {
     let _guard = PUSH_LOCK.lock().await;
     let serial = serial.to_string();
     let serial_q = serial.clone();
-    let pending = match run_blocking(app.clone(), move |db| {
+    let pending = match run_blocking(app, move |db| {
         db.run_in_connection(|conn| {
             Ok(WorkoutDeviceRepository::select()
                 .columns(&[workout_device::entity::columns::WORKOUT])
@@ -266,7 +268,7 @@ async fn push_pending_workouts(app: &AppHandle, serial: &str) {
     };
     for workout in pending {
         if let Err(e) =
-            send_workout_to_device(app.clone(), lang, weight_unit, &workout, &serial).await
+            send_workout_to_device(app, lang, weight_unit, &workout, &serial).await
         {
             error!("Error pushing pending workout '{workout}' to {serial}: {e}");
             continue;
@@ -274,7 +276,7 @@ async fn push_pending_workouts(app: &AppHandle, serial: &str) {
 
         let device = serial.clone();
         let wkt = workout.clone();
-        if let Err(e) = run_blocking(app.clone(), move |db| {
+        if let Err(e) = run_blocking(app, move |db| {
             db.run_in_transaction(|tx| {
                 Ok(WorkoutDeviceRepository::update()
                     .set(workout_device::entity::columns::PENDING, false.into())
@@ -308,7 +310,7 @@ async fn delete_pending_workouts(app: &AppHandle, serial: &str) {
     let _guard = PUSH_LOCK.lock().await;
     let serial = serial.to_string();
     let serial_q = serial.clone();
-    let pending = match run_blocking(app.clone(), move |db| {
+    let pending = match run_blocking(app, move |db| {
         db.run_in_connection(|conn| {
             Ok(WorkoutDeviceRepository::select()
                 .columns(&[workout_device::entity::columns::WORKOUT])
@@ -356,11 +358,11 @@ async fn delete_pending_workouts(app: &AppHandle, serial: &str) {
         settings.language
     };
     for workout in pending {
-        match delete_workout_from_device(&workout, &serial).await {
+        match delete_workout_from_device(app, &workout, &serial).await {
             Ok(deleted) => {
                 let device = serial.clone();
                 let wkt = workout.clone();
-                if let Err(e) = run_blocking(app.clone(), move |db| {
+                if let Err(e) = run_blocking(app, move |db| {
                     db.run_in_transaction(|tx| {
                         Ok(WorkoutDeviceRepository::update()
                             .set(workout_device::entity::columns::PENDING, false.into())
@@ -404,7 +406,7 @@ async fn list_pending_workouts(
     serial: &str,
 ) -> Result<Vec<String>, DatabaseError> {
     let serial_q = serial.to_string();
-    let rows = run_blocking(app.clone(), move |db| {
+    let rows = run_blocking(app, move |db| {
         db.run_in_connection(|conn| {
             let rows = WorkoutRepository::select()
                 .columns(&[workout::entity::columns::NAME])
@@ -528,8 +530,10 @@ async fn download_pending_workouts(app: &AppHandle, serial: &str) {
 
     let dst_dir = new_pending_dir(&constants::PENDING_DOWNLOAD_WORKOUTS_FOLDER, serial);
 
+    let mtp_client = app.state::<MtpLock>();
+
     // Locked only for the download, so a concurrent sync is not held back by DB work.
-    let downloaded = MTP_CLIENT_INST
+    let downloaded = mtp_client
         .lock()
         .await
         .download_workouts(serial, dst_dir.clone())
@@ -539,7 +543,7 @@ async fn download_pending_workouts(app: &AppHandle, serial: &str) {
         Ok(()) => {
             let app_cl = app.clone();
             let serial = serial.to_string();
-            run_blocking(app.clone(), move |db| {
+            run_blocking(app, move |db| {
                 store_pending_workouts(&app_cl, db, &dst_dir, &serial, &pending_workouts)
             })
             .await;
@@ -561,7 +565,8 @@ pub async fn send_to_device(
         (settings.language, settings.weight_unit)
     };
 
-    let connected = MTP_CLIENT_INST
+    let mtp_client = app.state::<MtpLock>();
+    let connected = mtp_client
         .lock()
         .await
         .is_device_connected(serial)
@@ -569,7 +574,7 @@ pub async fn send_to_device(
         .map_err(|e| e.to_string())?;
 
     let res: Result<bool, String> = if connected {
-        match send_workout_to_device(app.clone(), lang, weight_unit, workout, serial).await {
+        match send_workout_to_device(&app, lang, weight_unit, workout, serial).await {
             Ok(_) => {
                 // Register the pair so later changes (e.g. progressions) get re-sent to this device
                 let mut entry = WorkoutDevice {
@@ -578,7 +583,7 @@ pub async fn send_to_device(
                     pending: false,
                 };
 
-                if let Err(e) = run_blocking(app, move |database| {
+                if let Err(e) = run_blocking(&app, move |database| {
                     database.run_in_transaction(|tx| {
                         Ok(WorkoutDeviceRepository::insert()
                             .or_ignore()
@@ -602,7 +607,7 @@ pub async fn send_to_device(
             pending: true,
         };
 
-        run_blocking(app, move |database| {
+        run_blocking(&app, move |database| {
             database.run_in_transaction(|tx| {
                 Ok(WorkoutDeviceRepository::insert()
                     .or_replace()
@@ -648,7 +653,7 @@ pub async fn send_to_device(
 }
 
 async fn send_workout_to_device(
-    app: AppHandle,
+    app: &AppHandle,
     lang: Languages,
     weight_unit: WeightUnit,
     workout: &str,
@@ -719,7 +724,8 @@ async fn send_workout_to_device(
         return Err(e.to_string());
     }
 
-    let upload = MTP_CLIENT_INST
+    let mtp_client = app.state::<MtpLock>();
+    let upload = mtp_client
         .lock()
         .await
         .upload_workout(serial, path.clone())
@@ -731,8 +737,13 @@ async fn send_workout_to_device(
     upload
 }
 
-async fn delete_workout_from_device(workout: &str, serial: &str) -> Result<bool, String> {
-    MTP_CLIENT_INST
+async fn delete_workout_from_device(
+    app: &AppHandle,
+    workout: &str,
+    serial: &str,
+) -> Result<bool, String> {
+    let mtp_client = app.state::<MtpLock>();
+    mtp_client
         .lock()
         .await
         .delete_workout(serial, &Workout::file_name_for(workout))
@@ -787,7 +798,8 @@ pub async fn _import_from_device(app: &AppHandle, serial: &str) -> Result<usize,
     );
     let mut res: Result<Vec<u32>, DatabaseError> = Ok(Vec::new());
     let dst_dir = new_pending_dir(&constants::PENDING_DOWNLOAD_SESSIONS_FOLDER, serial);
-    let mtp_client = MTP_CLIENT_INST.lock().await;
+    let mtp_client = app.state::<MtpLock>();
+    let mtp_client = mtp_client.lock().await;
 
     if mtp_client
         .download_activities_since(serial, latest_date, dst_dir.clone())
@@ -828,7 +840,7 @@ pub async fn _import_from_device(app: &AppHandle, serial: &str) -> Result<usize,
 #[traced_command]
 #[tauri::command]
 pub async fn get_registered_devices(app: AppHandle) -> Result<Vec<DeviceListItem>, String> {
-    Ok(run_blocking(app, |database| {
+    Ok(run_blocking(&app, |database| {
         database.run_in_connection(|conn| Ok(DeviceRepository::select().fetch_in(conn)?))
     })
     .await

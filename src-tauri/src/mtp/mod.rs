@@ -1,13 +1,12 @@
 use std::{
     path::{Path, PathBuf},
-    sync::LazyLock,
     time::Instant,
 };
 
 use bytes::Bytes;
 use mtp_rs::{MtpDevice, NewObjectInfo, ObjectHandle, ObjectInfo, Storage};
 use tauri_plugin_log::log::{debug, error, info};
-use tokio::{fs, sync::Mutex};
+use tokio::fs;
 
 use crate::{
     dao::device::Device,
@@ -17,8 +16,6 @@ use crate::{
 #[cfg(debug_assertions)]
 pub mod dump;
 pub mod errors;
-
-pub static MTP_CLIENT_INST: LazyLock<Mutex<MtpClient>> = LazyLock::new(|| Mutex::new(MtpClient {}));
 
 pub struct MtpClient {}
 

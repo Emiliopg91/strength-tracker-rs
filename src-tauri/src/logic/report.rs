@@ -140,7 +140,7 @@ pub async fn get_report_data(
     info!("Getting report data...");
     let lang = settings.read().unwrap().language;
 
-    let res = run_blocking(app, move |database| {
+    let res = run_blocking(&app, move |database| {
         database.run_in_connection(|conn| {
             let mut sessions: Vec<_> = fetch_sessions(
                 conn,

@@ -62,6 +62,7 @@ use crate::{
             set_workout_status, workout_print_ready,
         },
     },
+    mtp::MtpClient,
     udev::UdevManager,
     utils::{constants, single_instance::SingleInstance, translations::translate},
 };
@@ -133,8 +134,9 @@ pub fn force_write_mtp_rules(auto_run: bool) -> crate::udev::errors::Result<()> 
 
 pub type SettingsLock = RwLock<Settings>;
 pub type ConnectLock = tokio::sync::Mutex<ConnectClient>;
+pub type MtpLock = tokio::sync::Mutex<MtpClient>;
 
-fn initialize(app: &AppHandle) -> (DatabasePool, Settings, ConnectClient) {
+fn initialize(app: &AppHandle) -> (DatabasePool, Settings, ConnectClient, MtpClient) {
     debug!("Initializing database...");
     let builder = DatabaseConnectionBuilder::default()
         .location(constants::DB_FILE.clone())
@@ -161,10 +163,11 @@ fn initialize(app: &AppHandle) -> (DatabasePool, Settings, ConnectClient) {
             .unwrap();
 
             let connect_client = ConnectClient::new(app.clone());
+            let mtp_client = MtpClient {};
 
             //merge_sessions(&database, _, _);
 
-            (database, settings, connect_client)
+            (database, settings, connect_client, mtp_client)
         }
         Err(e) => {
             error!("Could not open database: {}", e);
@@ -276,7 +279,7 @@ pub fn run(log_level: LevelFilter) {
                 exit(constants::ExitCodes::UdevError.into())
             }
 
-            let (database, settings, connect) = initialize(app.handle());
+            let (database, settings, connect, mtp_client) = initialize(app.handle());
 
             listen_for_signals(app.handle());
 
@@ -307,7 +310,7 @@ pub fn run(log_level: LevelFilter) {
 
                         let app_handle = app_handle.clone();
                         tauri::async_runtime::spawn_blocking(move || {
-                            let _ = _import_from_files(app_handle, paths.as_slice());
+                            let _ = _import_from_files(&app_handle, paths.as_slice());
                         });
                     }
                 });
@@ -356,6 +359,7 @@ pub fn run(log_level: LevelFilter) {
             app.manage(database);
             app.manage(SettingsLock::new(settings));
             app.manage(ConnectLock::new(connect));
+            app.manage(MtpLock::new(mtp_client));
 
             debug!("Setup finished");
             Ok(())

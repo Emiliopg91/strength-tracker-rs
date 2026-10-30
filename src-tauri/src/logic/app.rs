@@ -39,7 +39,7 @@ pub async fn get_settings(settings: State<'_, SettingsLock>) -> Result<Settings,
 pub async fn notify_frontend_ready(app: AppHandle) {
     info!("UI ready");
 
-    start_device_watcher(app.clone());
+    start_device_watcher(&app);
 
     if !app.state::<SettingsLock>().read().unwrap().start_into_tray {
         let _ = show_main_window(&app);
@@ -52,7 +52,7 @@ pub async fn notify_frontend_ready(app: AppHandle) {
     });
 
     let app_cl = app.clone();
-    std::thread::spawn(|| check_for_update(app_cl));
+    std::thread::spawn(move || check_for_update(&app_cl));
 }
 
 pub fn show_main_window(app: &AppHandle) -> tauri::Result<()> {
@@ -203,7 +203,7 @@ pub async fn get_translations(
         .collect())
 }
 
-fn check_for_update(app: AppHandle) {
+fn check_for_update(app: &AppHandle) {
     thread::sleep(Duration::from_secs(5));
 
     loop {

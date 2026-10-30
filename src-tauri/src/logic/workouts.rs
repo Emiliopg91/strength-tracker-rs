@@ -42,7 +42,7 @@ pub async fn get_workout_list(
     settings: State<'_, SettingsLock>,
 ) -> Result<Vec<WorkoutListItem>, String> {
     info!("Getting workouts list...");
-    let res = run_blocking(app, move |database| {
+    let res = run_blocking(&app, move |database| {
         database.run_in_connection(|conn| {
             let workouts: Vec<_> = WorkoutRepository::select()
                 .fetch_in(conn)?
@@ -142,7 +142,7 @@ pub async fn get_workout_details(
     name: &str,
 ) -> Result<WorkoutDetails, String> {
     let name = name.to_string();
-    let res = run_blocking(app, move |database| {
+    let res = run_blocking(&app, move |database| {
         database.run_in_connection(|conn| {
             info!("Getting details for workout {}", name);
 
@@ -275,7 +275,7 @@ pub async fn get_workout_details(
 #[tauri::command]
 pub async fn set_workout_status(app: AppHandle, workout: &str, status: bool) -> Result<(), String> {
     let workout = workout.to_string();
-    let res = run_blocking(app.clone(), move |database| {
+    let res = run_blocking(&app, move |database| {
         database
             .run_in_transaction(|tx| {
                 let wk_cl = workout.clone();
@@ -325,7 +325,7 @@ pub async fn save_workout(
     workout: Workout,
 ) -> Result<(), String> {
     let name = workout.name.clone();
-    let res = run_blocking(app.clone(), move |database| {
+    let res = run_blocking(&app, move |database| {
         database.run_in_transaction(|tx| {
             if edit && WorkoutRepository::select_by_id_in(tx, &workout.name)?.is_some() {
                 WorkoutRepository::update()

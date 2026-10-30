@@ -38,7 +38,7 @@ pub async fn get_exercises(
     settings: State<'_, SettingsLock>,
 ) -> Result<Vec<ExerciseListItem>, String> {
     info!("Getting exercises list...");
-    let res = run_blocking(app, move |database| {
+    let res = run_blocking(&app, move |database| {
         database.run_in_connection(|conn| {
             let prs = SetRepository::select()
                 .where_(Where::And(vec![
@@ -117,7 +117,7 @@ pub async fn get_exercise_details(
         "Getting details for exercise with category {} and id {}...",
         category, id
     );
-    let res = run_blocking(app.clone(), move |database| {
+    let res = run_blocking(&app, move |database| {
         database.run_in_connection(|conn| Ok(fetch_exercise_details(conn, category, id, None)?))
     })
     .await;
@@ -239,7 +239,7 @@ pub fn fetch_exercise_details(
 #[traced_command]
 #[tauri::command]
 pub async fn get_exercises_catalog(app: AppHandle) -> Result<HashMap<u16, Vec<u16>>, String> {
-    run_blocking(app, |db| {
+    run_blocking(&app, |db| {
         let mut catalog: HashMap<u16, Vec<u16>> = HashMap::new();
 
         db.run_in_connection(|conn| Ok(ExerciseRepository::select().fetch_in(conn)?))?
@@ -331,7 +331,7 @@ pub async fn set_exercise_unilateral(
     id: u16,
     value: bool,
 ) -> Result<(), String> {
-    let res: Result<_, String> = run_blocking(app, move |database| {
+    let res: Result<_, String> = run_blocking(&app, move |database| {
         ExerciseRepository::update()
             .set(exercise::entity::columns::UNILATERAL, value.into())
             .where_(Where::And(vec![
@@ -368,7 +368,7 @@ pub async fn set_exercise_progression(
     id: u16,
     value: bool,
 ) -> Result<(), String> {
-    let res: Result<_, String> = run_blocking(app, move |database| {
+    let res: Result<_, String> = run_blocking(&app, move |database| {
         ExerciseRepository::update()
             .set(exercise::entity::columns::PROGRESSION, value.into())
             .where_(Where::And(vec![
@@ -407,7 +407,7 @@ pub async fn set_exercise_progression_parameters(
     weight: f32,
 ) -> Result<(), String> {
     let reps = reps.to_string();
-    let res: Result<_, String> = run_blocking(app, move |database| {
+    let res: Result<_, String> = run_blocking(&app, move |database| {
         ExerciseRepository::update()
             .set(exercise::entity::columns::REPS, reps.into())
             .set(exercise::entity::columns::WEIGHT, weight.into())
@@ -443,7 +443,7 @@ pub async fn get_progression_status(
     category: u16,
     id: u16,
 ) -> Result<Option<ProgressionSuggestion>, String> {
-    run_blocking(app, move |database| {
+    run_blocking(&app, move |database| {
         database.run_in_connection(|conn| {
             Ok(WorkoutStepRepository::select()
                 .columns(&[
@@ -474,7 +474,7 @@ pub async fn get_progression_suggestion(
     category: u16,
     id: u16,
 ) -> Result<Option<ProgressionSuggestion>, String> {
-    run_blocking(app, move |database| {
+    run_blocking(&app, move |database| {
         database.run_in_connection(|conn| Ok(fetch_progression_suggestion(conn, category, id)?))
     })
     .await
@@ -596,7 +596,7 @@ pub async fn apply_progression_suggestion(
     id: u16,
     suggestion: ProgressionSuggestion,
 ) -> Result<(), String> {
-    let res = run_blocking(app.clone(), move |database| {
+    let res = run_blocking(&app, move |database| {
         database
             .run_in_transaction(|tx| {
                 // Reps go first: the weight update would otherwise change which steps are below
@@ -681,7 +681,7 @@ pub async fn save_exercise_notes(
         Some(notes.trim().to_string())
     };
 
-    run_blocking(app, move |database| {
+    run_blocking(&app, move |database| {
         database
             .run_in_transaction(|tx| {
                 ExerciseRepository::update()
