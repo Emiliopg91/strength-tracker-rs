@@ -267,9 +267,7 @@ async fn push_pending_workouts(app: &AppHandle, serial: &str) {
         (settings.language, settings.weight_unit)
     };
     for workout in pending {
-        if let Err(e) =
-            send_workout_to_device(app, lang, weight_unit, &workout, &serial).await
-        {
+        if let Err(e) = send_workout_to_device(app, lang, weight_unit, &workout, &serial).await {
             error!("Error pushing pending workout '{workout}' to {serial}: {e}");
             continue;
         }

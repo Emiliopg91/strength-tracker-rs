@@ -30,8 +30,11 @@ use crate::{
     utils::translations::{Languages, translate, translate_and_replace},
 };
 use chrono::{Datelike, Days, Local, Months, TimeZone, offset::LocalResult};
-use curl_rest::StatusCode;
 use rayon::{iter::Either, prelude::*};
+use reqwest::{
+    StatusCode,
+    header::{ACCEPT, USER_AGENT},
+};
 use rusqlite_orm::{
     dao::Repository,
     database::DatabasePool,
@@ -740,15 +743,16 @@ pub fn update_pending_geolocation(app: &AppHandle, db: &DatabasePool) {
                     first.0, first.1
                 );
                 //
-                let resp = curl_rest::Client::with_user_agent("strength-tracker-rs")
-                    .get()
-                    .header(curl_rest::Header::Accept("application/json".into()))
-                    .send(&url);
+                let resp = reqwest::blocking::Client::new()
+                    .get(&url)
+                    .header(USER_AGENT, "strength-tracker-rs")
+                    .header(ACCEPT, "application/json")
+                    .send();
 
                 match resp {
                     Ok(response) => {
-                        if response.status == StatusCode::Ok {
-                            match serde_json::from_slice::<serde_json::Value>(&response.body) {
+                        if response.status() == StatusCode::OK {
+                            match response.json::<serde_json::Value>() {
                                 Ok(e) => {
                                     if let Some(address) = e.get("address") {
                                         for key in ["village", "town", "city", "state", "country"] {
@@ -805,7 +809,7 @@ pub fn update_pending_geolocation(app: &AppHandle, db: &DatabasePool) {
                                 }
                             }
                         } else {
-                            error!("Invalid status code: {}", response.status)
+                            error!("Invalid status code: {}", response.status())
                         }
                     }
                     Err(e) => {

@@ -1,6 +1,6 @@
 use std::process::ExitStatus;
 
-use curl_rest::StatusCode;
+use reqwest::StatusCode;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -18,9 +18,7 @@ pub enum RCloneError {
     #[error("Bad JSON format: {0}")]
     BadJsonFormat(#[source] serde_json::error::Error),
     #[error("Error getting drives: {0:?}")]
-    ErrorGettingDrives(#[source] curl_rest::error::Error),
-    #[error("Error waiting for task: {0:?}")]
-    TaskError(#[source] tokio::task::JoinError),
+    ErrorGettingDrives(#[source] reqwest::Error),
     #[error("No drive found")]
     NoDriveFound(),
     #[error("Error reading config file: {0}")]

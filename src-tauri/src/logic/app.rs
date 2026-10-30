@@ -1,5 +1,9 @@
 use std::{collections::HashMap, thread, time::Duration};
 
+use reqwest::{
+    StatusCode,
+    header::{ACCEPT, USER_AGENT},
+};
 use rusqlite_orm::database::DatabasePool;
 use semver::Version;
 use serde_json::Value;
@@ -209,17 +213,16 @@ fn check_for_update(app: &AppHandle) {
     loop {
         info!("Looking for updates...");
 
-        let result = curl_rest::Client::with_user_agent("strength-tracker-rs")
-            .get()
-            .header(curl_rest::Header::Accept(
-                "application/vnd.github+json".into(),
-            ))
-            .send(constants::URL);
+        let result = reqwest::blocking::Client::new()
+            .get(constants::URL)
+            .header(USER_AGENT, "strength-tracker-rs")
+            .header(ACCEPT, "application/vnd.github+json")
+            .send();
 
         match result {
             Ok(response) => {
-                if response.status == curl_rest::StatusCode::Ok {
-                    match serde_json::from_slice::<Value>(&response.body) {
+                if response.status() == StatusCode::OK {
+                    match response.json::<Value>() {
                         Ok(response_json) => match response_json
                             .get("tag_name")
                             .and_then(Value::as_str)
@@ -257,7 +260,7 @@ fn check_for_update(app: &AppHandle) {
                         }
                     }
                 } else {
-                    debug!("Invalid response status: {}", response.status,)
+                    debug!("Invalid response status: {}", response.status())
                 }
             }
             Err(e) => {
