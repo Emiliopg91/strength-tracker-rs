@@ -137,7 +137,7 @@ pub async fn import_weight_from_connect(
     app: AppHandle,
     settings: State<'_, SettingsLock>,
     connect: State<'_, ConnectLock>,
-) -> Result<(), String> {
+) -> Result<usize, String> {
     let lang = settings.read().unwrap().language;
 
     let app_cpy = app.clone();
@@ -192,12 +192,12 @@ pub async fn import_weight_from_connect(
 
     match res {
         Ok(0) => {
-            info!("No Measures added");
-            Ok(())
+            info!("No measures added");
+            Ok(0)
         }
         Ok(added) => {
             info!("Measures {} added succesfully", added);
-            Ok(())
+            Ok(added)
         }
         Err(e) => Err(report_error(
             e,

@@ -4317,9 +4317,9 @@ checksum = "ff7589a1859b09232522bb9edf076ca7fcf14ded96685d3fa629db73023ffbb7"
 
 [[package]]
 name = "strength-tracker-rs"
-version = "3.8.1"
+version = "3.9.0"
 dependencies = [
- "base64 0.23.1",
+ "base64 0.21.7",
  "bytes",
  "chrono",
  "curl-rest",
@@ -4335,7 +4335,7 @@ dependencies = [
  "percent-encoding",
  "phf 0.11.3",
  "phf_codegen 0.11.3",
- "rand 0.10.3",
+ "rand 0.8.8",
  "rayon",
  "rusqlite_orm",
  "rustyfit",

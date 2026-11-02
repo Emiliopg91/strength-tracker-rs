@@ -20,8 +20,10 @@ export function AddBodyMetricMenu({ onAddManually, onImported }: Props) {
     } | null>(null);
 
     const importFromGarminConnect = () => {
-        withLoading(BackendClient.importWeightFromConnect()).then(() => {
-            onImported();
+        withLoading(BackendClient.importWeightFromConnect()).then((items) => {
+            if (items > 0) {
+                onImported();
+            }
         });
     };
 
