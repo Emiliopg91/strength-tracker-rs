@@ -25,7 +25,7 @@ use crate::{
         sessions::SessionSet,
     },
     logic::{
-        connect::send_workout_connect, devices::push_pending_to_connected,
+        connect::send_workout_connect, devices::push_pending_to_usb,
         notifications::show_notification, report_error, row_f64, row_int, row_text, run_blocking,
     },
     utils::translations::{Languages, translate},
@@ -677,7 +677,7 @@ pub async fn apply_progression_suggestion(
                 }
             }
             if modified {
-                push_pending_to_connected(&app).await;
+                push_pending_to_usb(&app).await;
             }
             Ok(())
         }
@@ -719,7 +719,7 @@ pub async fn save_exercise_notes(
                 let _ = send_workout_connect(&app, &connect, &settings, wkt).await;
             }
         }
-        push_pending_to_connected(&app).await;
+        push_pending_to_usb(&app).await;
     }
 
     Ok(())

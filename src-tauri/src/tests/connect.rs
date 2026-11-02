@@ -1,3 +1,9 @@
+use chrono::{Local, NaiveDate, TimeZone};
+
+use crate::connect::{
+    calendar_months, calendar_page_items,
+    client::{CalendarItem, CalendarItemType, CalendarMonth, api::calendar_month_path},
+};
 use serde_json::{Value, json};
 
 use crate::dao::{
@@ -387,4 +393,144 @@ fn new_workout_omits_id_and_description() {
 
     assert!(json.get("workoutId").is_none());
     assert!(json.get("description").is_none());
+}
+
+fn day(year: i32, month: u32, day: u32) -> NaiveDate {
+    NaiveDate::from_ymd_opt(year, month, day).unwrap()
+}
+
+#[test]
+fn calendar_items_keep_id_type_and_local_start() {
+    let json = r#"{
+        "year": 2026,
+        "month": 9,
+        "calendarItems": [
+            {"id": 24844421015, "itemType": "activity", "date": "2026-10-25", "title": "Torso",
+             "startTimestampLocal": "2026-10-25T09:57:05.0"},
+            {"id": 1793604267842, "itemType": "weight", "date": "2026-10-25", "startTimestampLocal": null},
+            {"id": null, "itemType": "nap", "date": "2026-10-25"},
+            {"itemType": "userTimeChanged", "date": "2026-10-25"},
+            {"id": 1, "itemType": "somethingNew", "date": "2026-10-25"}
+        ]
+    }"#;
+
+    let items = serde_json::from_str::<CalendarMonth>(json)
+        .unwrap()
+        .calendar_items;
+
+    let date = day(2026, 10, 25);
+    let start = date.and_hms_opt(9, 57, 5).unwrap();
+    let start = Local.from_local_datetime(&start).earliest().unwrap();
+    let item = |id, item_type, start_timestamp_local| CalendarItem {
+        id,
+        item_type,
+        date,
+        start_timestamp_local,
+    };
+    assert_eq!(
+        items,
+        [
+            item(
+                Some(24844421015),
+                CalendarItemType::Activity,
+                Some(start.timestamp() as u32)
+            ),
+            item(Some(1793604267842), CalendarItemType::Weight, None),
+            item(None, CalendarItemType::Nap, None),
+            item(None, CalendarItemType::UserTimeChanged, None),
+            item(Some(1), CalendarItemType::Unknown, None),
+        ]
+    );
+}
+
+#[test]
+fn calendar_start_without_fraction_is_accepted() {
+    let json = r#"{"itemType": "activity", "date": "2026-10-25", "startTimestampLocal": "2026-10-25T09:57:05"}"#;
+
+    let item: CalendarItem = serde_json::from_str(json).unwrap();
+
+    assert!(item.start_timestamp_local.is_some());
+}
+
+#[test]
+fn invalid_calendar_start_is_rejected() {
+    let json =
+        r#"{"itemType": "activity", "date": "2026-10-25", "startTimestampLocal": "yesterday"}"#;
+
+    assert!(serde_json::from_str::<CalendarItem>(json).is_err());
+}
+
+#[test]
+fn calendar_path_numbers_months_from_zero() {
+    assert_eq!(
+        calendar_month_path(2026, 1).unwrap(),
+        "/calendar-service/year/2026/month/0"
+    );
+    assert_eq!(
+        calendar_month_path(2026, 12).unwrap(),
+        "/calendar-service/year/2026/month/11"
+    );
+}
+
+#[test]
+fn calendar_path_rejects_months_out_of_range() {
+    assert!(calendar_month_path(2026, 0).is_err());
+    assert!(calendar_month_path(2026, 13).is_err());
+}
+
+#[test]
+fn calendar_months_within_a_single_month() {
+    assert_eq!(
+        calendar_months(day(2026, 10, 2), day(2026, 10, 31)),
+        [(2026, 10)]
+    );
+}
+
+#[test]
+fn calendar_months_cross_the_year() {
+    assert_eq!(
+        calendar_months(day(2026, 12, 15), day(2027, 1, 14)),
+        [(2026, 12), (2027, 1)]
+    );
+}
+
+#[test]
+fn thirty_days_can_span_three_months() {
+    assert_eq!(
+        calendar_months(day(2026, 1, 30), day(2026, 3, 1)),
+        [(2026, 1), (2026, 2), (2026, 3)]
+    );
+}
+
+#[test]
+fn calendar_page_keeps_only_its_month_inside_the_window() {
+    let item = |id, date| CalendarItem {
+        id: Some(id),
+        item_type: CalendarItemType::Activity,
+        date,
+        start_timestamp_local: None,
+    };
+    let page = vec![
+        item(1, day(2026, 9, 30)),
+        item(2, day(2026, 10, 2)),
+        item(3, day(2026, 10, 3)),
+        item(4, day(2026, 11, 2)),
+        item(5, day(2026, 11, 3)),
+    ];
+
+    let kept = |year, month| -> Vec<_> {
+        calendar_page_items(
+            page.clone(),
+            year,
+            month,
+            day(2026, 10, 3),
+            day(2026, 11, 2),
+        )
+        .into_iter()
+        .map(|i| i.id.unwrap())
+        .collect()
+    };
+
+    assert_eq!(kept(2026, 10), [3]);
+    assert_eq!(kept(2026, 11), [4]);
 }

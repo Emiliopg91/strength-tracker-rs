@@ -28,7 +28,10 @@ use crate::{
     },
     logic::{
         connect::send_workout_connect,
-        devices::{delete_pending_from_connected, push_pending_to_connected},
+        devices::{
+            delete_pending_from_connected, push_pending_to_usb,
+            send_enabled_workout_to_connect_devices,
+        },
         notifications::show_notification,
         report_error, row_f64, row_int, row_text, run_blocking,
     },
@@ -275,6 +278,7 @@ pub async fn get_workout_details(
 #[traced_command]
 #[tauri::command]
 pub async fn set_workout_status(app: AppHandle, workout: &str, status: bool) -> Result<(), String> {
+    let name = workout;
     let workout = workout.to_string();
     let res = run_blocking(&app, move |database| {
         database
@@ -308,7 +312,8 @@ pub async fn set_workout_status(app: AppHandle, workout: &str, status: bool) -> 
 
     if res.is_ok() {
         if status {
-            push_pending_to_connected(&app).await;
+            push_pending_to_usb(&app).await;
+            send_enabled_workout_to_connect_devices(&app, name).await;
         } else {
             delete_pending_from_connected(&app).await;
         }
@@ -399,7 +404,7 @@ pub async fn save_workout(
                 let _ = send_workout_connect(&app, &connect, &settings, &name_cl).await;
             }
             if edit {
-                push_pending_to_connected(&app).await;
+                push_pending_to_usb(&app).await;
             }
             Ok(())
         }

@@ -11,6 +11,7 @@ use tauri_plugin_log::log::{error, info};
 
 use crate::{
     ConnectLock, SettingsLock,
+    connect::client::CalendarItemType,
     dao::{
         body_metric::BodyMetricRepository,
         device::{self, Device, DeviceRepository},
@@ -32,11 +33,6 @@ use crate::{
     utils::{constants, translations::translate},
 };
 
-//31-aug-2026 UTC
-const MIN_DATE: u32 = 1788134400;
-//1 day
-const SYNC_OVERLAP: u32 = 86_400;
-
 #[traced_command]
 #[tauri::command]
 pub async fn import_from_connect(
@@ -49,48 +45,61 @@ pub async fn import_from_connect(
 
     let app_cpy = app.clone();
     let res: Result<_, String> = async {
-        let (mut device, from_date, existing) = run_blocking(&app, |database| {
+        let (mut device, existing) = run_blocking(&app, |database| {
             let device = DeviceRepository::select()
                 .where_(Where::Eq(device::entity::columns::SERIAL, "connect".into()))
                 .fetch_one(database)?
                 .unwrap();
 
-            // Overlap covers activities uploaded out of order; those already stored are skipped
-            let mark = device.last_activity_sync.unwrap_or(MIN_DATE);
-            let from_date = mark.saturating_sub(SYNC_OVERLAP).max(MIN_DATE);
-
             let existing: BTreeSet<u32> = database.run_in_connection(|conn| {
                 Ok(SessionRepository::select()
                     .columns(&[session::entity::columns::DATE])
-                    .where_(Where::Gte(session::entity::columns::DATE, from_date.into()))
                     .fetch_in(conn)?
                     .iter()
                     .map(|row| row_int(row, session::entity::columns::DATE.as_ref()) as u32)
                     .collect())
             })?;
 
-            Ok((device, from_date, existing))
+            Ok((device, existing))
         })
         .map_err(|e: DatabaseError| e.to_string())
         .await?;
+
+        let mut connect = connect.lock().await;
+
+        let calendar_items = connect
+            .list_recent_calendar_items()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        let pending: Vec<u64> = calendar_items
+            .iter()
+            .filter_map(|e| {
+                if e.item_type == CalendarItemType::Activity
+                    && let Some(date) = e.start_timestamp_local
+                    && !existing.contains(&date)
+                {
+                    e.id
+                } else {
+                    None
+                }
+            })
+            .collect();
 
         let dst_dir = new_pending_dir(&constants::PENDING_DOWNLOAD_SESSIONS_FOLDER, &device.serial);
         tokio::fs::create_dir_all(&dst_dir)
             .await
             .map_err(|e| e.to_string())?;
 
-        let newest = connect
-            .lock()
-            .await
-            .download_activities(from_date, &existing, &dst_dir)
+        connect
+            .download_activities(&pending, &dst_dir)
             .await
             .map_err(|e| e.to_string())?;
 
         // The mark only follows what Connect has listed, so activities uploaded late are not missed
-        let sync_mark = newest.filter(|&newest| Some(newest) > device.last_activity_sync);
         let imported_sessions = tokio::task::spawn_blocking(move || {
             let db = app_cpy.state::<DatabasePool>();
-            import_pending_sessions(&db, &dst_dir, &mut device, lang_cl, sync_mark)
+            import_pending_sessions(&db, &dst_dir, &mut device, lang_cl, None)
         })
         .await
         .expect("blocking DB task panicked")
@@ -421,7 +430,7 @@ pub async fn send_to_connect(
     let res: Result<_, Box<dyn std::error::Error>> = async {
         _send_to_connect(&app, workout, serial).await?;
 
-        // Register the pair so later changes (e.g. progressions) get re-sent to this device
+        // Register the pair so later changes (e.g. progressions) get re-sent once plugged by USB
         let mut entry = WorkoutDevice {
             device: serial.to_string(),
             workout: workout.to_string(),

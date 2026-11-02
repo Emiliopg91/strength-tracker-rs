@@ -195,45 +195,86 @@ async fn with_loading(app: &AppHandle, sync: impl Future<Output = usize>) {
     }
 }
 
-/// Uploads the pending workouts of every currently reachable device: those plugged in by USB
-/// and, if logged in, those linked to the Connect account.
-pub async fn push_pending_to_connected(app: &AppHandle) {
-    let mut serials: Vec<String> = Vec::new();
-
+/// Uploads the pending workouts of every device plugged in by USB. The rest keep them pending for
+/// the next plug: Connect only gets the workout itself, never a delivery to a device.
+pub async fn push_pending_to_usb(app: &AppHandle) {
     let mtp_client = app.state::<MtpLock>();
     // Bound in its own statement so the MTP lock is released before pushing
     let connected = mtp_client.lock().await.get_connected_devices().await;
     match connected {
-        Ok(devices) => serials.extend(devices.into_iter().map(|d| d.serial)),
+        Ok(devices) => {
+            for device in devices {
+                push_pending_workouts(app, &device.serial).await;
+            }
+        }
         Err(e) => error!("Error listing connected devices: {e}"),
     }
+}
 
-    let logged = app
+/// Devices linked to the Connect account where `workout` is still pending.
+pub fn pending_connect_devices(
+    conn: &rusqlite_orm::rusqlite::Connection,
+    workout: &str,
+) -> rusqlite_orm::errors::Result<Vec<String>> {
+    Ok(WorkoutDeviceRepository::select()
+        .columns(&[workout_device::entity::columns::DEVICE])
+        .where_(Where::And(vec![
+            Where::Eq(workout_device::entity::columns::WORKOUT, workout.into()),
+            Where::Eq(workout_device::entity::columns::PENDING, true.into()),
+            Where::InSub(
+                workout_device::entity::columns::DEVICE,
+                DeviceRepository::select()
+                    .distinct(&[device::entity::columns::SERIAL])
+                    .where_(Where::Eq(device::entity::columns::CONNECT, true.into()))
+                    .to_subquery(),
+            ),
+        ]))
+        .fetch_in(conn)?
+        .iter()
+        .filter_map(
+            |r| match r.get(workout_device::entity::columns::DEVICE.as_ref()) {
+                Some(Value::Text(serial)) => Some(serial.clone()),
+                _ => None,
+            },
+        )
+        .collect())
+}
+
+/// Delivers a just enabled `workout` through Connect to the linked devices still waiting for it,
+/// so call it after `push_pending_to_usb` for USB to take precedence.
+pub async fn send_enabled_workout_to_connect_devices(app: &AppHandle, workout: &str) {
+    if app
         .state::<ConnectLock>()
         .lock()
         .await
         .logged_user()
-        .is_some();
-    if logged {
-        let connect_devices = run_blocking(app, |db| {
-            db.run_in_connection(|conn| {
-                Ok(DeviceRepository::select()
-                    .where_(Where::Eq(device::entity::columns::CONNECT, true.into()))
-                    .fetch_in(conn)?)
-            })
-        })
-        .await;
-        match connect_devices {
-            Ok(devices) => serials.extend(devices.into_iter().map(|d| d.serial)),
-            Err(e) => error!("Error listing Connect devices: {e}"),
-        }
+        .is_none()
+    {
+        return;
     }
 
-    serials.sort();
-    serials.dedup();
-    // Each push picks USB or Connect on its own
+    // Held for the whole run: a waiting caller re-reads the queue after this one has cleared it
+    let _guard = PUSH_LOCK.lock().await;
+    let name = workout.to_string();
+    let serials = match run_blocking(app, move |db| {
+        db.run_in_connection(|conn| Ok(pending_connect_devices(conn, &name)?))
+    })
+    .await
+    {
+        Ok(serials) => serials,
+        Err(e) => {
+            error!("Error fetching Connect devices waiting for workout '{workout}': {e}");
+            return;
+        }
+    };
+
+    let lang = app.state::<SettingsLock>().read().unwrap().language;
     for serial in serials {
-        push_pending_workouts(app, &serial).await;
+        if let Err(e) = _send_to_connect(app, workout, &serial).await {
+            error!("Error pushing pending workout '{workout}' to {serial}: {e}");
+            continue;
+        }
+        finish_push(app, workout, &serial, lang).await;
     }
 }
 
@@ -255,7 +296,7 @@ pub async fn delete_pending_from_connected(app: &AppHandle) {
 /// Serializes pending pushes so concurrent triggers don't upload the same queue twice.
 static PUSH_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
-/// Uploads to `device` the workouts queued while it was disconnected, removing each queue entry once sent.
+/// Uploads by USB to `device` the workouts queued while it was unplugged, removing each queue entry once sent.
 async fn push_pending_workouts(app: &AppHandle, serial: &str) {
     // Held for the whole run: a waiting caller re-reads the queue after this one has cleared it
     let _guard = PUSH_LOCK.lock().await;
@@ -303,88 +344,49 @@ async fn push_pending_workouts(app: &AppHandle, serial: &str) {
         return;
     }
 
-    let serial_q = serial.clone();
-    let device =
-        match run_blocking(app, move |db| DeviceRepository::select_by_id(db, &serial_q)).await {
-            Ok(Some(device)) => device,
-            Ok(None) => {
-                error!("Device {serial} not found for pushing pending workouts");
-                return;
-            }
-            Err(e) => {
-                error!("Error fetching device {serial} for pushing pending workouts: {e}");
-                return;
-            }
-        };
-
-    // USB takes precedence when plugged in; otherwise fall back to Connect if logged in
-    let via_usb = device.usb
-        && app
-            .state::<MtpLock>()
-            .lock()
-            .await
-            .is_device_connected(&serial)
-            .await
-            .unwrap_or_else(|e| {
-                error!("Error checking USB connection of {serial}: {e}");
-                false
-            });
-    if !via_usb
-        && !(device.connect
-            && app
-                .state::<ConnectLock>()
-                .lock()
-                .await
-                .logged_user()
-                .is_some())
-    {
-        return;
-    }
-
     let (lang, weight_unit) = {
         let state = app.state::<SettingsLock>();
         let settings = state.read().unwrap();
         (settings.language, settings.weight_unit)
     };
     for workout in pending {
-        let sent = if via_usb {
-            send_workout_to_device(app, lang, weight_unit, &workout, &serial).await
-        } else {
-            _send_to_connect(app, &workout, &serial).await
-        };
-        if let Err(e) = sent {
+        if let Err(e) = send_workout_to_device(app, lang, weight_unit, &workout, &serial).await {
             error!("Error pushing pending workout '{workout}' to {serial}: {e}");
             continue;
         }
-
-        let device = serial.clone();
-        let wkt = workout.clone();
-        if let Err(e) = run_blocking(app, move |db| {
-            db.run_in_transaction(|tx| {
-                Ok(WorkoutDeviceRepository::update()
-                    .set(workout_device::entity::columns::PENDING, false.into())
-                    .where_(Where::And(vec![
-                        Where::Eq(workout_device::entity::columns::WORKOUT, wkt.clone().into()),
-                        Where::Eq(
-                            workout_device::entity::columns::DEVICE,
-                            device.clone().into(),
-                        ),
-                    ]))
-                    .execute_in(tx)?)
-            })
-        })
-        .await
-        {
-            error!("Error clearing pending upload entry for {serial}: {e}");
-        }
-
-        info!("Workout '{workout}' sent to device {serial}");
-        show_notification(NotificationDefinition {
-            title: workout.to_string(),
-            body: translate("ok_workout_send", lang),
-            kind: NotificationKind::Temporal,
-        });
+        finish_push(app, &workout, &serial, lang).await;
     }
+}
+
+/// Removes the queue entry of a workout just sent to the device `serial` and notifies it.
+async fn finish_push(app: &AppHandle, workout: &str, serial: &str, lang: Languages) {
+    let device = serial.to_string();
+    let wkt = workout.to_string();
+    if let Err(e) = run_blocking(app, move |db| {
+        db.run_in_transaction(|tx| {
+            Ok(WorkoutDeviceRepository::update()
+                .set(workout_device::entity::columns::PENDING, false.into())
+                .where_(Where::And(vec![
+                    Where::Eq(workout_device::entity::columns::WORKOUT, wkt.clone().into()),
+                    Where::Eq(
+                        workout_device::entity::columns::DEVICE,
+                        device.clone().into(),
+                    ),
+                ]))
+                .execute_in(tx)?)
+        })
+    })
+    .await
+    {
+        error!("Error clearing pending upload entry for {serial}: {e}");
+    }
+
+    info!("Workout '{workout}' sent to device {serial}");
+    show_notification(NotificationDefinition {
+        title: workout.to_string(),
+        body: translate("ok_workout_send", lang),
+        kind: NotificationKind::Temporal,
+    });
 }
 
 /// Deletes from `device` the disabled workouts queued while it was disconnected, removing each queue entry once deleted.

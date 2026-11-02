@@ -5,7 +5,7 @@ pub mod errors;
 use crate::{
     connect::{
         client::{
-            ActivitySummary, DeviceSummary, GarminClient, GarminError, OAuth1Token, OAuth2Token,
+            CalendarItem, DeviceSummary, GarminClient, GarminError, OAuth1Token, OAuth2Token,
             SsoClient, WeightEntry, WeightRange,
         },
         errors::{ConnectError, Result},
@@ -14,10 +14,10 @@ use crate::{
     utils::constants,
 };
 use bytes::Bytes;
+use chrono::{Datelike, Local, NaiveDate};
 use futures_util::stream::{self, TryStreamExt};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::{
-    collections::BTreeSet,
     io::{Cursor, Read},
     path::Path,
     time::Duration,
@@ -30,7 +30,6 @@ const KEYRING_EMAIL: &str = "garmin-email";
 const KEYRING_OAUTH1: &str = "garmin-oauth1";
 const KEYRING_OAUTH2: &str = "garmin-oauth2";
 
-const DOWNLOAD_STEP: u8 = 100;
 const DOWNLOAD_CONCURRENCY: usize = 6;
 const WORKOUT_LIST_STEP: u8 = 100;
 const WEIGHT_CHUNK_MONTHS: u32 = 12;
@@ -38,8 +37,40 @@ const WEIGHT_EMPTY_CHUNKS_STOP: u32 = 2;
 const RETRY_ATTEMPTS: u32 = 4;
 const RETRY_BASE_DELAY: Duration = Duration::from_secs(2);
 const TOKEN_EXPIRY_MARGIN_SECS: i64 = 300;
-/// Max gap between the end of a listed activity and the date of a stored session to match them.
-const SKIP_TOLERANCE_SECS: u32 = 60;
+const CALENDAR_RECENT_DAYS: u64 = 7;
+
+/// Year and month (1-12) of every calendar page covering the days from `from` to `to`.
+pub fn calendar_months(from: NaiveDate, to: NaiveDate) -> Vec<(u16, u8)> {
+    let mut months = Vec::new();
+    let (mut year, mut month) = (from.year(), from.month());
+    while (year, month) <= (to.year(), to.month()) {
+        months.push((year as u16, month as u8));
+        (year, month) = if month == 12 {
+            (year + 1, 1)
+        } else {
+            (year, month + 1)
+        };
+    }
+    months
+}
+
+/// Items of the page of `month` that fall between `from` and `to`. A page also holds days of the
+/// adjacent months, which are left to their own pages so no item is listed twice.
+pub fn calendar_page_items(
+    page: Vec<CalendarItem>,
+    year: u16,
+    month: u8,
+    from: NaiveDate,
+    to: NaiveDate,
+) -> Vec<CalendarItem> {
+    page.into_iter()
+        .filter(|item| {
+            item.date.year() == i32::from(year)
+                && item.date.month() == u32::from(month)
+                && (from..=to).contains(&item.date)
+        })
+        .collect()
+}
 
 /// Workout entry returned from the workout list and create endpoints
 #[derive(Debug, Clone, Deserialize)]
@@ -208,20 +239,15 @@ impl ConnectClient {
         }
     }
 
-    /// Downloads the activities started since `from`, except those already stored as a session in
-    /// `skip`. Sessions are dated at their end, so an activity matches the session dated at its
-    /// start plus its elapsed duration, give or take `SKIP_TOLERANCE_SECS`.
-    /// Returns the start of the newest activity listed, skipped ones included.
-    pub async fn download_activities<P>(
-        &mut self,
-        from: u32,
-        skip: &BTreeSet<u32>,
-        dst_path: P,
-    ) -> Result<Option<u32>>
+    /// Downloads the activities with the given ids into `dst_path`.
+    pub async fn download_activities<P>(&mut self, ids: &[u64], dst_path: P) -> Result<()>
     where
         P: AsRef<Path>,
     {
-        info!("Listing activities...");
+        if ids.is_empty() {
+            info!("Activities up to date");
+            return Ok(());
+        }
 
         self.refresh_token().await?;
 
@@ -235,88 +261,17 @@ impl ConnectClient {
                 ConnectError::FetchActivities(e),
             )
         })?;
-        let start_date = chrono::DateTime::from_timestamp(from as i64, 0)
-            .ok_or_else(|| {
-                log_error(
-                    "Error parsing start timestamp",
-                    ConnectError::InvalidTimestamp(from),
-                )
-            })?
-            .with_timezone(&chrono::Local)
-            .format("%Y-%m-%d");
 
-        let mut activities: Vec<(ActivitySummary, Option<u32>, Option<u32>)> = Vec::new();
-        'pages: loop {
-            let path = format!(
-                "/activitylist-service/activities/search/activities?limit={}&start={}&startDate={}",
-                DOWNLOAD_STEP,
-                activities.len(),
-                start_date
-            );
-            let result: Vec<ActivitySummary> = with_retry(|| client.get_json(oauth2, &path))
-                .await
-                .map_err(|e| {
-                    log_error(
-                        "Error fetching activity page",
-                        ConnectError::FetchActivities(e),
-                    )
-                })?;
-            let page_len = result.len();
-
-            // Results come newest first: the first one older than `from` ends the listing
-            for activity in result {
-                // GMT, as the local start is in the timezone where the activity was recorded
-                let start = activity
-                    .start_time_gmt
-                    .as_deref()
-                    .and_then(|t| {
-                        chrono::NaiveDateTime::parse_from_str(t, "%Y-%m-%d %H:%M:%S").ok()
-                    })
-                    .map(|t| t.and_utc().timestamp() as u32);
-                if let Some(start) = start
-                    && start < from
-                {
-                    break 'pages;
-                }
-                let end = start
-                    .zip(activity.elapsed_duration.or(activity.duration))
-                    .map(|(start, duration)| start + duration.round() as u32);
-                activities.push((activity, start, end));
-            }
-
-            if page_len < DOWNLOAD_STEP as usize {
-                break;
-            }
-        }
-        info!("Listed {} activities.", activities.len());
-
-        let newest = activities.iter().filter_map(|(_, start, _)| *start).max();
-        let activities: Vec<ActivitySummary> = activities
-            .into_iter()
-            .filter(|(_, _, end)| {
-                !end.is_some_and(|end| {
-                    skip.range(end.saturating_sub(SKIP_TOLERANCE_SECS)..=end + SKIP_TOLERANCE_SECS)
-                        .next()
-                        .is_some()
-                })
+        info!("Downloading {} activities...", ids.len());
+        let dst_path = dst_path.as_ref();
+        stream::iter(ids.iter().map(Ok))
+            .try_for_each_concurrent(DOWNLOAD_CONCURRENCY, |&id| {
+                Self::download_activity(&client, oauth2, id, dst_path)
             })
-            .map(|(activity, _, _)| activity)
-            .collect();
+            .await?;
+        info!("Downloaded {} activities.", ids.len());
 
-        if !activities.is_empty() {
-            info!("Downloading {} activities...", activities.len());
-            let dst_path = dst_path.as_ref();
-            stream::iter(activities.iter().map(Ok))
-                .try_for_each_concurrent(DOWNLOAD_CONCURRENCY, |activity| {
-                    Self::download_activity(&client, oauth2, activity.activity_id, dst_path)
-                })
-                .await?;
-            info!("Downloaded {} activities.", activities.len());
-        } else {
-            info!("Activities up to date");
-        }
-
-        Ok(newest)
+        Ok(())
     }
 
     /// Lists every device registered to the Connect account.
@@ -342,6 +297,40 @@ impl ConnectClient {
         info!("Listed {} devices.", devices.len());
 
         Ok(devices)
+    }
+
+    /// Lists the calendar items of the last `CALENDAR_RECENT_DAYS` days.
+    pub async fn list_recent_calendar_items(&mut self) -> Result<Vec<CalendarItem>> {
+        info!("Listing recent calendar items...");
+
+        self.refresh_token().await?;
+
+        let (Some(oauth1), Some(oauth2)) = (&self.oauth1, &self.oauth2) else {
+            return Err(ConnectError::LoginRequired());
+        };
+
+        let client = GarminClient::new(&oauth1.domain).map_err(|e| {
+            log_error(
+                "Error creating Garmin client",
+                ConnectError::FetchCalendar(e),
+            )
+        })?;
+
+        let to = Local::now().date_naive();
+        let from = to - chrono::Days::new(CALENDAR_RECENT_DAYS);
+
+        let mut items = Vec::new();
+        for (year, month) in calendar_months(from, to) {
+            let page = with_retry(|| client.list_calendar_month(oauth2, year, month))
+                .await
+                .map_err(|e| {
+                    log_error("Error fetching calendar", ConnectError::FetchCalendar(e))
+                })?;
+            items.extend(calendar_page_items(page, year, month, from, to));
+        }
+        info!("Listed {} calendar items.", items.len());
+
+        Ok(items)
     }
 
     /// Lists every workout stored in Connect.

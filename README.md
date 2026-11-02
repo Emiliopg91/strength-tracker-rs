@@ -27,7 +27,7 @@ No account required, no cloud, no Garmin Express (which doesn't exist on Linux a
 - **Double progression per exercise** — Set a rep range such as `8-10-12` and a weight increment. Your weakest set sets the pace: once every set reaches the top of the range, the app suggests adding the increment and starting again from the bottom; otherwise it moves you to the next rep step.
 - **Only when it's earned** — No suggestion while any set is below the range or sets were done at mixed weights. Progression can be turned off per exercise.
 - **Unilateral aware** — Rep ranges count per side for single-arm or single-leg exercises.
-- **One click to apply** — Accepted suggestions update your workouts and are pushed to the watch on its next connection, or its next Garmin Connect sync.
+- **One click to apply** — Accepted suggestions update your workouts, which are pushed to the watch on its next USB connection and kept up to date in your Garmin Connect library.
 
 ## Strength analysis
 
@@ -49,13 +49,13 @@ No account required, no cloud, no Garmin Express (which doesn't exist on Linux a
 ## Device sync
 
 - **USB (MTP) sync** — Auto-detects Garmin devices and downloads new activities.
-- **Workout upload queue** — Workouts sent or changed while the watch is disconnected are pushed automatically on its next connection — or queued in Garmin Connect for its next sync, if you're signed in.
+- **Workout upload queue** — Workouts sent or changed while the watch is disconnected are pushed automatically on its next USB connection. Garmin Connect only gets the updated copy in your library, not a new delivery to the watch.
 - **Workout import** — Import workout steps back from the device.
 - **Print workouts** — Print a workout or save it as PDF to take to the gym.
 - **Manual `.FIT` import** — Import activity files from disk.
-- **Garmin Connect import** — Optional, on-demand download of new activities and weigh-ins (including body composition from smart scales) since the last sync. Sign in once through a `zenity` dialog; the session is kept in the system keyring and refreshed automatically.
+- **Garmin Connect import** — Optional, on-demand download of the last 7 days' activities not yet imported, and of new weigh-ins (including body composition from smart scales) since the last sync. Sign in once through a `zenity` dialog; the session is kept in the system keyring and refreshed automatically.
 - **Garmin Connect workouts** — While signed in, saved workouts and applied progressions are mirrored to your Garmin Connect workout library.
-- **Wireless send** — Watches linked to your Garmin Connect account show up next to the plugged-in ones; send a workout to one and it lands on the watch on its next sync, no cable needed. Only watches that support strength workouts are listed.
+- **Wireless send** — Watches linked to your Garmin Connect account show up next to the plugged-in ones; send a workout to one and it lands on the watch on its next sync, no cable needed. Only watches that support strength workouts are listed. Re-enabling a workout sends it the same way to the linked watches still waiting for it.
 
 ## Your data, your machine
 

@@ -34,6 +34,8 @@ pub enum ConnectError {
     WriteActivity(u64, #[source] std::io::Error),
     #[error("Error fetching devices: {0}")]
     FetchDevices(#[source] crate::connect::client::GarminError),
+    #[error("Error fetching calendar: {0}")]
+    FetchCalendar(#[source] crate::connect::client::GarminError),
     #[error("Error fetching workouts: {0}")]
     FetchWorkouts(#[source] crate::connect::client::GarminError),
     #[error("Error creating workout: {0}")]

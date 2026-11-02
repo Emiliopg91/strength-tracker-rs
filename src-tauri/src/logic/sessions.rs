@@ -1,6 +1,5 @@
 use std::{
     collections::{HashMap, HashSet},
-    fs,
     path::{Path, PathBuf},
     sync::Mutex,
     time::Duration,
@@ -547,7 +546,7 @@ where
                     use std::path::PathBuf;
 
                     let file = PathBuf::from(format!("{}.txt", file.as_ref().display()));
-                    let _ = fs::remove_file(file);
+                    let _ = std::fs::remove_file(file);
                 }
 
                 true

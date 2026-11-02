@@ -1,5 +1,7 @@
 mod connect;
 mod dao;
+#[cfg(debug_assertions)]
+pub mod debug;
 mod dto;
 mod fit;
 mod logic;
@@ -11,8 +13,6 @@ mod utils;
 #[cfg(test)]
 mod tests;
 
-#[cfg(debug_assertions)]
-use std::path::Path;
 use std::{fs, process::exit, sync::RwLock, time::Duration};
 
 use rusqlite_orm::database::{
@@ -67,52 +67,6 @@ use crate::{
     utils::{constants, single_instance::SingleInstance, translations::translate},
 };
 
-#[cfg(debug_assertions)]
-use crate::fit::parser::FitParser;
-
-#[cfg(debug_assertions)]
-pub fn decode_files<P>(paths: &[P])
-where
-    P: AsRef<Path>,
-{
-    for path in paths {
-        let res: Result<(), Box<dyn std::error::Error>> = match FitParser::from_file(path) {
-            Ok(stream) => match stream.debug_dump() {
-                Ok(_) => Ok(()),
-                Err(e) => Err(e),
-            },
-            Err(e) => Err(Box::new(e)),
-        };
-        if let Err(e) = res {
-            eprintln!(
-                "Error handling '{}': \n  {}",
-                path.as_ref().display(),
-                e.as_ref()
-            )
-        }
-    }
-}
-
-#[cfg(debug_assertions)]
-pub fn encode_files<P>(paths: &[P])
-where
-    P: AsRef<Path>,
-{
-    for path in paths {
-        if let Err(e) = crate::fit::parser::debug_encode(path) {
-            eprintln!("Error handling '{}': \n  {}", path.as_ref().display(), e)
-        }
-    }
-}
-
-/// Debug-only incremental dump of the connected Garmin device into `./dump` (`--dump-device`).
-#[cfg(debug_assertions)]
-pub fn dump_device() {
-    if let Err(e) = crate::mtp::dump::run(Path::new("dump")) {
-        eprintln!("Error dumping device: {e}");
-    }
-}
-
 pub fn check_running() -> bool {
     SingleInstance::is_app_running().0
 }
@@ -166,6 +120,33 @@ fn initialize(app: &AppHandle) -> (DatabasePool, Settings, ConnectClient, MtpCli
             let mtp_client = MtpClient {};
 
             //merge_sessions(&database, _, _);
+
+            /*
+            let _ = database.run_in_transaction(|tx| {
+                let mut exercises = HashSet::new();
+                SetRepository::select()
+                    .distinct(&[set::entity::columns::EX_CAT, set::entity::columns::EX_ID])
+                    .fetch_in(tx)?
+                    .iter()
+                    .map(|r| {
+                        (
+                            match r.get(set::entity::columns::EX_CAT.as_ref()) {
+                                Some(Value::Int64(val)) => *val as u16,
+                                _ => unreachable!(),
+                            },
+                            match r.get(set::entity::columns::EX_ID.as_ref()) {
+                                Some(Value::Int64(val)) => *val as u16,
+                                _ => unreachable!(),
+                            },
+                        )
+                    })
+                    .for_each(|e| {
+                        exercises.insert(e);
+                        ()
+                    });
+                Ok(update_prs(tx, exercises, &[], None)?)
+            });
+            */
 
             (database, settings, connect_client, mtp_client)
         }
