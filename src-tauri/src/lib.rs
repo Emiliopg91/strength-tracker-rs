@@ -30,6 +30,7 @@ use tauri_plugin_log::{
     log::{LevelFilter, debug, error, info},
 };
 
+#[cfg(debug_assertions)]
 use crate::logic::exercises::update_all_prs;
 use crate::{
     connect::ConnectClient,

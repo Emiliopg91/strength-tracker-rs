@@ -257,6 +257,7 @@ pub async fn get_exercises_catalog(app: AppHandle) -> Result<HashMap<u16, Vec<u1
     .map_err(|e: DatabaseError| e.to_string())
 }
 
+#[cfg(debug_assertions)]
 pub fn update_all_prs(
     tx: &rusqlite_orm::rusqlite::Transaction,
 ) -> rusqlite_orm::errors::Result<()> {
