@@ -18,8 +18,8 @@ use crate::{
         notifications::{NotificationDefinition, NotificationKind},
     },
     logic::{
-        devices::start_device_watcher, notifications::show_notification, report_error,
-        sessions::update_pending_geolocation,
+        connect::get_devices_from_connect, devices::start_device_watcher,
+        notifications::show_notification, report_error, sessions::update_pending_geolocation,
     },
     udev::UdevManager,
     utils::translations::{Languages, TRANSLATIONS, translate, translate_and_replace},
@@ -39,6 +39,7 @@ pub async fn get_settings(settings: State<'_, SettingsLock>) -> Result<Settings,
 pub async fn notify_frontend_ready(app: AppHandle) {
     info!("UI ready");
 
+    get_devices_from_connect(&app).await;
     start_device_watcher(&app);
 
     if !app.state::<SettingsLock>().read().unwrap().start_into_tray {

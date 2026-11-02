@@ -141,11 +141,7 @@ impl WorkoutStep {
                     } else {
                         EndCondition::lap_button()
                     },
-                    end_condition_value: if let Some(time) = step.time.flatten() {
-                        Some((time / 1000) as f64)
-                    } else {
-                        None
-                    },
+                    end_condition_value: step.time.flatten().map(|time| (time / 1000) as f64),
                     description: step.notes.clone(),
                     category: None,
                     exercise_name: None,
@@ -169,11 +165,7 @@ impl WorkoutStep {
                         end_condition_value: if let Some(reps) = step.reps.flatten() {
                             Some(reps as f64)
                         } else {
-                            if let Some(time) = step.time.flatten() {
-                                Some((time / 1000) as f64)
-                            } else {
-                                None
-                            }
+                            step.time.flatten().map(|time| (time / 1000) as f64)
                         },
                         description: step.notes.clone(),
                         category: Some(
@@ -193,11 +185,7 @@ impl WorkoutStep {
                         } else {
                             None
                         },
-                        weight_value: if let Some(weight) = step.weight.clone() {
-                            Some(weight as f64)
-                        } else {
-                            None
-                        },
+                        weight_value: step.weight.map(|weight| weight as f64),
                     }))
                 }
                 workout_step::StepType::Repeat => {

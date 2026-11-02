@@ -1,7 +1,7 @@
 use crate::{
     dao::{
-        additional_data::AdditionalData, exercise::Exercise, session::Session, set::Set,
-        sport::Sport, sub_sport::SubSport,
+        additional_data::AdditionalData, device::Device, exercise::Exercise, session::Session,
+        set::Set, sport::Sport, sub_sport::SubSport,
     },
     fit::parser::{
         FitParser,
@@ -24,6 +24,7 @@ impl TryFrom<FitParser> for Session {
         let mut laps = Vec::new();
         let mut workout = WorkoutAccumulator::default();
         let mut max_heart_rate = None;
+        let mut device = None;
 
         let path_string = value.borrow_path().display().to_string();
 
@@ -39,6 +40,12 @@ impl TryFrom<FitParser> for Session {
                             // A non-strength workout only leaves the session without workout_obj
                             let _ = workout.set_workout(&workout_obj);
                             session_data.set_workout(workout_obj);
+                        }
+                        MesgNum::DEVICE_INFO => {
+                            let device_info_obj = mesgdef::DeviceInfo::from(msg);
+                            device = Some(Device::serial_from_unit_id(
+                                device_info_obj.serial_number as u64,
+                            ))
                         }
                         MesgNum::SESSION => {
                             let session_obj = mesgdef::Session::from(msg);
@@ -151,7 +158,7 @@ impl TryFrom<FitParser> for Session {
             sub_sport: session_data.sub_sport_obj.id,
             sub_sport_obj: Some(session_data.sub_sport_obj),
             laps,
-            device: None,
+            device,
             device_obj: None,
             additional_data,
             show_exercises_chart: true,

@@ -1,5 +1,15 @@
 use serde::{Deserialize, Serialize};
 
+/// Device entry returned from the device registration endpoint
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeviceSummary {
+    pub display_name: String,
+    pub unit_id: u64,
+    pub workout_capable: bool,
+    pub strength_workout_capable: bool,
+}
+
 /// Activity summary returned from the activity list endpoint
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

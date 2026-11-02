@@ -77,6 +77,7 @@ export class WorkoutUtils {
                 ex_id: null,
                 weight: null,
                 notes: step.notes && step.notes!.length > 0 ? step.notes : "",
+                exercise: null,
             };
         } else {
             return {
@@ -96,6 +97,7 @@ export class WorkoutUtils {
                         ? Math.round(fromKg(step.weight) * 10) / 10
                         : null,
                 notes: step.notes && step.notes!.length > 0 ? step.notes : "",
+                exercise: null,
             };
         }
     }
@@ -160,6 +162,7 @@ export class WorkoutUtils {
                     time: null,
                     weight: null,
                     notes: "",
+                    exercise: null,
                 });
             } else {
                 result.push(
@@ -197,6 +200,7 @@ export class WorkoutUtils {
                     leaf.notes !== null && leaf.notes.length > 0
                         ? leaf.notes
                         : null,
+                exercise: null,
             };
         } else {
             return {
@@ -218,6 +222,7 @@ export class WorkoutUtils {
                     leaf.notes !== null && leaf.notes.length > 0
                         ? leaf.notes
                         : null,
+                exercise: null,
             };
         }
     }
@@ -230,6 +235,7 @@ export class WorkoutUtils {
         reps: null,
         weight: null,
         notes: "",
+        exercise: null,
     };
 
     public static DEFAULT_EXERCISE: LeafStep = {
@@ -240,6 +246,7 @@ export class WorkoutUtils {
         reps: 8,
         weight: 0,
         notes: "",
+        exercise: null,
     };
 
     public static DEFAULT_GROUP: StepGroup = {

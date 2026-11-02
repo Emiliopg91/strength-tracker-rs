@@ -26,6 +26,7 @@ export interface DeviceListItem {
   manufacturer: string;
   model: string;
   serial_number: string;
+  strength_workout: boolean;
 }
 
 // From src-tauri/src/dao/settings.rs:200

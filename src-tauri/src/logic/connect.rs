@@ -6,23 +6,30 @@ use rusqlite_orm::{
     dao::Repository, database::DatabasePool, errors::DatabaseError, types::where_clause::Where,
 };
 use strength_tracker_rs_macros::traced_command;
-use tauri::{AppHandle, Manager, State};
-use tauri_plugin_log::log::info;
+use tauri::{AppHandle, Emitter, Manager, State};
+use tauri_plugin_log::log::{error, info};
 
 use crate::{
     ConnectLock, SettingsLock,
     dao::{
         body_metric::BodyMetricRepository,
-        device::{self, DeviceRepository},
+        device::{self, Device, DeviceRepository},
         session::{self, SessionRepository},
         workout::WorkoutRepository,
+        workout_device::{WorkoutDevice, WorkoutDeviceRepository},
     },
-    dto::connect::ConnectWorkout,
+    dto::{
+        connect::ConnectWorkout,
+        devices::DeviceListItem,
+        notifications::{NotificationDefinition, NotificationKind},
+    },
     logic::{
-        new_pending_dir, report_error, row_int, run_blocking,
+        new_pending_dir,
+        notifications::show_notification,
+        report_error, row_int, run_blocking,
         sessions::{import_pending_sessions, update_pending_geolocation},
     },
-    utils::constants,
+    utils::{constants, translations::translate},
 };
 
 //31-aug-2026 UTC
@@ -188,12 +195,22 @@ pub async fn connect_logged_user(
 
 #[traced_command]
 #[tauri::command]
-pub async fn connect_login(connect: State<'_, ConnectLock>) -> Result<Option<String>, String> {
-    let mut connect = connect.lock().await;
+pub async fn connect_login(
+    app: AppHandle,
+    connect: State<'_, ConnectLock>,
+) -> Result<Option<String>, String> {
+    let user = {
+        let mut connect = connect.lock().await;
+        connect.prompt_login().await.map_err(|e| e.to_string())?;
+        connect.logged_user()
+    };
 
-    connect.prompt_login().await.map_err(|e| e.to_string())?;
+    // Released the lock first: the discovery needs it
+    if user.is_some() {
+        get_devices_from_connect(&app).await;
+    }
 
-    Ok(connect.logged_user())
+    Ok(user)
 }
 
 #[traced_command]
@@ -211,7 +228,7 @@ pub async fn send_workout_connect(
     let weight_unit = settings.read().unwrap().weight_unit;
 
     let id = workout.to_string();
-    let mut workout = run_blocking(&app, move |database| {
+    let mut workout = run_blocking(app, move |database| {
         database.run_in_connection(move |conn| {
             let Some(mut workout) = WorkoutRepository::select_by_id_in(conn, &id)? else {
                 return Ok(None);
@@ -266,7 +283,7 @@ pub async fn send_workout_connect(
     drop(client);
 
     if workout.connect_id != original_id {
-        run_blocking(&app, |database| {
+        run_blocking(app, |database| {
             database.run_in_transaction(move |tx| Ok(workout.update_by_id_in(tx)?))
         })
         .await
@@ -274,4 +291,173 @@ pub async fn send_workout_connect(
     }
 
     Ok(())
+}
+
+/// Mirrors the workout-capable devices of the Connect account into the database: enrolls new
+/// ones, refreshes the Connect-owned fields of known ones and clears the `connect` flag of those
+/// no longer listed. Emits `device_discovered` per added or changed device
+/// Does nothing if the device list cannot be fetched.
+pub async fn get_devices_from_connect(app_orig: &AppHandle) {
+    let connect = app_orig.state::<ConnectLock>();
+
+    let devices = match connect.lock().await.list_devices().await {
+        Ok(devices) => devices,
+        Err(e) => {
+            error!("Error listing Connect devices: {e}");
+            return;
+        }
+    };
+
+    let listed: Vec<Device> = devices
+        .iter()
+        .filter(|d| d.workout_capable)
+        .map(Device::from)
+        .collect();
+
+    let app = app_orig.clone();
+    let res = run_blocking(app_orig, move |database| {
+        database.run_in_transaction(move |tx| {
+            for mut dao in listed.iter().cloned() {
+                match DeviceRepository::select_by_id_in(tx, &dao.serial)? {
+                    None => {
+                        DeviceRepository::insert().item(&mut dao).execute_in(tx)?;
+                    }
+                    Some(db)
+                        if !db.connect
+                            || db.model != dao.model
+                            || db.strength_workout != dao.strength_workout =>
+                    {
+                        DeviceRepository::update()
+                            .set(device::entity::columns::CONNECT, true.into())
+                            .set(device::entity::columns::MODEL, dao.model.clone().into())
+                            .set(
+                                device::entity::columns::STRENGTH_WORKOUT,
+                                dao.strength_workout.into(),
+                            )
+                            .where_(Where::Eq(
+                                device::entity::columns::SERIAL,
+                                dao.serial.clone().into(),
+                            ))
+                            .execute_in(tx)?;
+                    }
+                    Some(_) => {}
+                }
+
+                let payload: DeviceListItem = (&dao).into();
+                let _ = app.emit("device_discovered", payload);
+            }
+
+            let removed: Vec<Device> = DeviceRepository::select()
+                .where_(Where::Eq(device::entity::columns::CONNECT, true.into()))
+                .fetch_in(tx)?
+                .into_iter()
+                .filter(|db| !listed.iter().any(|d| d.serial == db.serial))
+                .collect();
+
+            if !removed.is_empty() {
+                DeviceRepository::update()
+                    .set(device::entity::columns::CONNECT, false.into())
+                    .where_(Where::In(
+                        device::entity::columns::SERIAL,
+                        removed.iter().map(|d| d.serial.clone().into()).collect(),
+                    ))
+                    .execute_in(tx)?;
+            }
+
+            Ok(())
+        })
+    })
+    .await;
+
+    match res {
+        Ok(()) => {}
+        Err(e) => error!("Error syncing Connect devices: {e}"),
+    }
+}
+
+/// Queues `workout` in Connect for delivery to the device `serial`, first uploading the workout
+/// to Connect if it has no Connect id yet.
+pub async fn _send_to_connect(app: &AppHandle, workout: &str, serial: &str) -> Result<(), String> {
+    let fetch_connect_id = || {
+        let name = workout.to_string();
+        run_blocking(app, move |database| {
+            Ok::<_, DatabaseError>(
+                WorkoutRepository::select_by_id(database, &name)?.and_then(|w| w.connect_id),
+            )
+        })
+    };
+
+    let connect_id = match fetch_connect_id().await.map_err(|e| e.to_string())? {
+        Some(id) => id,
+        None => {
+            send_workout_connect(app, &app.state(), &app.state(), workout).await?;
+            fetch_connect_id()
+                .await
+                .map_err(|e| e.to_string())?
+                .ok_or_else(|| format!("Workout {workout} has no Connect id"))?
+        }
+    };
+    let workout_id = connect_id
+        .parse::<u64>()
+        .map_err(|e| format!("Invalid Connect workout id '{connect_id}': {e}"))?;
+    let unit_id = Device::unit_id_from_serial(serial).map_err(|e| e.to_string())?;
+
+    app.state::<ConnectLock>()
+        .lock()
+        .await
+        .send_workout_to_device(workout_id, workout, unit_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[traced_command]
+#[tauri::command]
+pub async fn send_to_connect(
+    app: AppHandle,
+    settings: State<'_, SettingsLock>,
+    workout: &str,
+    serial: &str,
+) -> Result<(), String> {
+    let res: Result<_, Box<dyn std::error::Error>> = async {
+        _send_to_connect(&app, workout, serial).await?;
+
+        // Register the pair so later changes (e.g. progressions) get re-sent to this device
+        let mut entry = WorkoutDevice {
+            device: serial.to_string(),
+            workout: workout.to_string(),
+            pending: false,
+        };
+        run_blocking(&app, move |database| {
+            database.run_in_transaction(|tx| {
+                Ok(WorkoutDeviceRepository::insert()
+                    .or_replace()
+                    .item(&mut entry)
+                    .execute_in(tx)?)
+            })
+        })
+        .await?;
+
+        Ok(())
+    }
+    .await;
+
+    let lang = settings.read().unwrap().language;
+
+    match res {
+        Ok(()) => {
+            info!("Workout '{}' sent to device {}", workout, serial);
+            show_notification(NotificationDefinition {
+                title: workout.to_string(),
+                body: translate("ok_workout_send", lang),
+                kind: NotificationKind::Temporal,
+            });
+            Ok(())
+        }
+        Err(e) => Err(report_error(
+            e,
+            lang,
+            "error_workout_send",
+            "Error sending workout to device",
+        )),
+    }
 }

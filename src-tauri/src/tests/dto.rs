@@ -76,6 +76,9 @@ fn session_details_with_additional_data() {
         model: "Forerunner 265".to_string(),
         last_activity_sync: None,
         last_body_metric_sync: None,
+        usb: true,
+        connect: false,
+        strength_workout: true,
     });
 
     let mut data = common::additional_data(1);

@@ -18,9 +18,9 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_log::log::{error, info};
 
 use crate::{
-    MtpLock, SettingsLock,
+    ConnectLock, MtpLock, SettingsLock,
     dao::{
-        device::{Device, DeviceRepository},
+        device::{self, Device, DeviceRepository},
         exercise::{self, ExerciseRepository},
         session::{self, SessionRepository},
         settings::WeightUnit,
@@ -34,6 +34,7 @@ use crate::{
     },
     fit::{parser::FitParser, writer::FitWriter},
     logic::{
+        connect::_send_to_connect,
         list_fit_files, new_pending_dir,
         notifications::show_notification,
         report_error, run_blocking,
@@ -131,10 +132,24 @@ async fn on_device_connected(
     };
     let db = app.state::<DatabasePool>();
     let enrol_res = db.run_in_transaction(|tx| {
-        Ok(DeviceRepository::insert()
-            .or_ignore()
-            .item(device)
-            .execute_in(tx)?)
+        let _: () = if let Some(device) = DeviceRepository::select_by_id_in(tx, &device.serial)? {
+            if !device.usb {
+                DeviceRepository::update()
+                    .set(device::entity::columns::USB, true.into())
+                    .where_(Where::Eq(
+                        device::entity::columns::SERIAL,
+                        device.serial.clone().into(),
+                    ))
+                    .execute_in(tx)
+                    .map(|_| ())?
+            }
+        } else {
+            DeviceRepository::insert()
+                .item(device)
+                .execute_in(tx)
+                .map(|_| ())?
+        };
+        Ok(())
     });
     if let Err(e) = enrol_res {
         error!(
@@ -180,18 +195,45 @@ async fn with_loading(app: &AppHandle, sync: impl Future<Output = usize>) {
     }
 }
 
-/// Uploads the pending workouts of every currently connected device.
+/// Uploads the pending workouts of every currently reachable device: those plugged in by USB
+/// and, if logged in, those linked to the Connect account.
 pub async fn push_pending_to_connected(app: &AppHandle) {
+    let mut serials: Vec<String> = Vec::new();
+
     let mtp_client = app.state::<MtpLock>();
     // Bound in its own statement so the MTP lock is released before pushing
     let connected = mtp_client.lock().await.get_connected_devices().await;
     match connected {
-        Ok(devices) => {
-            for device in devices {
-                push_pending_workouts(app, &device.serial).await;
-            }
-        }
+        Ok(devices) => serials.extend(devices.into_iter().map(|d| d.serial)),
         Err(e) => error!("Error listing connected devices: {e}"),
+    }
+
+    let logged = app
+        .state::<ConnectLock>()
+        .lock()
+        .await
+        .logged_user()
+        .is_some();
+    if logged {
+        let connect_devices = run_blocking(app, |db| {
+            db.run_in_connection(|conn| {
+                Ok(DeviceRepository::select()
+                    .where_(Where::Eq(device::entity::columns::CONNECT, true.into()))
+                    .fetch_in(conn)?)
+            })
+        })
+        .await;
+        match connect_devices {
+            Ok(devices) => serials.extend(devices.into_iter().map(|d| d.serial)),
+            Err(e) => error!("Error listing Connect devices: {e}"),
+        }
+    }
+
+    serials.sort();
+    serials.dedup();
+    // Each push picks USB or Connect on its own
+    for serial in serials {
+        push_pending_workouts(app, &serial).await;
     }
 }
 
@@ -261,13 +303,56 @@ async fn push_pending_workouts(app: &AppHandle, serial: &str) {
         return;
     }
 
+    let serial_q = serial.clone();
+    let device =
+        match run_blocking(app, move |db| DeviceRepository::select_by_id(db, &serial_q)).await {
+            Ok(Some(device)) => device,
+            Ok(None) => {
+                error!("Device {serial} not found for pushing pending workouts");
+                return;
+            }
+            Err(e) => {
+                error!("Error fetching device {serial} for pushing pending workouts: {e}");
+                return;
+            }
+        };
+
+    // USB takes precedence when plugged in; otherwise fall back to Connect if logged in
+    let via_usb = device.usb
+        && app
+            .state::<MtpLock>()
+            .lock()
+            .await
+            .is_device_connected(&serial)
+            .await
+            .unwrap_or_else(|e| {
+                error!("Error checking USB connection of {serial}: {e}");
+                false
+            });
+    if !via_usb
+        && !(device.connect
+            && app
+                .state::<ConnectLock>()
+                .lock()
+                .await
+                .logged_user()
+                .is_some())
+    {
+        return;
+    }
+
     let (lang, weight_unit) = {
         let state = app.state::<SettingsLock>();
         let settings = state.read().unwrap();
         (settings.language, settings.weight_unit)
     };
     for workout in pending {
-        if let Err(e) = send_workout_to_device(app, lang, weight_unit, &workout, &serial).await {
+        let sent = if via_usb {
+            send_workout_to_device(app, lang, weight_unit, &workout, &serial).await
+        } else {
+            _send_to_connect(app, &workout, &serial).await
+        };
+        if let Err(e) = sent {
             error!("Error pushing pending workout '{workout}' to {serial}: {e}");
             continue;
         }

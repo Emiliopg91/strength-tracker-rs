@@ -21,6 +21,10 @@ export class BackendListener {
 	  return BackendListener.inner_listen<DeviceListItem>("device_disconnected", callback);
 	}
 
+	public static onDeviceDiscovered(callback: (payload: DeviceListItem) => void): () => void {
+	  return BackendListener.inner_listen<DeviceListItem>("device_discovered", callback);
+	}
+
 	public static onFinishLoading(callback: () => void): () => void {
 	  return BackendListener.inner_listen<undefined>("finish_loading", callback);
 	}

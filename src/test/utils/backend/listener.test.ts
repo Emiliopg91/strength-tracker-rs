@@ -13,6 +13,7 @@ const device: DeviceListItem = {
     manufacturer: "Garmin",
     model: "Forerunner",
     serial_number: "123",
+    strength_workout: true,
 };
 
 describe("BackendListener", () => {

@@ -6,7 +6,7 @@ use serde::{Serialize, de::DeserializeOwned};
 
 use super::error::{GarminError, Result};
 use super::http;
-use super::models::{ActivityDetails, ActivitySummary};
+use super::models::{ActivityDetails, ActivitySummary, DeviceSummary};
 use super::tokens::OAuth2Token;
 
 /// User agent for Connect API requests
@@ -41,6 +41,12 @@ impl GarminClient {
 
     pub async fn get_activity(&self, token: &OAuth2Token, id: u64) -> Result<ActivityDetails> {
         self.get_json(token, &format!("/activity-service/activity/{}", id))
+            .await
+    }
+
+    /// List every device registered to the account.
+    pub async fn list_devices(&self, token: &OAuth2Token) -> Result<Vec<DeviceSummary>> {
+        self.get_json(token, "/device-service/deviceregistration/devices")
             .await
     }
 

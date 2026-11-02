@@ -33,7 +33,7 @@ export function WorkoutActionsMenu({
 }: Props) {
     const withLoading = useLoadingTask();
     const { translate } = useContext(I18nSettingsContext);
-    const { registeredDevices } = useContext(DeviceContext);
+    const { devices } = useContext(DeviceContext);
     const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
     const [sendMenuAnchor, setSendMenuAnchor] = useState<HTMLElement | null>(
         null,
@@ -48,9 +48,19 @@ export function WorkoutActionsMenu({
         withLoading(BackendClient.sendToDevice(workoutName, serial));
     };
 
+    const sendToConnect = (serial: string) => {
+        withLoading(BackendClient.sendToConnect(workoutName, serial));
+    };
+
     const saveAsPdf = () => {
         withLoading(BackendClient.loadWorkoutPage(workoutName));
     };
+
+    const workoutDevices = devices
+        .filter((d) => {
+            return d.strength;
+        })
+        .toSorted((a, b) => a.model.localeCompare(b.model));
 
     return (
         <>
@@ -84,7 +94,7 @@ export function WorkoutActionsMenu({
                     // The Popper is a React child, so hovering it doesn't count as leaving
                     onMouseLeave={() => setSendMenuAnchor(null)}
                     selected={Boolean(sendMenuAnchor)}
-                    disabled={registeredDevices.length == 0 || !send}
+                    disabled={workoutDevices.length == 0 || !send}
                 >
                     <ListItemText>{translate("send_to")}</ListItemText>
                     <ChevronRightIcon fontSize="small" />
@@ -96,20 +106,36 @@ export function WorkoutActionsMenu({
                     >
                         <Paper elevation={8}>
                             <MenuList>
-                                {registeredDevices.map((device, idx) => (
-                                    <MenuItem
-                                        key={"dev-" + idx}
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            closeMenus();
-                                            sendToDevice(device.serial_number);
-                                        }}
-                                    >
-                                        {device.manufacturer +
-                                            " " +
-                                            device.model}
-                                    </MenuItem>
-                                ))}
+                                {workoutDevices.map((device, idx) => {
+                                    // Plugged in USB first, then Connect; otherwise send_to_device leaves it pending for the next plug
+                                    const viaConnect =
+                                        !device.usb && device.connect;
+                                    return (
+                                        <MenuItem
+                                            key={"dev-" + idx}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                closeMenus();
+                                                if (viaConnect) {
+                                                    sendToConnect(
+                                                        device.serial_number,
+                                                    );
+                                                } else {
+                                                    sendToDevice(
+                                                        device.serial_number,
+                                                    );
+                                                }
+                                            }}
+                                        >
+                                            {device.manufacturer +
+                                                " " +
+                                                device.model +
+                                                (viaConnect
+                                                    ? " (Connect)"
+                                                    : "")}
+                                        </MenuItem>
+                                    );
+                                })}
                             </MenuList>
                         </Paper>
                     </Popper>

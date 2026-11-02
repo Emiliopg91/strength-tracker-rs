@@ -14,7 +14,9 @@ pub mod tokens;
 
 pub use api::GarminClient;
 pub use error::{GarminError, Result};
-pub use models::{ActivityDetails, ActivitySummary, ActivityType, WeightEntry, WeightRange};
+pub use models::{
+    ActivityDetails, ActivitySummary, ActivityType, DeviceSummary, WeightEntry, WeightRange,
+};
 pub use sso::SsoClient;
 pub use tokens::{OAuth1Token, OAuth2Token};
 

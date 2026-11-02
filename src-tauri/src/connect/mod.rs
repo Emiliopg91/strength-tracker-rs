@@ -5,8 +5,8 @@ pub mod errors;
 use crate::{
     connect::{
         client::{
-            ActivitySummary, GarminClient, GarminError, OAuth1Token, OAuth2Token, SsoClient,
-            WeightEntry, WeightRange,
+            ActivitySummary, DeviceSummary, GarminClient, GarminError, OAuth1Token, OAuth2Token,
+            SsoClient, WeightEntry, WeightRange,
         },
         errors::{ConnectError, Result},
     },
@@ -47,6 +47,20 @@ const SKIP_TOLERANCE_SECS: u32 = 60;
 pub struct WorkoutSummary {
     pub workout_id: u64,
     pub workout_name: String,
+}
+
+/// Entry of the device message queue, which Connect delivers on the device's next sync
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DeviceMessage<'a> {
+    device_id: u64,
+    message_url: String,
+    message_type: &'a str,
+    message_name: &'a str,
+    group_name: Option<&'a str>,
+    priority: u8,
+    file_type: &'a str,
+    meta_data_id: u64,
 }
 
 pub struct ConnectClient {
@@ -305,6 +319,31 @@ impl ConnectClient {
         Ok(newest)
     }
 
+    /// Lists every device registered to the Connect account.
+    pub async fn list_devices(&mut self) -> Result<Vec<DeviceSummary>> {
+        info!("Listing devices...");
+
+        self.refresh_token().await?;
+
+        let (Some(oauth1), Some(oauth2)) = (&self.oauth1, &self.oauth2) else {
+            return Err(ConnectError::LoginRequired());
+        };
+
+        let client = GarminClient::new(&oauth1.domain).map_err(|e| {
+            log_error(
+                "Error creating Garmin client",
+                ConnectError::FetchDevices(e),
+            )
+        })?;
+
+        let devices = with_retry(|| client.list_devices(oauth2))
+            .await
+            .map_err(|e| log_error("Error fetching devices", ConnectError::FetchDevices(e)))?;
+        info!("Listed {} devices.", devices.len());
+
+        Ok(devices)
+    }
+
     /// Lists every workout stored in Connect.
     pub async fn list_workouts(&mut self) -> Result<Vec<WorkoutSummary>> {
         info!("Listing workouts...");
@@ -385,6 +424,59 @@ impl ConnectClient {
             .await
             .map_err(|e| log_error("Error updating workout", ConnectError::UpdateWorkout(id, e)))?;
         info!("Updated workout {}.", id);
+
+        Ok(())
+    }
+
+    /// Queues the Connect workout `workout_id`, named `name`, for delivery to the device `unit_id`
+    /// on its next sync.
+    pub async fn send_workout_to_device(
+        &mut self,
+        workout_id: u64,
+        name: &str,
+        unit_id: u64,
+    ) -> Result<()> {
+        info!("Sending workout {} to device {}...", workout_id, unit_id);
+
+        self.refresh_token().await?;
+
+        let (Some(oauth1), Some(oauth2)) = (&self.oauth1, &self.oauth2) else {
+            return Err(ConnectError::LoginRequired());
+        };
+
+        let client = GarminClient::new(&oauth1.domain).map_err(|e| {
+            log_error(
+                "Error creating Garmin client",
+                ConnectError::SendWorkout(workout_id, unit_id, e),
+            )
+        })?;
+
+        let message = [DeviceMessage {
+            device_id: unit_id,
+            message_url: format!("workout-service/workout/FIT/{}", workout_id),
+            message_type: "workouts",
+            message_name: name,
+            group_name: None,
+            priority: 1,
+            file_type: "FIT",
+            meta_data_id: workout_id,
+        }];
+
+        // Not retried: a request that timed out after reaching Connect would queue the workout twice
+        client
+            .post_json::<_, serde_json::Value>(
+                oauth2,
+                "/device-service/devicemessage/messages",
+                &message,
+            )
+            .await
+            .map_err(|e| {
+                log_error(
+                    "Error sending workout",
+                    ConnectError::SendWorkout(workout_id, unit_id, e),
+                )
+            })?;
+        info!("Sent workout {} to device {}.", workout_id, unit_id);
 
         Ok(())
     }
