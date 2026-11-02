@@ -1,5 +1,6 @@
 mod additional_data;
 mod common;
+mod connect;
 mod dto;
 mod export;
 mod home;
