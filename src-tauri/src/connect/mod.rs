@@ -37,7 +37,7 @@ const WEIGHT_EMPTY_CHUNKS_STOP: u32 = 2;
 const RETRY_ATTEMPTS: u32 = 4;
 const RETRY_BASE_DELAY: Duration = Duration::from_secs(2);
 const TOKEN_EXPIRY_MARGIN_SECS: i64 = 300;
-const CALENDAR_RECENT_DAYS: u64 = 7;
+const CALENDAR_RECENT_DAYS: u64 = 6;
 
 /// Year and month (1-12) of every calendar page covering the days from `from` to `to`.
 pub fn calendar_months(from: NaiveDate, to: NaiveDate) -> Vec<(u16, u8)> {

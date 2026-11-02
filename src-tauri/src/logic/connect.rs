@@ -1,9 +1,11 @@
 use std::collections::BTreeSet;
 
-use chrono::Local;
 use futures_util::TryFutureExt;
 use rusqlite_orm::{
-    dao::Repository, database::DatabasePool, errors::DatabaseError, types::where_clause::Where,
+    dao::Repository,
+    database::DatabasePool,
+    errors::DatabaseError,
+    types::{order_by::OrderBy, where_clause::Where},
 };
 use strength_tracker_rs_macros::traced_command;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -13,7 +15,7 @@ use crate::{
     ConnectLock, SettingsLock,
     connect::client::CalendarItemType,
     dao::{
-        body_metric::BodyMetricRepository,
+        body_metric::{self, BodyMetricRepository},
         device::{self, Device, DeviceRepository},
         session::{self, SessionRepository},
         workout::WorkoutRepository,
@@ -140,12 +142,19 @@ pub async fn import_weight_from_connect(
 
     let app_cpy = app.clone();
 
-    let res: Result<(), String> = async {
-        let mut device = run_blocking(&app, |database| {
-            Ok(DeviceRepository::select()
-                .where_(Where::Eq(device::entity::columns::SERIAL, "connect".into()))
-                .fetch_one(database)?
-                .unwrap())
+    let res: Result<usize, String> = async {
+        let existing = run_blocking(&app, |database| {
+            let existing: Vec<u32> = database.run_in_connection(|conn| {
+                Ok(BodyMetricRepository::select()
+                    .columns(&[body_metric::entity::columns::DATE])
+                    .order_by(OrderBy::Desc(body_metric::entity::columns::DATE))
+                    .fetch_in(conn)?
+                    .iter()
+                    .map(|row| row_int(row, session::entity::columns::DATE.as_ref()) as u32)
+                    .collect())
+            })?;
+
+            Ok(existing)
         })
         .map_err(|e: DatabaseError| e.to_string())
         .await?;
@@ -153,7 +162,7 @@ pub async fn import_weight_from_connect(
         let mut entries = connect
             .lock()
             .await
-            .list_weight(device.last_body_metric_sync)
+            .list_weight(existing.first().map(|d| *d))
             .await
             .map_err(|e| e.to_string())?;
 
@@ -161,28 +170,33 @@ pub async fn import_weight_from_connect(
             let db = app_cpy.state::<DatabasePool>();
             db.run_in_transaction(move |tx| {
                 let mut insert = BodyMetricRepository::insert().or_replace();
+                let mut any = false;
                 for entry in &mut entries {
-                    insert = insert.item(entry);
+                    if !existing.contains(&entry.date) {
+                        any = true;
+                        insert = insert.item(entry);
+                    }
                 }
-                insert.execute_in(tx)?;
-
-                device.last_body_metric_sync = Some(Local::now().timestamp() as u32);
-                device.update_by_id_in(tx)?;
-
-                Ok(())
+                if any {
+                    Ok(insert.execute_in(tx)?)
+                } else {
+                    Ok(0)
+                }
             })
         })
         .await
         .expect("blocking DB task panicked")
-        .map_err(|e: DatabaseError| e.to_string())?;
-
-        Ok(())
+        .map_err(|e: DatabaseError| e.to_string())
     }
     .await;
 
     match res {
-        Ok(_) => {
-            info!("Measures added succesfully");
+        Ok(0) => {
+            info!("No Measures added");
+            Ok(())
+        }
+        Ok(added) => {
+            info!("Measures {} added succesfully", added);
             Ok(())
         }
         Err(e) => Err(report_error(

@@ -1,5 +1,3 @@
-use gpx::Gpx;
-
 use crate::{
     dao::{additional_data::AdditionalData, body_metric::BodyMetric, device::Device},
     dto::{
@@ -9,8 +7,6 @@ use crate::{
     tests::common,
     utils::time::local_midnight,
 };
-
-const QUARTER_TURN: i32 = 1 << 30;
 
 #[test]
 fn session_list_item_active_calories() {
@@ -95,55 +91,4 @@ fn session_details_with_additional_data() {
     assert_eq!(details.distance, Some(5.25));
     assert_eq!(details.notes, "Easy run");
     assert_eq!(details.device.as_deref(), Some("Garmin Forerunner 265"));
-}
-
-#[test]
-fn gpx_track_and_lap_waypoints() {
-    let mut session = common::session(1);
-    let mut data = common::additional_data(1);
-    data.coordinates = Some(AdditionalData::build_coordinates_blob(&[
-        (0, 0),
-        (
-            AdditionalData::INVALID_POSITION,
-            AdditionalData::INVALID_POSITION,
-        ),
-        (QUARTER_TURN, QUARTER_TURN),
-    ]));
-    data.altitudes = Some(AdditionalData::build_altitudes_blob(&[
-        10.0,
-        20.0,
-        AdditionalData::INVALID_ALTITUDE,
-    ]));
-    session.additional_data = Some(data);
-    session.laps = vec![
-        common::lap(1, 0, Some((0, 0))),
-        common::lap(1, 1, None),
-        common::lap(1, 2, Some((QUARTER_TURN, 0))),
-    ];
-
-    let gpx = Gpx::from(session);
-
-    assert_eq!(gpx.tracks.len(), 1);
-    assert_eq!(gpx.tracks[0].name.as_deref(), Some("Session 1"));
-
-    let points = &gpx.tracks[0].segments[0].points;
-    assert_eq!(points.len(), 2, "invalid positions are skipped");
-    assert_eq!(points[0].elevation, Some(10.0));
-    assert_eq!(points[1].elevation, None);
-    assert!((points[1].point().y() - 90.0).abs() < 1e-9);
-
-    let names: Vec<_> = gpx
-        .waypoints
-        .iter()
-        .map(|w| w.name.clone().unwrap())
-        .collect();
-    assert_eq!(names, vec!["1", "3"], "laps without position are skipped");
-}
-
-#[test]
-fn gpx_session_without_additional_data() {
-    let gpx = Gpx::from(common::session(1));
-
-    assert_eq!(gpx.tracks.len(), 1);
-    assert!(gpx.tracks[0].segments[0].points.is_empty());
 }

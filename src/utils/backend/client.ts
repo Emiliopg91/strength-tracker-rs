@@ -14,25 +14,25 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/exercises.rs:593
+	// From src-tauri/src/logic/exercises.rs:620
 	public static applyProgressionSuggestion(category: number, id: number, suggestion: ProgressionSuggestion): Promise<void> {
 	  return BackendClient.inner_invoke("apply_progression_suggestion", { category, id, suggestion }); 
 	}
 	
 
-	// From src-tauri/src/logic/connect.rs:199
+	// From src-tauri/src/logic/connect.rs:213
 	public static connectLoggedUser(): Promise<string | null> {
 	  return BackendClient.inner_invoke("connect_logged_user"); 
 	}
 	
 
-	// From src-tauri/src/logic/connect.rs:207
+	// From src-tauri/src/logic/connect.rs:221
 	public static connectLogin(): Promise<string | null> {
 	  return BackendClient.inner_invoke("connect_login"); 
 	}
 	
 
-	// From src-tauri/src/logic/connect.rs:227
+	// From src-tauri/src/logic/connect.rs:241
 	public static connectLogout(): Promise<void> {
 	  return BackendClient.inner_invoke("connect_logout"); 
 	}
@@ -47,12 +47,6 @@ export class BackendClient {
 	// From src-tauri/src/logic/export.rs:136
 	public static exportDatabase(): Promise<void> {
 	  return BackendClient.inner_invoke("export_database"); 
-	}
-	
-
-	// From src-tauri/src/logic/export.rs:30
-	public static exportGpx(session: number): Promise<void> {
-	  return BackendClient.inner_invoke("export_gpx", { session }); 
 	}
 	
 
@@ -92,13 +86,13 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/exercises.rs:442
+	// From src-tauri/src/logic/exercises.rs:469
 	public static getProgressionStatus(category: number, id: number): Promise<ProgressionSuggestion | null> {
 	  return BackendClient.inner_invoke("get_progression_status", { category, id }); 
 	}
 	
 
-	// From src-tauri/src/logic/exercises.rs:473
+	// From src-tauri/src/logic/exercises.rs:500
 	public static getProgressionSuggestion(category: number, id: number): Promise<ProgressionSuggestion | null> {
 	  return BackendClient.inner_invoke("get_progression_suggestion", { category, id }); 
 	}
@@ -152,7 +146,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/connect.rs:38
+	// From src-tauri/src/logic/connect.rs:40
 	public static importFromConnect(): Promise<number> {
 	  return BackendClient.inner_invoke("import_from_connect"); 
 	}
@@ -170,7 +164,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/connect.rs:134
+	// From src-tauri/src/logic/connect.rs:136
 	public static importWeightFromConnect(): Promise<void> {
 	  return BackendClient.inner_invoke("import_weight_from_connect"); 
 	}
@@ -200,7 +194,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/exercises.rs:695
+	// From src-tauri/src/logic/exercises.rs:722
 	public static saveExerciseNotes(category: number, id: number, notes: string): Promise<void> {
 	  return BackendClient.inner_invoke("save_exercise_notes", { category, id, notes }); 
 	}
@@ -218,7 +212,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/connect.rs:424
+	// From src-tauri/src/logic/connect.rs:438
 	public static sendToConnect(workout: string, serial: string): Promise<void> {
 	  return BackendClient.inner_invoke("send_to_connect", { workout, serial }); 
 	}
@@ -230,19 +224,19 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/exercises.rs:365
+	// From src-tauri/src/logic/exercises.rs:392
 	public static setExerciseProgression(category: number, id: number, value: boolean): Promise<void> {
 	  return BackendClient.inner_invoke("set_exercise_progression", { category, id, value }); 
 	}
 	
 
-	// From src-tauri/src/logic/exercises.rs:402
+	// From src-tauri/src/logic/exercises.rs:429
 	public static setExerciseProgressionParameters(category: number, id: number, reps: string, weight: number): Promise<void> {
 	  return BackendClient.inner_invoke("set_exercise_progression_parameters", { category, id, reps, weight }); 
 	}
 	
 
-	// From src-tauri/src/logic/exercises.rs:328
+	// From src-tauri/src/logic/exercises.rs:355
 	public static setExerciseUnilateral(category: number, id: number, value: boolean): Promise<void> {
 	  return BackendClient.inner_invoke("set_exercise_unilateral", { category, id, value }); 
 	}

@@ -353,8 +353,6 @@ struct RecordAccumulator {
     last_coord: (i32, i32),
     speeds: Vec<f64>,
     any_speed: bool,
-    altitudes: Vec<f64>,
-    any_altitude: bool,
     distance: Option<f64>,
 }
 
@@ -389,16 +387,6 @@ impl RecordAccumulator {
                 }
                 None => AdditionalData::INVALID_SPEED,
             });
-
-        self.altitudes.push(
-            match msg.enhanced_altitude_scaled().or(msg.altitude_scaled()) {
-                Some(v) => {
-                    self.any_altitude = true;
-                    v
-                }
-                None => AdditionalData::INVALID_ALTITUDE,
-            },
-        );
     }
 }
 
@@ -407,7 +395,6 @@ impl From<RecordAccumulator> for Option<AdditionalData> {
         let coords = value.any_coord.then_some(value.coords);
         let hrs = value.any_hr.then_some(value.hrs);
         let speeds = value.any_speed.then_some(value.speeds);
-        let altitudes = value.any_altitude.then_some(value.altitudes);
 
         if hrs.is_some() || coords.is_some() || speeds.is_some() || value.distance.is_some() {
             Some(AdditionalData {
@@ -416,8 +403,6 @@ impl From<RecordAccumulator> for Option<AdditionalData> {
                 coordinates: coords.map(|coords| AdditionalData::build_coordinates_blob(&coords)),
                 speeds: speeds.map(|speeds| AdditionalData::build_speeds_blob(&speeds)),
                 distance: value.distance,
-                altitudes: altitudes
-                    .map(|altitudes| AdditionalData::build_altitudes_blob(&altitudes)),
                 notes: None,
                 max_hr: None,
             })

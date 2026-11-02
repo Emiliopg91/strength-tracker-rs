@@ -31,7 +31,6 @@ export interface SessionFrontDetails extends SessionDetails {
         avg: number;
         color: string;
     }[];
-    elevations: [number, number] | undefined;
     volume: number;
 }
 
@@ -51,34 +50,14 @@ export class SessionUtils {
             hrBreathData: [],
             hrRanges: [0, 0, 0],
             volume: 0,
-            elevations: undefined,
         };
 
         SessionUtils.handleSeries(details, fromKg);
-        SessionUtils.handleAltitude(details);
         SessionUtils.handleLaps(details);
         SessionUtils.handleGpsCoordiates(details);
         SessionUtils.handleHeartRate(details);
 
         return details;
-    }
-
-    private static handleAltitude(details: SessionFrontDetails) {
-        if (details.altitudes && details.altitudes.length > 0) {
-            let asc = 0;
-            let desc = 0;
-
-            const filtered = details.altitudes.filter((v) => Boolean(v));
-            for (let i = 1; i < filtered.length; i++) {
-                if (filtered![i]! > filtered![i - 1]!) {
-                    asc += filtered![i]! - filtered![i - 1]!;
-                } else if (filtered![i]! < filtered![i - 1]!) {
-                    desc += filtered![i - 1]! - filtered![i]!;
-                }
-            }
-
-            details.elevations = [asc, desc];
-        }
     }
 
     private static handleSeries(

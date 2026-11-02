@@ -1,13 +1,8 @@
 use std::{collections::HashSet, hash::Hash};
 
-use geo_types::Point;
-use gpx::{Gpx, Track, TrackSegment, Waypoint};
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    dao::{exercise::Exercise, lap::Lap, session::Session, set::Set},
-    utils::constants,
-};
+use crate::dao::{exercise::Exercise, lap::Lap, session::Session, set::Set};
 
 #[derive(Serialize, Default)]
 pub struct SessionListItem {
@@ -112,7 +107,6 @@ pub struct SessionDetails {
     pub heart_rates: Vec<Option<u8>>,
     pub max_hr: u8,
     pub coordinates: Vec<Option<(i32, i32)>>,
-    pub altitudes: Vec<Option<f64>>,
     pub laps: Vec<SessionLap>,
     pub speeds: Vec<Option<f64>>,
     pub distance: Option<f64>,
@@ -147,7 +141,6 @@ impl From<(&Session, &[Exercise], &[Set], &[Lap])> for SessionDetails {
         let mut gps_coordinates = Vec::new();
         let mut speeds = Vec::new();
         let mut distance = None;
-        let mut altitudes = Vec::new();
         let mut notes = "".to_string();
 
         if let Some(add_data) = &value.0.additional_data {
@@ -163,9 +156,6 @@ impl From<(&Session, &[Exercise], &[Set], &[Lap])> for SessionDetails {
             }
             if let Some(nts) = add_data.notes.clone() {
                 notes = nts
-            }
-            if let Some(alts) = add_data.get_altitudes() {
-                altitudes = round_samples(alts, 10.0)
             }
             if let Some(hr) = add_data.max_hr {
                 max_hr = hr;
@@ -212,7 +202,6 @@ impl From<(&Session, &[Exercise], &[Set], &[Lap])> for SessionDetails {
             coordinates: gps_coordinates,
             speeds,
             distance,
-            altitudes,
             notes,
             primary_muscles,
             secondary_muscles,
@@ -232,46 +221,4 @@ pub struct SessionSetsUpdate {
 pub struct SessionLocation {
     pub session: u32,
     pub location: String,
-}
-
-impl From<Session> for Gpx {
-    fn from(session: Session) -> Self {
-        let mut gpx = Gpx::default();
-
-        gpx.version = gpx::GpxVersion::Gpx11;
-        gpx.creator = Some(constants::APP_TITLE.to_string());
-
-        let mut track = Track::new();
-        track.name = Some(session.name);
-
-        let mut segment = TrackSegment::new();
-        if let Some(additional_data) = &session.additional_data
-            && let Some(coords) = additional_data.get_coordinates_degrees()
-        {
-            let altitudes = additional_data.get_altitudes().unwrap_or_default();
-
-            for (idx, coord) in coords.into_iter().enumerate() {
-                if let Some((lat, lon)) = coord {
-                    let mut wpt = Waypoint::new(Point::new(lon, lat));
-                    if let Some(altitude) = altitudes.get(idx) {
-                        wpt.elevation = *altitude;
-                    }
-                    segment.points.push(wpt);
-                }
-            }
-        }
-
-        track.segments.push(segment);
-        gpx.tracks.push(track);
-
-        for lap in session.laps {
-            if let Some((lat, lon)) = lap.get_coordinates_degrees() {
-                let mut wp = Waypoint::new(Point::new(lon, lat));
-                wp.name = Some(format!("{}", lap.idx + 1));
-                gpx.waypoints.push(wp);
-            }
-        }
-
-        gpx
-    }
 }

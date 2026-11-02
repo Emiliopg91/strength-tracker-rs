@@ -43,7 +43,7 @@ No account required, no cloud, no Garmin Express (which doesn't exist on Linux a
 ## Beyond the gym
 
 - **Cardio activities** — Heart-rate chart with time-in-zone breakdown, speed and laps.
-- **GPS routes** — Interactive map with a speed-colored track, satellite/street toggle, reverse-geocoded naming and GPX export with elevation.
+- **GPS routes** — Interactive map with a speed-colored track, satellite/street toggle and reverse-geocoded naming.
 - **Body measurements** — Log them manually or import them from Garmin Connect, then compare and chart them over time with 7-day averages.
 
 ## Device sync

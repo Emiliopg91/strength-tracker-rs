@@ -257,6 +257,33 @@ pub async fn get_exercises_catalog(app: AppHandle) -> Result<HashMap<u16, Vec<u1
     .map_err(|e: DatabaseError| e.to_string())
 }
 
+pub fn update_all_prs(
+    tx: &rusqlite_orm::rusqlite::Transaction,
+) -> rusqlite_orm::errors::Result<()> {
+    let mut exercises = HashSet::new();
+    SetRepository::select()
+        .distinct(&[set::entity::columns::EX_CAT, set::entity::columns::EX_ID])
+        .fetch_in(tx)?
+        .iter()
+        .map(|r| {
+            (
+                match r.get(set::entity::columns::EX_CAT.as_ref()) {
+                    Some(Value::Int64(val)) => *val as u16,
+                    _ => unreachable!(),
+                },
+                match r.get(set::entity::columns::EX_ID.as_ref()) {
+                    Some(Value::Int64(val)) => *val as u16,
+                    _ => unreachable!(),
+                },
+            )
+        })
+        .for_each(|e| {
+            exercises.insert(e);
+            ()
+        });
+    update_prs(tx, exercises, &[], None)
+}
+
 /// Recomputes the `pr` flag for each affected exercise and notifies if any of the just-imported/edited sessions set a new record.
 pub fn update_prs(
     tx: &rusqlite_orm::rusqlite::Transaction,

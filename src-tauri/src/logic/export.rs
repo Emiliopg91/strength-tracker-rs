@@ -1,18 +1,12 @@
-use std::{
-    fs::{self, File},
-    io::BufWriter,
-};
+use std::{fs, io::BufWriter};
 
-use chrono::{Local, TimeZone};
-use gpx::Gpx;
-use rusqlite_orm::database::DatabasePool;
+use chrono::Local;
 use strength_tracker_rs_macros::traced_command;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, State};
 use tauri_plugin_log::log::info;
 
 use crate::{
     SettingsLock,
-    dao::session::SessionRepository,
     dto::{
         export::Export,
         notifications::{NotificationDefinition, NotificationKind},
@@ -24,67 +18,6 @@ use crate::{
         translations::{translate, translate_and_replace},
     },
 };
-
-#[traced_command]
-#[tauri::command]
-pub async fn export_gpx(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
-    session: u32,
-) -> Result<(), String> {
-    let session = tokio::task::spawn_blocking(move || {
-        let database = app.state::<DatabasePool>();
-        database.run_in_connection(|conn| {
-            let mut session = SessionRepository::select_by_id_in(conn, session)?.unwrap();
-            session.fetch_additional_data_relationship_in(conn)?;
-            session.fetch_laps_relationship_in(conn)?;
-
-            Ok(session)
-        })
-    })
-    .await
-    .map_err(|e| e.to_string())?
-    .map_err(|e| e.to_string())?;
-
-    let path = constants::HOME_DIR.join(format!(
-        "{}-{}.gpx",
-        session.name,
-        Local
-            .timestamp_millis_opt(session.date as i64 * 1000)
-            .unwrap()
-    ));
-    let path_str = path.display().to_string();
-    info!("Exporting track to {}...", path.display());
-
-    let gpx = Gpx::from(session);
-    let res = tokio::task::spawn_blocking(move || {
-        let file = File::create(&path).map_err(|e| e.to_string())?;
-        let writer = BufWriter::new(file);
-        gpx::write(&gpx, writer).map_err(|e| e.to_string())?;
-        Ok::<(), String>(())
-    })
-    .await
-    .map_err(|e| e.to_string())
-    .flatten();
-
-    let lang = settings.read().unwrap().language;
-    match res {
-        Ok(()) => {
-            show_notification(NotificationDefinition {
-                title: translate("ok_on_track_export", lang),
-                body: translate_and_replace("export_file_path", &[&path_str], lang),
-                kind: NotificationKind::Temporal,
-            });
-            Ok(())
-        }
-        Err(e) => Err(report_error(
-            e,
-            lang,
-            "error_on_export",
-            "Error exporting track",
-        )),
-    }
-}
 
 #[traced_command]
 #[tauri::command]

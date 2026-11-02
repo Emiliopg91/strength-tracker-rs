@@ -9,7 +9,6 @@ pub struct AdditionalData {
     pub heart_rates: Option<Vec<u8>>,
     pub coordinates: Option<Vec<u8>>,
     pub speeds: Option<Vec<u8>>,
-    pub altitudes: Option<Vec<u8>>,
     pub distance: Option<f64>,
     pub notes: Option<String>,
     pub max_hr: Option<u8>,
@@ -19,14 +18,12 @@ impl AdditionalData {
     pub const INVALID_HEAR_RATE: u8 = u8::MAX;
     pub const INVALID_POSITION: i32 = i32::MAX;
     pub const INVALID_SPEED: f64 = -1_f64;
-    pub const INVALID_ALTITUDE: f64 = f64::MAX;
 
     pub const SEMICIRCLE_TO_DEGREES: f64 = 180.0 / (2_i64.pow(31) as f64);
 
     pub fn new(session: u32) -> Self {
         Self {
             session,
-            altitudes: None,
             coordinates: None,
             distance: None,
             heart_rates: None,
@@ -81,35 +78,6 @@ impl AdditionalData {
         }
 
         coords
-    }
-
-    /// Unpacks the altitudes Blob into Vec
-    pub fn get_altitudes(&self) -> Option<Vec<Option<f64>>> {
-        self.altitudes.as_ref().map(|records| {
-            records
-                .as_chunks::<8>()
-                .0
-                .iter()
-                .map(|chunk| {
-                    let val = f64::from_be_bytes(*chunk);
-                    if val != Self::INVALID_ALTITUDE {
-                        Some(val)
-                    } else {
-                        None
-                    }
-                })
-                .collect()
-        })
-    }
-    /// Build blob from altitudes Vec
-    pub fn build_altitudes_blob(value: &[f64]) -> Vec<u8> {
-        let mut records = Vec::new();
-
-        value.iter().for_each(|speed| {
-            records.extend_from_slice(&(*speed).to_be_bytes());
-        });
-
-        records
     }
 
     /// Unpacks the speeds Blob into Vec

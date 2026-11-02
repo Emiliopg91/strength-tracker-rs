@@ -30,6 +30,7 @@ use tauri_plugin_log::{
     log::{LevelFilter, debug, error, info},
 };
 
+use crate::logic::exercises::update_all_prs;
 use crate::{
     connect::ConnectClient,
     dao::body_metric::migration_21,
@@ -51,7 +52,7 @@ use crate::{
             save_exercise_notes, set_exercise_progression, set_exercise_progression_parameters,
             set_exercise_unilateral,
         },
-        export::{export_database, export_gpx, upload_to_cloud},
+        export::{export_database, upload_to_cloud},
         report::{get_report_data, load_report, report_ready},
         sessions::{
             _import_from_files, get_heatmap_data, get_session_details, get_sessions,
@@ -121,32 +122,8 @@ fn initialize(app: &AppHandle) -> (DatabasePool, Settings, ConnectClient, MtpCli
 
             //merge_sessions(&database, _, _);
 
-            /*
-            let _ = database.run_in_transaction(|tx| {
-                let mut exercises = HashSet::new();
-                SetRepository::select()
-                    .distinct(&[set::entity::columns::EX_CAT, set::entity::columns::EX_ID])
-                    .fetch_in(tx)?
-                    .iter()
-                    .map(|r| {
-                        (
-                            match r.get(set::entity::columns::EX_CAT.as_ref()) {
-                                Some(Value::Int64(val)) => *val as u16,
-                                _ => unreachable!(),
-                            },
-                            match r.get(set::entity::columns::EX_ID.as_ref()) {
-                                Some(Value::Int64(val)) => *val as u16,
-                                _ => unreachable!(),
-                            },
-                        )
-                    })
-                    .for_each(|e| {
-                        exercises.insert(e);
-                        ()
-                    });
-                Ok(update_prs(tx, exercises, &[], None)?)
-            });
-            */
+            #[cfg(debug_assertions)]
+            let _ = database.run_in_transaction(|tx| Ok(update_all_prs(tx)?));
 
             (database, settings, connect_client, mtp_client)
         }
@@ -388,7 +365,6 @@ pub fn run(log_level: LevelFilter) {
             //Export
             export_database,
             upload_to_cloud,
-            export_gpx,
             //Report
             report_ready,
             load_report,

@@ -32,8 +32,6 @@ curl-rest = "^0"
 embedded-io-adapters = { version = "^0", features = ["std"] }
 futures-util = "^0"
 strength-tracker-rs-macros = { path = "../src-tauri-macros" }
-geo-types = "^0"
-gpx = "^0"
 hmac = "^0.13"
 keyring = { version = "^3", features = ["sync-secret-service", "crypto-rust"] }
 libc = "^0"

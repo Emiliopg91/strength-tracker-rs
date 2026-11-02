@@ -938,7 +938,6 @@ pub fn merge_sessions(
                 merge_vec(&mut add_data.heart_rates, &mut add_data2.heart_rates);
                 merge_vec(&mut add_data.coordinates, &mut add_data2.coordinates);
                 merge_vec(&mut add_data.speeds, &mut add_data2.speeds);
-                merge_vec(&mut add_data.altitudes, &mut add_data2.altitudes);
 
                 add_data.distance = match (add_data.distance, add_data2.distance) {
                     (Some(d1), Some(d2)) => Some(d1 + d2),

@@ -130,7 +130,6 @@ export function SessionModal({ session, onClose, onUpdate }: Props) {
                 {localSession.valid_points.length > 0 && (
                     <>
                         <SessionMap
-                            timestamp={localSession.timestamp}
                             validPoints={localSession.valid_points}
                             gpsSegments={localSession.gps_segments}
                             startPoint={localSession.start_point}

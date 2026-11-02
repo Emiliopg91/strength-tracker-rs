@@ -123,7 +123,6 @@ export interface ReportData {
 export interface SessionDetails {
   active_calories: number;
   active_time: number;
-  altitudes: (number | null)[];
   coordinates: ([number, number] | null)[];
   device: string | null;
   distance: number | null;

@@ -6,10 +6,11 @@ import { useContext } from "react";
 type Props = {
     selected: ExerciseOption | undefined;
     onChange: (opt: ExerciseOption) => void;
+    error?: boolean;
     sx?: SxProps<Theme>;
 };
 
-export function ExerciseField({ selected, onChange, sx }: Props) {
+export function ExerciseField({ selected, onChange, error, sx }: Props) {
     const { exercisesCatalog } = useContext(AppContext);
     const { translate } = useContext(I18nSettingsContext);
 
@@ -32,6 +33,7 @@ export function ExerciseField({ selected, onChange, sx }: Props) {
                 <TextField
                     {...params}
                     multiline
+                    error={error}
                     label={translate("select_exercise")}
                 />
             )}
