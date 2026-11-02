@@ -279,7 +279,6 @@ pub fn update_all_prs(
         })
         .for_each(|e| {
             exercises.insert(e);
-            ()
         });
     update_prs(tx, exercises, &[], None)
 }

@@ -162,7 +162,7 @@ pub async fn import_weight_from_connect(
         let mut entries = connect
             .lock()
             .await
-            .list_weight(existing.first().map(|d| *d))
+            .list_weight(existing.first().copied())
             .await
             .map_err(|e| e.to_string())?;
 
