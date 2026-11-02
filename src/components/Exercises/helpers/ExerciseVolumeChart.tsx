@@ -85,64 +85,79 @@ export function ExerciseVolumeChart({ series, exercise }: Props) {
     const minReps = Math.min(...chartData.map(({ reps }) => reps)) / 1.3;
 
     return (
-        <div className="chart-container">
-            <ResponsiveContainer width="100%" height="100%">
-                <LineChart
-                    data={chartData}
-                    margin={{ top: 5, right: 5, left: 5, bottom: 5 }}
-                >
-                    <CartesianGrid stroke="#80808000" strokeDasharray="5 5" />
-                    <XAxis
-                        dataKey="date"
-                        type="number"
-                        domain={[minDate, maxDate]}
-                        stroke="#fff"
-                        tick={false}
-                        height={0}
-                    />
-                    <YAxis
-                        yAxisId="left"
-                        stroke="#fff"
-                        width={0}
-                        domain={[minWeight, maxWeight]}
-                        tick={false}
-                    />{" "}
-                    <YAxis
-                        yAxisId="right"
-                        stroke="#fff"
-                        domain={[minReps, maxReps]}
-                        width={0}
-                        tick={false}
-                    />{" "}
-                    <Line
-                        yAxisId="left"
-                        type="monotone"
-                        name={translate("weight")}
-                        dataKey="weight"
-                        stroke="#0f0"
-                        dot={{ fill: "#0f0" }}
-                        activeDot={{ stroke: "#f0f0f000" }}
-                        isAnimationActive={false}
-                    />
-                    <Line
-                        yAxisId="right"
-                        type="monotone"
-                        name={translate("repetitions")}
-                        dataKey="reps"
-                        stroke="#0ff"
-                        dot={{ fill: "#0ff" }}
-                        activeDot={{ stroke: "#f0f0f000" }}
-                        isAnimationActive={false}
-                    />
-                    <Tooltip
-                        isAnimationActive={false}
-                        content={(props) => (
-                            <ExerciseVolumeTooltip {...props} />
-                        )}
-                    />
-                    <Legend />
-                </LineChart>
-            </ResponsiveContainer>
-        </div>
+        <>
+            {chartData.length > 1 && (
+                <>
+                    <div className="chart-container">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <LineChart
+                                data={chartData}
+                                margin={{
+                                    top: 5,
+                                    right: 5,
+                                    left: 5,
+                                    bottom: 5,
+                                }}
+                            >
+                                <CartesianGrid
+                                    stroke="#80808000"
+                                    strokeDasharray="5 5"
+                                />
+                                <XAxis
+                                    dataKey="date"
+                                    type="number"
+                                    domain={[minDate, maxDate]}
+                                    stroke="#fff"
+                                    tick={false}
+                                    height={0}
+                                />
+                                <YAxis
+                                    yAxisId="left"
+                                    stroke="#fff"
+                                    width={0}
+                                    domain={[minWeight, maxWeight]}
+                                    tick={false}
+                                />{" "}
+                                <YAxis
+                                    yAxisId="right"
+                                    stroke="#fff"
+                                    domain={[minReps, maxReps]}
+                                    width={0}
+                                    tick={false}
+                                />{" "}
+                                <Line
+                                    yAxisId="left"
+                                    type="monotone"
+                                    name={translate("weight")}
+                                    dataKey="weight"
+                                    stroke="#0f0"
+                                    dot={{ fill: "#0f0" }}
+                                    activeDot={{ stroke: "#f0f0f000" }}
+                                    isAnimationActive={false}
+                                />
+                                <Line
+                                    yAxisId="right"
+                                    type="monotone"
+                                    name={translate("repetitions")}
+                                    dataKey="reps"
+                                    stroke="#0ff"
+                                    dot={{ fill: "#0ff" }}
+                                    activeDot={{ stroke: "#f0f0f000" }}
+                                    isAnimationActive={false}
+                                />
+                                <Tooltip
+                                    isAnimationActive={false}
+                                    content={(props) => (
+                                        <ExerciseVolumeTooltip {...props} />
+                                    )}
+                                />
+                                <Legend />
+                            </LineChart>
+                        </ResponsiveContainer>
+                    </div>
+                    <hr />
+                </>
+            )}
+        </>
     );
 }

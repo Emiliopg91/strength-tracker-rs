@@ -484,12 +484,11 @@ export function ExerciseModal({
                             series={exercise.series}
                             exercise={exercise}
                         />
-                        <hr />
                         <table className="full-width">
                             <colgroup>
                                 <col className="col-350" />
                                 <col />
-                                <col />
+                                <col className="col-120" />
                             </colgroup>
                             <thead>
                                 <tr>

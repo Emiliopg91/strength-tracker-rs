@@ -11,7 +11,10 @@ use crate::{
 };
 use rustyfit::{
     DecoderEvent, StreamingIterator,
-    profile::{mesgdef, typedef::MesgNum},
+    profile::{
+        mesgdef,
+        typedef::{DeviceIndex, MesgNum},
+    },
 };
 
 impl TryFrom<FitParser> for Session {
@@ -43,9 +46,14 @@ impl TryFrom<FitParser> for Session {
                         }
                         MesgNum::DEVICE_INFO => {
                             let device_info_obj = mesgdef::DeviceInfo::from(msg);
-                            device = Some(Device::serial_from_unit_id(
-                                device_info_obj.serial_number as u64,
-                            ))
+                            // The other indices are paired sensors, usually without serial
+                            if device_info_obj.device_index == DeviceIndex::CREATOR
+                                && device_info_obj.serial_number != 0
+                            {
+                                device = Some(Device::serial_from_unit_id(
+                                    device_info_obj.serial_number as u64,
+                                ));
+                            }
                         }
                         MesgNum::SESSION => {
                             let session_obj = mesgdef::Session::from(msg);

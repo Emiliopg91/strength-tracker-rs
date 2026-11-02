@@ -167,7 +167,12 @@ impl WorkoutStep {
                         step_type: StepType::interval(),
                         end_condition,
                         end_condition_value,
-                        description: step.notes.clone(),
+                        // Steps without their own notes inherit the exercise notes, as in the FIT upload
+                        description: step
+                            .notes
+                            .clone()
+                            .filter(|notes| !notes.is_empty())
+                            .or_else(|| step.exercise.as_ref().and_then(|e| e.notes.clone())),
                         category: Some(
                             step.exercise
                                 .clone()

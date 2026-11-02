@@ -117,6 +117,43 @@ fn exercise_with_reps_and_weight() {
     );
 }
 
+fn with_exercise_notes(mut step: WorkoutStep, notes: &str) -> WorkoutStep {
+    step.exercise.as_mut().unwrap().notes = Some(notes.to_string());
+    step
+}
+
+#[test]
+fn step_without_notes_inherits_exercise_notes() {
+    let json = steps_json(&[with_exercise_notes(reps(0, 10, None), "Elbows in")]);
+
+    assert_eq!(json[0]["description"], "Elbows in");
+}
+
+#[test]
+fn step_with_empty_notes_inherits_exercise_notes() {
+    let mut step = with_exercise_notes(reps(0, 10, None), "Elbows in");
+    step.notes = Some(String::new());
+    let json = steps_json(&[step]);
+
+    assert_eq!(json[0]["description"], "Elbows in");
+}
+
+#[test]
+fn step_notes_win_over_exercise_notes() {
+    let mut step = with_exercise_notes(reps(0, 10, None), "Elbows in");
+    step.notes = Some("Slow eccentric".to_string());
+    let json = steps_json(&[step]);
+
+    assert_eq!(json[0]["description"], "Slow eccentric");
+}
+
+#[test]
+fn step_and_exercise_without_notes_omit_description() {
+    let json = steps_json(&[reps(0, 10, None)]);
+
+    assert!(json[0].get("description").is_none());
+}
+
 #[test]
 fn exercise_without_weight_omits_weight_fields() {
     let json = steps_json(&[reps(0, 12, None)]);

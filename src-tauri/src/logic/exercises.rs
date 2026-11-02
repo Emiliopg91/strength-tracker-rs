@@ -15,6 +15,7 @@ use crate::{
         exercise::{self, ExerciseRepository},
         session::{self, SessionRepository},
         set::{self, SetRepository},
+        workout::{self, WorkoutRepository},
         workout_device::{self, WorkoutDeviceRepository},
         workout_step::{self, WorkoutStep, WorkoutStepRepository},
     },
@@ -693,6 +694,8 @@ pub async fn apply_progression_suggestion(
 #[tauri::command]
 pub async fn save_exercise_notes(
     app: AppHandle,
+    settings: State<'_, SettingsLock>,
+    connect: State<'_, ConnectLock>,
     category: u16,
     id: u16,
     notes: &str,
@@ -703,22 +706,80 @@ pub async fn save_exercise_notes(
         Some(notes.trim().to_string())
     };
 
-    run_blocking(&app, move |database| {
+    let workouts = run_blocking(&app, move |database| {
         database
-            .run_in_transaction(|tx| {
-                ExerciseRepository::update()
-                    .set(exercise::entity::columns::NOTES, notes.clone().into())
-                    .where_(Where::And(vec![
-                        Where::Eq(exercise::entity::columns::CATEGORY, category.into()),
-                        Where::Eq(exercise::entity::columns::ID, id.into()),
-                    ]))
-                    .execute_in(tx)?;
-
-                Ok(())
-            })
-            .map_err(|e| e.to_string())?;
-
-        Ok(())
+            .run_in_transaction(|tx| Ok(update_exercise_notes(tx, category, id, notes.clone())?))
+            .map_err(|e| e.to_string())
     })
-    .await
+    .await?;
+
+    if !workouts.is_empty() {
+        if connect.lock().await.logged_user().is_some() {
+            for wkt in &workouts {
+                let _ = send_workout_connect(&app, &connect, &settings, wkt).await;
+            }
+        }
+        push_pending_to_connected(&app).await;
+    }
+
+    Ok(())
+}
+
+/// Stores the exercise notes and queues for upload the workouts inheriting them.
+/// Returns every workout inheriting the notes.
+pub fn update_exercise_notes(
+    tx: &rusqlite_orm::rusqlite::Transaction,
+    category: u16,
+    id: u16,
+    notes: Option<String>,
+) -> rusqlite_orm::errors::Result<Vec<String>> {
+    ExerciseRepository::update()
+        .set(exercise::entity::columns::NOTES, notes.into())
+        .where_(Where::And(vec![
+            Where::Eq(exercise::entity::columns::CATEGORY, category.into()),
+            Where::Eq(exercise::entity::columns::ID, id.into()),
+        ]))
+        .execute_in(tx)?;
+
+    let workouts: Vec<String> = WorkoutStepRepository::select()
+        .distinct(&[workout_step::entity::columns::WORKOUT])
+        .where_(Where::And(vec![
+            Where::Eq(workout_step::entity::columns::EX_CAT, category.into()),
+            Where::Eq(workout_step::entity::columns::EX_ID, id.into()),
+            Where::Or(vec![
+                Where::Null(workout_step::entity::columns::NOTES),
+                Where::Eq(workout_step::entity::columns::NOTES, "".into()),
+            ]),
+        ]))
+        .fetch_in(tx)?
+        .iter()
+        .filter_map(
+            |r| match r.get(workout_step::entity::columns::WORKOUT.as_ref()) {
+                Some(Value::Text(name)) => Some(name.clone()),
+                _ => None,
+            },
+        )
+        .collect();
+
+    if !workouts.is_empty() {
+        // On a disabled workout `pending` means deletion from the device; enabling it queues the upload
+        WorkoutDeviceRepository::update()
+            .set(workout_device::entity::columns::PENDING, true.into())
+            .where_(Where::And(vec![
+                Where::In(
+                    workout_device::entity::columns::WORKOUT,
+                    workouts.iter().map(|w| w.clone().into()).collect(),
+                ),
+                Where::InSub(
+                    workout_device::entity::columns::WORKOUT,
+                    WorkoutRepository::select()
+                        .distinct(&[workout::entity::columns::NAME])
+                        .where_(Where::Eq(workout::entity::columns::ENABLED, true.into()))
+                        .to_subquery(),
+                ),
+            ]))
+            .execute_in(tx)?;
+    }
+
+    Ok(workouts)
 }
