@@ -1,5 +1,7 @@
 mod connect;
 mod dao;
+#[cfg(debug_assertions)]
+pub mod debug;
 mod dto;
 mod fit;
 mod logic;
@@ -11,8 +13,6 @@ mod utils;
 #[cfg(test)]
 mod tests;
 
-#[cfg(debug_assertions)]
-use std::path::Path;
 use std::{fs, process::exit, sync::RwLock, time::Duration};
 
 use rusqlite_orm::database::{
@@ -30,6 +30,7 @@ use tauri_plugin_log::{
     log::{LevelFilter, debug, error, info},
 };
 
+use crate::logic::exercises::update_all_prs;
 use crate::{
     connect::ConnectClient,
     dao::body_metric::migration_21,
@@ -42,7 +43,7 @@ use crate::{
         body_metrics::{add_body_measures, delete_body_metric, get_body_measures},
         connect::{
             connect_logged_user, connect_login, connect_logout, import_from_connect,
-            import_weight_from_connect,
+            import_weight_from_connect, send_to_connect,
         },
         devices::{get_registered_devices, import_from_device, send_to_device},
         exercises::{
@@ -51,7 +52,7 @@ use crate::{
             save_exercise_notes, set_exercise_progression, set_exercise_progression_parameters,
             set_exercise_unilateral,
         },
-        export::{export_database, export_gpx, upload_to_cloud},
+        export::{export_database, upload_to_cloud},
         report::{get_report_data, load_report, report_ready},
         sessions::{
             _import_from_files, get_heatmap_data, get_session_details, get_sessions,
@@ -66,52 +67,6 @@ use crate::{
     udev::UdevManager,
     utils::{constants, single_instance::SingleInstance, translations::translate},
 };
-
-#[cfg(debug_assertions)]
-use crate::fit::parser::FitParser;
-
-#[cfg(debug_assertions)]
-pub fn decode_files<P>(paths: &[P])
-where
-    P: AsRef<Path>,
-{
-    for path in paths {
-        let res: Result<(), Box<dyn std::error::Error>> = match FitParser::from_file(path) {
-            Ok(stream) => match stream.debug_dump() {
-                Ok(_) => Ok(()),
-                Err(e) => Err(e),
-            },
-            Err(e) => Err(Box::new(e)),
-        };
-        if let Err(e) = res {
-            eprintln!(
-                "Error handling '{}': \n  {}",
-                path.as_ref().display(),
-                e.as_ref()
-            )
-        }
-    }
-}
-
-#[cfg(debug_assertions)]
-pub fn encode_files<P>(paths: &[P])
-where
-    P: AsRef<Path>,
-{
-    for path in paths {
-        if let Err(e) = crate::fit::parser::debug_encode(path) {
-            eprintln!("Error handling '{}': \n  {}", path.as_ref().display(), e)
-        }
-    }
-}
-
-/// Debug-only incremental dump of the connected Garmin device into `./dump` (`--dump-device`).
-#[cfg(debug_assertions)]
-pub fn dump_device() {
-    if let Err(e) = crate::mtp::dump::run(Path::new("dump")) {
-        eprintln!("Error dumping device: {e}");
-    }
-}
 
 pub fn check_running() -> bool {
     SingleInstance::is_app_running().0
@@ -166,6 +121,9 @@ fn initialize(app: &AppHandle) -> (DatabasePool, Settings, ConnectClient, MtpCli
             let mtp_client = MtpClient {};
 
             //merge_sessions(&database, _, _);
+
+            #[cfg(debug_assertions)]
+            let _ = database.run_in_transaction(|tx| Ok(update_all_prs(tx)?));
 
             (database, settings, connect_client, mtp_client)
         }
@@ -407,7 +365,6 @@ pub fn run(log_level: LevelFilter) {
             //Export
             export_database,
             upload_to_cloud,
-            export_gpx,
             //Report
             report_ready,
             load_report,
@@ -416,7 +373,8 @@ pub fn run(log_level: LevelFilter) {
             import_weight_from_connect,
             connect_logged_user,
             connect_logout,
-            connect_login
+            connect_login,
+            send_to_connect,
         ])
         .build(tauri::generate_context!())
         .unwrap_or_else(|e| {

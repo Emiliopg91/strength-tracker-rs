@@ -14,6 +14,9 @@ importers:
       '@emotion/styled':
         specifier: ^11.14.1
         version: 11.14.1(@emotion/react@11.14.0(@types/react@19.3.0)(react@19.3.1)(supports-color@7.2.0))(@types/react@19.3.0)(react@19.3.1)(supports-color@7.2.0)
+      '@mjcdev/react-body-highlighter':
+        specifier: ^0.0.4
+        version: 0.0.4(react@19.3.1)
       '@mui/icons-material':
         specifier: ^9.5.0
         version: 9.5.0(@mui/material@9.5.0(@emotion/react@11.14.0(@types/react@19.3.0)(react@19.3.1)(supports-color@7.2.0))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.3.0)(react@19.3.1)(supports-color@7.2.0))(@types/react@19.3.0)(react@19.3.1)(supports-color@7.2.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(@types/react@19.3.0)(react@19.3.1)
@@ -44,9 +47,6 @@ importers:
       react:
         specifier: ^19.3.1
         version: 19.3.1
-      react-body-highlighter:
-        specifier: ^2.0.5
-        version: 2.0.5(react@19.3.1)
       react-dom:
         specifier: ^19.3.1
         version: 19.3.1(react@19.3.1)
@@ -569,6 +569,11 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
+
+  '@mjcdev/react-body-highlighter@0.0.4':
+    resolution: {integrity: sha512-BKUGDmTGCzCSY5B7lu4ZzaZfmLJdhIDfD0a0FE67/AEi35YXmvza5FgWK6qXWtbeVW7H+TFwamq8n+HoQdVuWA==}
+    peerDependencies:
+      react: '*'
 
   '@mui/core-downloads-tracker@9.5.0':
     resolution: {integrity: sha512-PErEpl3Lp+1ZqWYKI7GQU8XSiciAFmLbUAZ7IoaUL598HLy1UAFuEUMEJu8yAS1v8vkXYzWprMVZzky4UwXoOA==}
@@ -2074,11 +2079,8 @@ packages:
     resolution: {integrity: sha512-vYt7UD1U9Wg6138shLtLOvdAu+8DsC/ilFtEVHcH+wydcSpNE20AfSOduf6MkRFahL5FY7X1oU7nKVZFtfq8Fg==}
     engines: {node: '>=6'}
 
-  react-body-highlighter@2.0.5:
-    resolution: {integrity: sha512-yt37177vKIc+8TGxQw//G/3ah2aw/3E0g1oDt4N+46fMLVZ9BSelhc9S7kiwEkJRvYc3RyUSr9453uMJnvtxRg==}
-    engines: {node: '>=10'}
-    peerDependencies:
-      react: '>=16'
+  ramda@0.30.1:
+    resolution: {integrity: sha512-tEF5I22zJnuclswcZMc8bDIrwRHRzf+NqVEmqg50ShAZMP7MWeR/RGDthfM/p+BlqvF2fXAzpn8i+SJcYD3alw==}
 
   react-dom@19.3.1:
     resolution: {integrity: sha512-Y0bARz53lhEC1NMCASs0/j+faB/zqt3R8hpvg1e8+61ZVJ4UL0UdC4cBbXfZMcIuhrfgeILTLe+ZeBCavQPtKQ==}
@@ -3010,6 +3012,11 @@ snapshots:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
+
+  '@mjcdev/react-body-highlighter@0.0.4(react@19.3.1)':
+    dependencies:
+      ramda: 0.30.1
+      react: 19.3.1
 
   '@mui/core-downloads-tracker@9.5.0': {}
 
@@ -4606,9 +4613,7 @@ snapshots:
 
   punycode@2.3.1: {}
 
-  react-body-highlighter@2.0.5(react@19.3.1):
-    dependencies:
-      react: 19.3.1
+  ramda@0.30.1: {}
 
   react-dom@19.3.1(react@19.3.1):
     dependencies:

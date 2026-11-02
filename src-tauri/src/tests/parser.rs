@@ -237,7 +237,6 @@ fn parses_strength_sessions() {
             expected.fixture
         );
         assert!(additional_data.speeds.is_none(), "{}", expected.fixture);
-        assert!(additional_data.altitudes.is_none(), "{}", expected.fixture);
         assert_eq!(additional_data.distance, Some(0.0));
     }
 }
@@ -304,11 +303,6 @@ fn parses_walk_sessions() {
             Some(expected.records),
             "{ctx}"
         );
-        assert_eq!(
-            additional_data.get_altitudes().map(|v| v.len()),
-            Some(expected.records),
-            "{ctx}"
-        );
 
         let coords = additional_data.get_coordinates_degrees().unwrap();
         assert_eq!(coords.len(), expected.records, "{ctx}");
@@ -360,5 +354,4 @@ fn parses_indoor_biking_session() {
     assert_eq!(speeds.len(), expected.records, "{ctx}");
     assert_eq!(speeds.iter().flatten().count(), 3739, "{ctx}");
     assert!(additional_data.coordinates.is_none(), "{ctx}");
-    assert!(additional_data.altitudes.is_none(), "{ctx}");
 }

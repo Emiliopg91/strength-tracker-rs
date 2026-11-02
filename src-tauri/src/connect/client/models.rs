@@ -1,4 +1,15 @@
-use serde::{Deserialize, Serialize};
+use chrono::{Local, NaiveDate, NaiveDateTime, TimeZone};
+use serde::{Deserialize, Deserializer, Serialize, de::Error};
+
+/// Device entry returned from the device registration endpoint
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeviceSummary {
+    pub display_name: String,
+    pub unit_id: u64,
+    pub workout_capable: bool,
+    pub strength_workout_capable: bool,
+}
 
 /// Activity summary returned from the activity list endpoint
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -147,4 +158,55 @@ pub struct WeightEntry {
     pub metabolic_age: Option<f64>,
     #[serde(default)]
     pub source_type: Option<String>,
+}
+
+/// Calendar month returned from the calendar service
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarMonth {
+    #[serde(default)]
+    pub calendar_items: Vec<CalendarItem>,
+}
+
+/// Kind of a calendar item
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum CalendarItemType {
+    Activity,
+    Weight,
+    Nap,
+    UserTimeChanged,
+    #[serde(other)]
+    Unknown,
+}
+
+/// Item of a calendar month
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarItem {
+    /// Missing on some item types, such as naps
+    #[serde(default)]
+    pub id: Option<u64>,
+    pub item_type: CalendarItemType,
+    /// Calendar day of the item
+    pub date: NaiveDate,
+    /// Start time in seconds since the epoch, reading Connect's local time in the system timezone.
+    /// Only activities have it.
+    #[serde(default, deserialize_with = "local_timestamp")]
+    pub start_timestamp_local: Option<u32>,
+}
+
+/// Parses a zoneless date such as `2026-10-25T09:57:05.0`. A time skipped by a DST change gives `None`.
+fn local_timestamp<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<u32>, D::Error> {
+    let Some(date) = Option::<String>::deserialize(deserializer)? else {
+        return Ok(None);
+    };
+
+    let date =
+        NaiveDateTime::parse_from_str(&date, "%Y-%m-%dT%H:%M:%S%.f").map_err(D::Error::custom)?;
+    Local
+        .from_local_datetime(&date)
+        .earliest()
+        .map(|date| u32::try_from(date.timestamp()).map_err(D::Error::custom))
+        .transpose()
 }

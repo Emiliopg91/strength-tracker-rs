@@ -23,11 +23,11 @@ import { SessionModal } from "../Sessions/SessionModal";
 import { WorkoutModal } from "../Workouts/WorkoutModal";
 import { Heatmap } from "./helpers/Heatmap";
 import { WorkloadChart } from "./helpers/WorkloadChart";
-import { ImportSessionsMenu } from "./helpers/ImportSessionsMenu";
 import { WorkoutStepsModal } from "../Workouts/WorkoutStepsModal";
 import { WorkoutActionsMenu } from "../Workouts/helpers/WorkoutActionsMenu";
 import { Button } from "@mui/material";
 import { ReportModal } from "../Report/ReportModal";
+import { ImportSessionsMenu } from "../Sessions/helpers/ImportSessionsMenu";
 
 interface PeriodStats {
     sessions: number;

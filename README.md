@@ -17,7 +17,7 @@ No account required, no cloud, no Garmin Express (which doesn't exist on Linux a
 
 ## The training loop
 
-1. **Plan** — Build strength workouts in the app and send them to your watch.
+1. **Plan** — Build strength workouts in the app and send them to your watch, by cable or wirelessly through Garmin Connect.
 2. **Train** — Follow the workout on the watch as usual.
 3. **Sync** — Plug the watch in. The app can launch itself on connect and imports new activities automatically.
 4. **Progress** — Strength Tracker checks each exercise against its rep range and suggests your next target. Apply the suggestion and the affected workouts are updated, queued for your watch and, if you're signed in, synced to Garmin Connect, ready for the next session.
@@ -27,7 +27,7 @@ No account required, no cloud, no Garmin Express (which doesn't exist on Linux a
 - **Double progression per exercise** — Set a rep range such as `8-10-12` and a weight increment. Your weakest set sets the pace: once every set reaches the top of the range, the app suggests adding the increment and starting again from the bottom; otherwise it moves you to the next rep step.
 - **Only when it's earned** — No suggestion while any set is below the range or sets were done at mixed weights. Progression can be turned off per exercise.
 - **Unilateral aware** — Rep ranges count per side for single-arm or single-leg exercises.
-- **One click to apply** — Accepted suggestions update your workouts, which are pushed to the watch on its next connection and to Garmin Connect right away.
+- **One click to apply** — Accepted suggestions update your workouts, which are pushed to the watch on its next USB connection and kept up to date in your Garmin Connect library.
 
 ## Strength analysis
 
@@ -43,18 +43,19 @@ No account required, no cloud, no Garmin Express (which doesn't exist on Linux a
 ## Beyond the gym
 
 - **Cardio activities** — Heart-rate chart with time-in-zone breakdown, speed and laps.
-- **GPS routes** — Interactive map with a speed-colored track, satellite/street toggle, reverse-geocoded naming and GPX export with elevation.
+- **GPS routes** — Interactive map with a speed-colored track, satellite/street toggle and reverse-geocoded naming.
 - **Body measurements** — Log them manually or import them from Garmin Connect, then compare and chart them over time with 7-day averages.
 
 ## Device sync
 
 - **USB (MTP) sync** — Auto-detects Garmin devices and downloads new activities.
-- **Workout upload queue** — Workouts sent or changed while the watch is disconnected are pushed automatically on its next connection.
+- **Workout upload queue** — Workouts sent or changed while the watch is disconnected are pushed automatically on its next USB connection. Garmin Connect only gets the updated copy in your library, not a new delivery to the watch.
 - **Workout import** — Import workout steps back from the device.
 - **Print workouts** — Print a workout or save it as PDF to take to the gym.
 - **Manual `.FIT` import** — Import activity files from disk.
-- **Garmin Connect import** — Optional, on-demand download of new activities and weigh-ins (including body composition from smart scales) since the last sync. Sign in once through a `zenity` dialog; the session is kept in the system keyring and refreshed automatically.
-- **Garmin Connect workout sync** — While signed in, saving a workout or applying a progression creates or updates it in Garmin Connect. Workouts already in Connect are matched by name instead of duplicated.
+- **Garmin Connect import** — Optional, on-demand download of the last 7 days' activities not yet imported, and of new weigh-ins (including body composition from smart scales) since the last sync. Sign in once through a `zenity` dialog; the session is kept in the system keyring and refreshed automatically.
+- **Garmin Connect workouts** — While signed in, saved workouts and applied progressions are mirrored to your Garmin Connect workout library. Workouts already in Connect are matched by name instead of duplicated.
+- **Wireless send** — Watches linked to your Garmin Connect account show up next to the plugged-in ones; send a workout to one and it lands on the watch on its next sync, no cable needed. Only watches that support strength workouts are listed. Re-enabling a workout sends it the same way to the linked watches still waiting for it.
 
 ## Your data, your machine
 

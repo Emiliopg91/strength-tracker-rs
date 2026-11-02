@@ -27,7 +27,6 @@ const makeDetails = (
     notes: "",
     sets: [],
     speeds: [],
-    altitudes: [],
     sport: 0,
     sub_sport: 0,
     timestamp: 0,

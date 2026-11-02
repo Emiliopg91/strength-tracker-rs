@@ -314,6 +314,29 @@ export function ExerciseModal({
                                                 />
                                             </td>
                                         </tr>
+                                        {progression && progressionStatus && (
+                                            <tr>
+                                                <td>
+                                                    {translate(
+                                                        "current_progression",
+                                                    )}
+                                                    :
+                                                </td>
+                                                <td>
+                                                    {(exercise.unilateral
+                                                        ? "2x" +
+                                                          progressionStatus.reps /
+                                                              2
+                                                        : progressionStatus.reps) +
+                                                        "x" +
+                                                        fromKg(
+                                                            progressionStatus.weight,
+                                                        ) +
+                                                        " " +
+                                                        getWeightUnit()}
+                                                </td>
+                                            </tr>
+                                        )}
                                     </>
                                 )}
                             </tbody>
@@ -341,36 +364,6 @@ export function ExerciseModal({
                         <tbody>
                             {progression && (
                                 <>
-                                    {progressionStatus && (
-                                        <tr>
-                                            <td
-                                                style={{
-                                                    paddingBottom: "10px",
-                                                }}
-                                            >
-                                                {translate(
-                                                    "current_progression",
-                                                )}
-                                                :
-                                            </td>
-                                            <td
-                                                style={{
-                                                    paddingBottom: "10px",
-                                                }}
-                                            >
-                                                {(exercise.unilateral
-                                                    ? "2x" +
-                                                      progressionStatus.reps / 2
-                                                    : progressionStatus.reps) +
-                                                    "x" +
-                                                    fromKg(
-                                                        progressionStatus.weight,
-                                                    ) +
-                                                    " " +
-                                                    getWeightUnit()}
-                                            </td>
-                                        </tr>
-                                    )}
                                     <tr>
                                         <td>{translate("progression")}:</td>
                                         <td>
@@ -484,12 +477,11 @@ export function ExerciseModal({
                             series={exercise.series}
                             exercise={exercise}
                         />
-                        <hr />
                         <table className="full-width">
                             <colgroup>
                                 <col className="col-350" />
                                 <col />
-                                <col />
+                                <col className="col-120" />
                             </colgroup>
                             <thead>
                                 <tr>

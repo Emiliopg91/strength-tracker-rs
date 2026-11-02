@@ -74,7 +74,6 @@ pub fn additional_data(session: u32) -> AdditionalData {
         heart_rates: None,
         coordinates: None,
         speeds: None,
-        altitudes: None,
         distance: None,
         notes: None,
         max_hr: None,

@@ -82,8 +82,11 @@ export class WorkoutUtils {
         } else {
             return {
                 kind: StepType.Exercise,
+                // Reps take precedence over time in the editor, a leftover time would be hidden there
                 time:
-                    step.time !== null && step.time !== undefined
+                    step.reps == null &&
+                    step.time !== null &&
+                    step.time !== undefined
                         ? step.time / 1000
                         : null,
                 reps:

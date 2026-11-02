@@ -26,6 +26,7 @@ export interface DeviceListItem {
   manufacturer: string;
   model: string;
   serial_number: string;
+  strength_workout: boolean;
 }
 
 // From src-tauri/src/dao/settings.rs:200
@@ -118,11 +119,10 @@ export interface ReportData {
   sessions: SessionDetails[];
 }
 
-// From src-tauri/src/dto/sessions.rs:97
+// From src-tauri/src/dto/sessions.rs:92
 export interface SessionDetails {
   active_calories: number;
   active_time: number;
-  altitudes: (number | null)[];
   coordinates: ([number, number] | null)[];
   device: string | null;
   distance: number | null;
@@ -143,14 +143,14 @@ export interface SessionDetails {
   training_load: number;
 }
 
-// From src-tauri/src/dto/sessions.rs:80
+// From src-tauri/src/dto/sessions.rs:75
 export interface SessionLap {
   idx: number;
   start_latitude: number | null;
   start_longitude: number | null;
 }
 
-// From src-tauri/src/dto/sessions.rs:13
+// From src-tauri/src/dto/sessions.rs:8
 export interface SessionListItem {
   active_calories: number;
   has_record: boolean;
@@ -163,13 +163,13 @@ export interface SessionListItem {
   training_load: number;
 }
 
-// From src-tauri/src/dto/sessions.rs:232
+// From src-tauri/src/dto/sessions.rs:221
 export interface SessionLocation {
   location: string;
   session: number;
 }
 
-// From src-tauri/src/dto/sessions.rs:53
+// From src-tauri/src/dto/sessions.rs:48
 export interface SessionSet {
   duration: number;
   ex_cat: number;
@@ -181,7 +181,7 @@ export interface SessionSet {
   weight: number;
 }
 
-// From src-tauri/src/dto/sessions.rs:225
+// From src-tauri/src/dto/sessions.rs:214
 export interface SessionSetsUpdate {
   notes: string | null;
   sets: SessionSet[];

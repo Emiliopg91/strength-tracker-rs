@@ -11,7 +11,7 @@ type Props = {
 };
 
 export function ImportSessionsMenu({ onImported }: Props) {
-    const { availableDevices } = useContext(DeviceContext);
+    const { devices } = useContext(DeviceContext);
     const { connectUser } = useContext(AppContext);
     const withLoading = useLoadingTask();
     const { translate } = useContext(I18nSettingsContext);
@@ -19,6 +19,8 @@ export function ImportSessionsMenu({ onImported }: Props) {
         top: number;
         left: number;
     } | null>(null);
+
+    const usbDevices = devices.filter((ad) => ad.usb);
 
     const importFromDisk = () => {
         withLoading(BackendClient.importFromFiles()).then((count) => {
@@ -46,7 +48,7 @@ export function ImportSessionsMenu({ onImported }: Props) {
 
     return (
         <>
-            {availableDevices.length == 0 && !connectUser && (
+            {usbDevices.length == 0 && !connectUser && (
                 <Button
                     id="import-file-toggle"
                     variant="contained"
@@ -56,7 +58,7 @@ export function ImportSessionsMenu({ onImported }: Props) {
                     {translate("import_from_disk")}
                 </Button>
             )}
-            {(availableDevices.length > 0 || connectUser) && (
+            {(usbDevices.length > 0 || connectUser) && (
                 <>
                     <Button
                         id="import-file-toggle"
@@ -101,7 +103,7 @@ export function ImportSessionsMenu({ onImported }: Props) {
                                 {translate("import_garmin_connect")}
                             </MenuItem>
                         )}
-                        {availableDevices.map((device, idx) => (
+                        {usbDevices.map((device, idx) => (
                             <MenuItem
                                 key={"dev-" + idx}
                                 onClick={() => {

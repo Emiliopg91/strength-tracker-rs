@@ -149,25 +149,30 @@ impl WorkoutStep {
                     weight_value: None,
                 })),
                 workout_step::StepType::Exercise => {
+                    // Weights are stored in kg, while Connect reads `weightValue` in `weightUnit`
+                    let unit = match weight_unit {
+                        settings::WeightUnit::Kilograms => WeightUnit::kilogram(),
+                        settings::WeightUnit::Pounds => WeightUnit::pound(),
+                    };
+                    // Time wins over reps, as in the FIT writer, so both paths build the same step
+                    let (end_condition, end_condition_value) =
+                        match (step.time.flatten(), step.reps.flatten()) {
+                            (Some(time), _) => (EndCondition::time(), Some((time / 1000) as f64)),
+                            (None, Some(reps)) => (EndCondition::reps(), Some(reps as f64)),
+                            (None, None) => (EndCondition::lap_button(), None),
+                        };
                     res.push(WorkoutStep::Executable(ExecutableStep {
                         step_order: 0,
                         child_step_id: None,
                         step_type: StepType::interval(),
-                        end_condition: if step.reps.flatten().is_some() {
-                            EndCondition::reps()
-                        } else {
-                            if step.time.flatten().is_some() {
-                                EndCondition::time()
-                            } else {
-                                EndCondition::lap_button()
-                            }
-                        },
-                        end_condition_value: if let Some(reps) = step.reps.flatten() {
-                            Some(reps as f64)
-                        } else {
-                            step.time.flatten().map(|time| (time / 1000) as f64)
-                        },
-                        description: step.notes.clone(),
+                        end_condition,
+                        end_condition_value,
+                        // Steps without their own notes inherit the exercise notes, as in the FIT upload
+                        description: step
+                            .notes
+                            .clone()
+                            .filter(|notes| !notes.is_empty())
+                            .or_else(|| step.exercise.as_ref().and_then(|e| e.notes.clone())),
                         category: Some(
                             step.exercise
                                 .clone()
@@ -177,15 +182,11 @@ impl WorkoutStep {
                                 .name,
                         ),
                         exercise_name: Some(step.exercise.clone().unwrap().name),
-                        weight_unit: if step.weight.is_some() {
-                            match weight_unit {
-                                settings::WeightUnit::Kilograms => Some(WeightUnit::kilogram()),
-                                settings::WeightUnit::Pounds => Some(WeightUnit::pound()),
-                            }
-                        } else {
-                            None
-                        },
-                        weight_value: step.weight.map(|weight| weight as f64),
+                        // Rounded to 0.1, as the frontend displays it
+                        weight_value: step.weight.map(|weight| {
+                            (weight as f64 * 1000.0 / unit.factor * 10.0).round() / 10.0
+                        }),
+                        weight_unit: step.weight.map(|_| unit),
                     }))
                 }
                 workout_step::StepType::Repeat => {

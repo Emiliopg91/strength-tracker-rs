@@ -1,9 +1,5 @@
 import { JSX } from "react";
-import Model, {
-    IExerciseData,
-    IModelProps,
-    Muscle,
-} from "react-body-highlighter";
+import Body, { ExtendedBodyPart, Slug } from "@mjcdev/react-body-highlighter";
 
 type Props = {
     primary: string[];
@@ -14,53 +10,61 @@ export function MuscleModel({
     primary: primary_input,
     secondary: secondary_input,
 }: Props): JSX.Element {
-    const data: IExerciseData[] = [
-        { name: "Primary1", muscles: exercisesToIdentifiers(primary_input) },
-        { name: "Primary2", muscles: exercisesToIdentifiers(primary_input) },
-        { name: "Secondary", muscles: exercisesToIdentifiers(secondary_input) },
-    ];
-    const modelProps: IModelProps = {
-        data,
-        style: { width: "5rem" },
-        svgStyle: { pointerEvents: "none" },
-        highlightedColors: ["yellow", "red"],
-    };
+    const intensities = new Map<Slug, number>();
+    for (const slug of exercisesToSlugs(secondary_input)) {
+        intensities.set(slug, SECONDARY_INTENSITY);
+    }
+    // Set last so a muscle both primary and secondary shows as primary
+    for (const slug of exercisesToSlugs(primary_input)) {
+        intensities.set(slug, PRIMARY_INTENSITY);
+    }
+    const data: ExtendedBodyPart[] = [...intensities].map(
+        ([slug, intensity]) => ({ slug, intensity }),
+    );
 
+    // The library has no prop to disable the pointer cursor and click handling of its paths
     return (
         <>
-            <Model {...modelProps} type="anterior" />
-            <Model {...modelProps} type="posterior" />
+            <div style={MODEL_STYLE}>
+                <Body data={data} colors={COLORS} scale={SCALE} side="front" />
+            </div>
+            <div style={MODEL_STYLE}>
+                <Body data={data} colors={COLORS} scale={SCALE} side="back" />
+            </div>
         </>
     );
 }
 
-const MUSCLE_IDENTIFIERS: Record<string, string[]> = {
-    abductors: ["abductors"],
+// Each model is 200 * SCALE px wide and keeps its 1:2 ratio
+const SCALE = 0.575;
+// Takes out the empty side margins of the model, leaving 100px of width
+const MODEL_STYLE = { pointerEvents: "none", margin: "0 -7px" } as const;
+// Indexed by intensity - 1
+const COLORS = ["yellow", "red"];
+const SECONDARY_INTENSITY = 1;
+const PRIMARY_INTENSITY = 2;
+
+// The model has no abductors region: the glutes are the closest hip abductors it shows
+const MUSCLE_IDENTIFIERS: Record<string, Slug[]> = {
+    abductors: ["gluteal"],
     abs: ["abs"],
-    adductors: ["adductor"],
+    adductors: ["adductors"],
     biceps: ["biceps"],
     calves: ["calves"],
     chest: ["chest"],
     forearm: ["forearm"],
     glutes: ["gluteal"],
     hamstrings: ["hamstring"],
-    hips: ["abductors", "adductor"],
+    hips: ["gluteal", "adductors"],
     lats: ["upper-back"],
     lower_back: ["lower-back"],
     obliques: ["obliques"],
     quads: ["quadriceps"],
-    shoulders: ["front-deltoids", "back-deltoids"],
-    traps: ["neck", "trapezius"],
+    shoulders: ["deltoids"],
+    traps: ["trapezius"],
     triceps: ["triceps"],
 };
 
-function exercisesToIdentifiers(exercises: string[]): Muscle[] {
-    const identifiers = new Set<Muscle>();
-    for (const muscle of exercises) {
-        for (const identifier of MUSCLE_IDENTIFIERS[muscle] ?? []) {
-            identifiers.add(identifier as Muscle);
-        }
-    }
-
-    return [...identifiers];
+function exercisesToSlugs(exercises: string[]): Slug[] {
+    return exercises.flatMap((muscle) => MUSCLE_IDENTIFIERS[muscle] ?? []);
 }

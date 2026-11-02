@@ -101,7 +101,7 @@ exercises:
   en: Exercises
   es: Ejercicios
 series:
-  en: Series
+  en: Sets
   es: Series
 volume:
   en: Volume
@@ -379,15 +379,6 @@ user_settings:
 session_notes:
   en: Session notes
   es: Notas de sesión
-export_gpx:
-  en: Export track to GPX
-  es: Exportar ruta a GPX
-ok_on_track_export:
-  en: Track exported succesfully
-  es: Ruta exportada con éxito
-elevations:
-  en: Elevation
-  es: Elevacion
 month_1:
   en: January
   es: Enero

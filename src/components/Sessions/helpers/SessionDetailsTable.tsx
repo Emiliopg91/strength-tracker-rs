@@ -74,16 +74,6 @@ export function SessionDetailsTable({ session }: Props) {
                         </tr>
                     </>
                 )}
-                {session.elevations && (
-                    <tr>
-                        <td>{translate("elevations")}:</td>
-                        <td>
-                            {formatNumber(session.elevations[0], 0) +
-                                " ↑   ↓ " +
-                                formatNumber(session.elevations[1], 0)}
-                        </td>
-                    </tr>
-                )}
                 {session.volume > 0 && (
                     <tr>
                         <td>{translate("volume")}:</td>

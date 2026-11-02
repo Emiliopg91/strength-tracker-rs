@@ -65,19 +65,6 @@ fn coordinates_trailing_bytes_are_ignored() {
 }
 
 #[test]
-fn altitudes_blob_roundtrip_with_invalid() {
-    let values = [-12.5, 0.0, AdditionalData::INVALID_ALTITUDE, 2_345.75];
-
-    let mut data = common::additional_data(1);
-    data.altitudes = Some(AdditionalData::build_altitudes_blob(&values));
-
-    assert_eq!(
-        data.get_altitudes().unwrap(),
-        vec![Some(-12.5), Some(0.0), None, Some(2_345.75)]
-    );
-}
-
-#[test]
 fn heart_rates_invalid_is_none() {
     let mut data = common::additional_data(1);
     data.heart_rates = Some(vec![60, 0, AdditionalData::INVALID_HEAR_RATE, 254]);
@@ -94,17 +81,5 @@ fn missing_blobs_are_none() {
 
     assert!(data.get_coordinates_semicircle().is_none());
     assert!(data.get_coordinates_degrees().is_none());
-    assert!(data.get_altitudes().is_none());
     assert!(data.get_heart_rates().is_none());
-}
-
-#[test]
-fn lap_coordinates_to_degrees() {
-    assert!(common::lap(1, 0, None).get_coordinates_degrees().is_none());
-
-    let (lat, lon) = common::lap(1, 0, Some((QUARTER_TURN, 0)))
-        .get_coordinates_degrees()
-        .unwrap();
-    assert!((lat - 90.0).abs() < 1e-9);
-    assert_eq!(lon, 0.0);
 }

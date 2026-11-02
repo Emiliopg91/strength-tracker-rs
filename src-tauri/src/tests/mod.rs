@@ -1,8 +1,12 @@
 mod additional_data;
 mod common;
+mod connect;
 mod dto;
+mod dump;
+mod exercise_notes;
 mod export;
 mod home;
+mod import;
 mod notes;
 mod parser;
 mod progressions;
@@ -10,3 +14,4 @@ mod prs;
 mod schema;
 mod settings;
 mod translations;
+mod workout_push;

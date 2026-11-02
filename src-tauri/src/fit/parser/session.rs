@@ -1,7 +1,7 @@
 use crate::{
     dao::{
-        additional_data::AdditionalData, exercise::Exercise, session::Session, set::Set,
-        sport::Sport, sub_sport::SubSport,
+        additional_data::AdditionalData, device::Device, exercise::Exercise, session::Session,
+        set::Set, sport::Sport, sub_sport::SubSport,
     },
     fit::parser::{
         FitParser,
@@ -11,7 +11,10 @@ use crate::{
 };
 use rustyfit::{
     DecoderEvent, StreamingIterator,
-    profile::{mesgdef, typedef::MesgNum},
+    profile::{
+        mesgdef,
+        typedef::{DeviceIndex, MesgNum},
+    },
 };
 
 impl TryFrom<FitParser> for Session {
@@ -24,6 +27,7 @@ impl TryFrom<FitParser> for Session {
         let mut laps = Vec::new();
         let mut workout = WorkoutAccumulator::default();
         let mut max_heart_rate = None;
+        let mut device = None;
 
         let path_string = value.borrow_path().display().to_string();
 
@@ -39,6 +43,17 @@ impl TryFrom<FitParser> for Session {
                             // A non-strength workout only leaves the session without workout_obj
                             let _ = workout.set_workout(&workout_obj);
                             session_data.set_workout(workout_obj);
+                        }
+                        MesgNum::DEVICE_INFO => {
+                            let device_info_obj = mesgdef::DeviceInfo::from(msg);
+                            // The other indices are paired sensors, usually without serial
+                            if device_info_obj.device_index == DeviceIndex::CREATOR
+                                && device_info_obj.serial_number != 0
+                            {
+                                device = Some(Device::serial_from_unit_id(
+                                    device_info_obj.serial_number as u64,
+                                ));
+                            }
                         }
                         MesgNum::SESSION => {
                             let session_obj = mesgdef::Session::from(msg);
@@ -151,7 +166,7 @@ impl TryFrom<FitParser> for Session {
             sub_sport: session_data.sub_sport_obj.id,
             sub_sport_obj: Some(session_data.sub_sport_obj),
             laps,
-            device: None,
+            device,
             device_obj: None,
             additional_data,
             show_exercises_chart: true,
@@ -338,8 +353,6 @@ struct RecordAccumulator {
     last_coord: (i32, i32),
     speeds: Vec<f64>,
     any_speed: bool,
-    altitudes: Vec<f64>,
-    any_altitude: bool,
     distance: Option<f64>,
 }
 
@@ -374,16 +387,6 @@ impl RecordAccumulator {
                 }
                 None => AdditionalData::INVALID_SPEED,
             });
-
-        self.altitudes.push(
-            match msg.enhanced_altitude_scaled().or(msg.altitude_scaled()) {
-                Some(v) => {
-                    self.any_altitude = true;
-                    v
-                }
-                None => AdditionalData::INVALID_ALTITUDE,
-            },
-        );
     }
 }
 
@@ -392,7 +395,6 @@ impl From<RecordAccumulator> for Option<AdditionalData> {
         let coords = value.any_coord.then_some(value.coords);
         let hrs = value.any_hr.then_some(value.hrs);
         let speeds = value.any_speed.then_some(value.speeds);
-        let altitudes = value.any_altitude.then_some(value.altitudes);
 
         if hrs.is_some() || coords.is_some() || speeds.is_some() || value.distance.is_some() {
             Some(AdditionalData {
@@ -401,8 +403,6 @@ impl From<RecordAccumulator> for Option<AdditionalData> {
                 coordinates: coords.map(|coords| AdditionalData::build_coordinates_blob(&coords)),
                 speeds: speeds.map(|speeds| AdditionalData::build_speeds_blob(&speeds)),
                 distance: value.distance,
-                altitudes: altitudes
-                    .map(|altitudes| AdditionalData::build_altitudes_blob(&altitudes)),
                 notes: None,
                 max_hr: None,
             })

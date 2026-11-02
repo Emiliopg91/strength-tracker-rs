@@ -14,6 +14,7 @@ import "@/styles/Sessions/SessionList.css";
 import { Button } from "@mui/material";
 import { SessionsCompareModal } from "./SessionsCompareModal";
 import { useFilterList } from "@/hooks/useFilterList";
+import { ImportSessionsMenu } from "./helpers/ImportSessionsMenu";
 
 export function SessionsList() {
     const { sessionsVersion } = useContext(AppContext);
@@ -171,6 +172,13 @@ export function SessionsList() {
                     onClose={() => setComparingSessions(undefined)}
                 />
             )}
+
+            <div
+                style={{ display: "flex", gap: 5 }}
+                className="list-action-bar equal-width-children"
+            >
+                <ImportSessionsMenu onImported={refreshList} />
+            </div>
         </>
     );
 }

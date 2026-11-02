@@ -1,6 +1,5 @@
 use std::{
     collections::{HashMap, HashSet},
-    fs,
     path::{Path, PathBuf},
     sync::Mutex,
     time::Duration,
@@ -10,7 +9,7 @@ use crate::{
     SettingsLock,
     dao::{
         additional_data::{self, AdditionalData, AdditionalDataRepository},
-        device::Device,
+        device::{self, Device, DeviceRepository},
         exercise::{self, ExerciseRepository},
         lap::LapRepository,
         session::{self, Session, SessionRepository},
@@ -25,7 +24,7 @@ use crate::{
     fit::parser::FitParser,
     logic::{
         exercises::update_prs, list_fit_files, notifications::show_notification, report_error,
-        row_int, run_blocking, settle_pending_files,
+        row_int, row_text, run_blocking, settle_pending_files,
     },
     utils::translations::{Languages, translate, translate_and_replace},
 };
@@ -376,7 +375,7 @@ pub fn _import_from_files(app: &AppHandle, files: &[PathBuf]) -> Result<usize, S
     let lang = app.state::<SettingsLock>().read().unwrap().language;
     let database = app.state::<DatabasePool>();
     let res = database
-        .run_in_transaction(|tx| Ok(import_file_list(tx, files, None, lang)?.sessions))
+        .run_in_transaction(|tx| Ok(import_file_list(tx, files, lang)?.sessions))
         .map_err(|e| e.to_string());
 
     match res {
@@ -413,7 +412,7 @@ pub fn import_pending_sessions(
     let res = db.run_in_transaction(|tx| {
         let res = if !activities.is_empty() {
             info!("Fetched {} activity files", activities.len());
-            import_file_list(tx, &activities, Some(device.clone()), lang)?
+            import_file_list(tx, &activities, lang)?
         } else {
             ImportedFiles::default()
         };
@@ -450,7 +449,6 @@ pub struct ImportedFiles {
 pub fn import_file_list<F>(
     tx: &mut rusqlite_orm::rusqlite::Transaction,
     files: &[F],
-    device: Option<Device>,
     lang: Languages,
 ) -> Result<ImportedFiles, DatabaseError>
 where
@@ -505,6 +503,16 @@ where
             .map(|row| row_int(row, session::entity::columns::DATE.as_ref()) as u32)
             .collect()
     };
+    let known_devices: HashSet<_> = if sessions.is_empty() {
+        HashSet::new()
+    } else {
+        DeviceRepository::select()
+            .columns(&[device::entity::columns::SERIAL])
+            .fetch_in(tx)?
+            .iter()
+            .map(|row| row_text(row, device::entity::columns::SERIAL.as_ref()))
+            .collect()
+    };
     let mut handled_workouts = HashSet::new();
 
     for (session, file) in &mut sessions {
@@ -521,9 +529,8 @@ where
                 done.push(file.as_ref().to_path_buf());
                 false
             } else {
-                if let Some(ref device) = device {
-                    session.device = Some(device.serial.clone());
-                }
+                // The serial recorded in the file may belong to a device that isn't registered
+                session.device = session.device.take().filter(|s| known_devices.contains(s));
                 insert_session(tx, session, &mut handled_workouts)?;
 
                 for serie in &session.sets {
@@ -539,7 +546,7 @@ where
                     use std::path::PathBuf;
 
                     let file = PathBuf::from(format!("{}.txt", file.as_ref().display()));
-                    let _ = fs::remove_file(file);
+                    let _ = std::fs::remove_file(file);
                 }
 
                 true
@@ -931,7 +938,6 @@ pub fn merge_sessions(
                 merge_vec(&mut add_data.heart_rates, &mut add_data2.heart_rates);
                 merge_vec(&mut add_data.coordinates, &mut add_data2.coordinates);
                 merge_vec(&mut add_data.speeds, &mut add_data2.speeds);
-                merge_vec(&mut add_data.altitudes, &mut add_data2.altitudes);
 
                 add_data.distance = match (add_data.distance, add_data2.distance) {
                     (Some(d1), Some(d2)) => Some(d1 + d2),

@@ -9,6 +9,10 @@ use crate::{
 
 /// Fires a native desktop notification via `notify-send`, on a background thread.
 pub fn show_notification(notification: NotificationDefinition) {
+    if cfg!(test) {
+        return;
+    }
+
     thread::spawn(move || {
         let icon_param = format!("--icon={}", *ICON_PATH);
         let expire_param = format!("--expire-time={}", notification.kind.get_timeout());

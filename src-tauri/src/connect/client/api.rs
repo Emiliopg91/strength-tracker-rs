@@ -6,7 +6,7 @@ use serde::{Serialize, de::DeserializeOwned};
 
 use super::error::{GarminError, Result};
 use super::http;
-use super::models::{ActivityDetails, ActivitySummary};
+use super::models::{ActivityDetails, ActivitySummary, CalendarItem, CalendarMonth, DeviceSummary};
 use super::tokens::OAuth2Token;
 
 /// User agent for Connect API requests
@@ -15,6 +15,18 @@ const API_USER_AGENT: &str = "GCM-iOS-5.7.2.1";
 #[derive(Clone)]
 pub struct GarminClient {
     base_url: String,
+}
+
+/// Path of the calendar page of `month` (1-12). The calendar service numbers months from 0.
+pub fn calendar_month_path(year: u16, month: u8) -> Result<String> {
+    if !(1..=12).contains(&month) {
+        return Err(GarminError::config(format!("Invalid month: {month}")));
+    }
+    Ok(format!(
+        "/calendar-service/year/{}/month/{}",
+        year,
+        month - 1
+    ))
 }
 
 impl GarminClient {
@@ -42,6 +54,25 @@ impl GarminClient {
     pub async fn get_activity(&self, token: &OAuth2Token, id: u64) -> Result<ActivityDetails> {
         self.get_json(token, &format!("/activity-service/activity/{}", id))
             .await
+    }
+
+    /// List every device registered to the account.
+    pub async fn list_devices(&self, token: &OAuth2Token) -> Result<Vec<DeviceSummary>> {
+        self.get_json(token, "/device-service/deviceregistration/devices")
+            .await
+    }
+
+    /// List the items of the calendar page of `month` (1-12), which includes days of the adjacent
+    /// months.
+    pub async fn list_calendar_month(
+        &self,
+        token: &OAuth2Token,
+        year: u16,
+        month: u8,
+    ) -> Result<Vec<CalendarItem>> {
+        let path = calendar_month_path(year, month)?;
+        let calendar: CalendarMonth = self.get_json(token, &path).await?;
+        Ok(calendar.calendar_items)
     }
 
     /// Make an authenticated GET request and deserialize the JSON response

@@ -337,6 +337,7 @@ export function WorkoutSetLeaf({
                 {typeSelect}
                 <ExerciseField
                     selected={selected}
+                    error={errors.exercise}
                     onChange={(opt) => onExerciseChange(opt!)}
                     sx={{ width: 480 }}
                 />
