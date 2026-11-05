@@ -3,7 +3,7 @@ import { Fragment, useContext } from "react";
 import { Dialog, DialogContent, DialogTitle, IconButton } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import { SessionFrontDetails } from "@/utils/SessionUtils";
-import { SessionSet } from "@/utils/backend/models";
+import { SessionStepDto } from "@/utils/backend/models";
 
 type Props = {
     sessions: SessionFrontDetails[];
@@ -23,16 +23,16 @@ export function SessionsCompareModal({ sessions, onClose }: Props) {
     // of their first set across sessions
     const exercises: string[] = [];
     const groupedSets = sessions.map((s) => {
-        const groups: Record<string, SessionSet[]> = {};
-        s.sets
-            .filter((set) => !set.rest)
+        const groups: Record<string, SessionStepDto[]> = {};
+        s.steps
+            .filter((step) => !step.rest)
             .sort((a, b) => a.idx - b.idx)
-            .forEach((set) => {
-                const key = set.ex_cat + "-" + set.ex_id;
+            .forEach((step) => {
+                const key = step.ex_cat + "-" + step.ex_id;
                 if (!groups[key]) {
                     groups[key] = [];
                 }
-                groups[key].push(set);
+                groups[key].push(step);
             });
         return groups;
     });

@@ -127,6 +127,10 @@
   width: 230px;
 }
 
+.col-240 {
+  width: 240px;
+}
+
 .col-250 {
   width: 250px;
 }
@@ -137,6 +141,14 @@
 
 .col-280 {
   width: 280px;
+}
+
+.col-290 {
+  width: 290px;
+}
+
+.col-310 {
+  width: 310px;
 }
 
 .col-320 {

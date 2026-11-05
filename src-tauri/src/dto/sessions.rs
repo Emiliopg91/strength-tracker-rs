@@ -2,7 +2,7 @@ use std::{collections::HashSet, hash::Hash};
 
 use serde::{Deserialize, Serialize};
 
-use crate::dao::{exercise::Exercise, lap::Lap, session::Session, set::Set};
+use crate::dao::{exercise::Exercise, lap::Lap, session::Session, session_step::SessionStep};
 
 #[derive(Serialize, Default)]
 pub struct SessionListItem {
@@ -45,28 +45,34 @@ impl Hash for SessionListItem {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct SessionSet {
-    pub ex_cat: u16,
-    pub ex_id: u16,
+pub struct SessionStepDto {
+    pub ex_cat: Option<u16>,
+    pub ex_id: Option<u16>,
     pub idx: u8,
     pub reps: u16,
+    pub reps_ref: Option<u16>,
     pub weight: f32,
+    pub weight_ref: Option<f32>,
     pub pr: bool,
     pub rest: bool,
     pub duration: u32,
+    pub duration_ref: Option<u32>,
 }
 
-impl From<&Set> for SessionSet {
-    fn from(value: &Set) -> Self {
+impl From<&SessionStep> for SessionStepDto {
+    fn from(value: &SessionStep) -> Self {
         Self {
             ex_cat: value.ex_cat,
             ex_id: value.ex_id,
             idx: value.idx,
             reps: value.reps,
+            reps_ref: value.reps_ref,
             weight: value.weight,
+            weight_ref: value.weight_ref,
             pr: value.pr,
-            rest: value.ex_cat == u16::MAX,
+            rest: value.rest,
             duration: value.duration,
+            duration_ref: value.duration_ref,
         }
     }
 }
@@ -103,7 +109,7 @@ pub struct SessionDetails {
     pub sport: u8,
     pub sub_sport: u8,
 
-    pub sets: Vec<SessionSet>,
+    pub steps: Vec<SessionStepDto>,
     pub heart_rates: Vec<Option<u8>>,
     pub max_hr: u8,
     pub coordinates: Vec<Option<(i32, i32)>>,
@@ -128,8 +134,8 @@ fn round_samples(samples: Vec<Option<f64>>, scale: f64) -> Vec<Option<f64>> {
         .collect()
 }
 
-impl From<(&Session, &[Exercise], &[Set], &[Lap])> for SessionDetails {
-    fn from(value: (&Session, &[Exercise], &[Set], &[Lap])) -> Self {
+impl From<(&Session, &[Exercise], &[SessionStep], &[Lap])> for SessionDetails {
+    fn from(value: (&Session, &[Exercise], &[SessionStep], &[Lap])) -> Self {
         let device = value
             .0
             .device_obj
@@ -180,7 +186,7 @@ impl From<(&Session, &[Exercise], &[Set], &[Lap])> for SessionDetails {
             .collect();
         let primary_muscles = primary_set.into_iter().collect();
 
-        let sets = value.2.iter().map(SessionSet::from).collect();
+        let sets = value.2.iter().map(SessionStepDto::from).collect();
         let laps = value.3.iter().map(SessionLap::from).collect();
 
         let show_exercises_chart = value.0.show_exercises_chart;
@@ -194,7 +200,7 @@ impl From<(&Session, &[Exercise], &[Set], &[Lap])> for SessionDetails {
             training_load: value.0.training_load,
             sport: value.0.sport,
             sub_sport: value.0.sub_sport,
-            sets,
+            steps: sets,
             heart_rates,
             max_hr,
             device,
@@ -211,9 +217,9 @@ impl From<(&Session, &[Exercise], &[Set], &[Lap])> for SessionDetails {
 }
 
 #[derive(Deserialize, Serialize)]
-pub struct SessionSetsUpdate {
+pub struct SessionStepsUpdate {
     pub timestamp: u32,
-    pub sets: Vec<SessionSet>,
+    pub sets: Vec<SessionStepDto>,
     pub notes: Option<String>,
 }
 

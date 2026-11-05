@@ -17,7 +17,7 @@
     "@mjcdev/react-body-highlighter": "^0.0.4",
     "@mui/icons-material": "^9.5.0",
     "@mui/material": "^9.5.0",
-    "@mui/x-date-pickers": "^9.16.0",
+    "@mui/x-date-pickers": "^9.17.0",
     "@tauri-apps/api": "^2.12.4",
     "@tauri-apps/plugin-autostart": "^2.7.0",
     "@tauri-apps/plugin-log": "^2.10.1",

@@ -68,7 +68,7 @@ export interface ExerciseDetails {
   reps: number;
   reps_range: string;
   secondary_muscles: string[];
-  series: Record<string, SessionSet[]>;
+  series: Record<string, SessionStepDto[]>;
   unilateral: boolean;
   weight: number;
   workouts: string[];
@@ -119,7 +119,7 @@ export interface ReportData {
   sessions: SessionDetails[];
 }
 
-// From src-tauri/src/dto/sessions.rs:92
+// From src-tauri/src/dto/sessions.rs:98
 export interface SessionDetails {
   active_calories: number;
   active_time: number;
@@ -133,17 +133,17 @@ export interface SessionDetails {
   notes: string;
   primary_muscles: string[];
   secondary_muscles: string[];
-  sets: SessionSet[];
   show_exercises_chart: boolean;
   speeds: (number | null)[];
   sport: number;
+  steps: SessionStepDto[];
   sub_sport: number;
   timestamp: number;
   total_elapsed_time: number;
   training_load: number;
 }
 
-// From src-tauri/src/dto/sessions.rs:75
+// From src-tauri/src/dto/sessions.rs:81
 export interface SessionLap {
   idx: number;
   start_latitude: number | null;
@@ -163,28 +163,31 @@ export interface SessionListItem {
   training_load: number;
 }
 
-// From src-tauri/src/dto/sessions.rs:221
+// From src-tauri/src/dto/sessions.rs:227
 export interface SessionLocation {
   location: string;
   session: number;
 }
 
 // From src-tauri/src/dto/sessions.rs:48
-export interface SessionSet {
+export interface SessionStepDto {
   duration: number;
-  ex_cat: number;
-  ex_id: number;
+  duration_ref: number | null;
+  ex_cat: number | null;
+  ex_id: number | null;
   idx: number;
   pr: boolean;
   reps: number;
+  reps_ref: number | null;
   rest: boolean;
   weight: number;
+  weight_ref: number | null;
 }
 
-// From src-tauri/src/dto/sessions.rs:214
-export interface SessionSetsUpdate {
+// From src-tauri/src/dto/sessions.rs:220
+export interface SessionStepsUpdate {
   notes: string | null;
-  sets: SessionSet[];
+  sets: SessionStepDto[];
   timestamp: number;
 }
 

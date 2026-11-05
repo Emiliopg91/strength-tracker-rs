@@ -41,7 +41,7 @@ fn heatmap_totals_and_record_flags_match_inserted_sessions() {
             if record_indices.contains(&i) {
                 let mut set = common::set(date, 0, (0, i as u16), 5, 100.0 + i as f32);
                 set.pr = true;
-                session.sets = vec![set];
+                session.steps = vec![set];
             }
 
             common::insert_session(tx, session);
@@ -84,14 +84,14 @@ fn session_set_flags_report_sets_and_records_per_session() {
 
         // Sets, none of them a record.
         let mut plain = common::session(2_000);
-        plain.sets = vec![common::set(2_000, 0, (0, 1), 5, 50.0)];
+        plain.steps = vec![common::set(2_000, 0, (0, 1), 5, 50.0)];
         common::insert_session(tx, plain);
 
         // Sets, one of them a record.
         let mut record = common::session(3_000);
         let mut pr = common::set(3_000, 1, (0, 2), 5, 60.0);
         pr.pr = true;
-        record.sets = vec![common::set(3_000, 0, (0, 1), 5, 40.0), pr];
+        record.steps = vec![common::set(3_000, 0, (0, 1), 5, 40.0), pr];
         common::insert_session(tx, record);
 
         Ok(())

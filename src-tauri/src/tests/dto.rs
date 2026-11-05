@@ -2,7 +2,7 @@ use crate::{
     dao::{additional_data::AdditionalData, body_metric::BodyMetric, device::Device},
     dto::{
         body_metrics::BodyMetricListItem,
-        sessions::{SessionDetails, SessionListItem, SessionSet},
+        sessions::{SessionDetails, SessionListItem, SessionStepDto},
     },
     tests::common,
     utils::time::local_midnight,
@@ -23,8 +23,8 @@ fn session_set_from_set() {
     let mut set = common::set(1, 3, (5, 7), 8, 62.5);
     set.pr = true;
 
-    let dto = SessionSet::from(&set);
-    assert_eq!((dto.ex_cat, dto.ex_id, dto.idx), (5, 7, 3));
+    let dto = SessionStepDto::from(&set);
+    assert_eq!((dto.ex_cat, dto.ex_id, dto.idx), (Some(5), Some(7), 3));
     assert_eq!((dto.reps, dto.weight, dto.pr), (8, 62.5, true));
 }
 
@@ -56,7 +56,7 @@ fn session_details_without_additional_data() {
     let details = SessionDetails::from((&session, &[][..], &sets[..], &[][..]));
 
     assert_eq!(details.timestamp, 1);
-    assert_eq!(details.sets.len(), 1);
+    assert_eq!(details.steps.len(), 1);
     assert!(details.heart_rates.is_empty());
     assert!(details.coordinates.is_empty());
     assert!(details.distance.is_none());

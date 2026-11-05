@@ -3,7 +3,7 @@ import { SessionUtils, WorkoutLoad } from "@/utils/SessionUtils";
 import {
     SessionDetails,
     SessionListItem,
-    SessionSet,
+    SessionStepDto,
 } from "@/utils/backend/models";
 import { KG_TO_LB } from "@/context/I18nSettingsContext";
 
@@ -25,7 +25,7 @@ const makeDetails = (
     laps: [],
     name: "Session",
     notes: "",
-    sets: [],
+    steps: [],
     speeds: [],
     sport: 0,
     sub_sport: 0,
@@ -39,15 +39,18 @@ const makeDetails = (
     ...overrides,
 });
 
-const makeSet = (overrides: Partial<SessionSet> = {}): SessionSet => ({
+const makeSet = (overrides: Partial<SessionStepDto> = {}): SessionStepDto => ({
     ex_cat: 0,
     ex_id: 0,
     idx: 0,
     pr: false,
     reps: 10,
+    reps_ref: null,
     rest: false,
     weight: 50,
+    weight_ref: null,
     duration: 0,
+    duration_ref: null,
     ...overrides,
 });
 
@@ -55,7 +58,7 @@ describe("SessionUtils.detailsFromBackend - sets", () => {
     it("computes volume across all sets", () => {
         const details = SessionUtils.detailsFromBackend(
             makeDetails({
-                sets: [
+                steps: [
                     makeSet({
                         idx: 0,
                         ex_cat: 1,
@@ -87,21 +90,21 @@ describe("SessionUtils.detailsFromBackend - sets", () => {
 
     it("converts weights to the selected unit rounded to one decimal", () => {
         const details = SessionUtils.detailsFromBackend(
-            makeDetails({ sets: [makeSet({ reps: 2, weight: 100 })] }),
+            makeDetails({ steps: [makeSet({ reps: 2, weight: 100 })] }),
             kgToLb,
         );
 
-        expect(details.sets[0].weight).toBe(220.5);
+        expect(details.steps[0].weight).toBe(220.5);
         expect(details.volume).toBeCloseTo(441, 6);
     });
 
     it("rounds kilograms to one decimal", () => {
         const details = SessionUtils.detailsFromBackend(
-            makeDetails({ sets: [makeSet({ weight: 62.46 })] }),
+            makeDetails({ steps: [makeSet({ weight: 62.46 })] }),
             kgToKg,
         );
 
-        expect(details.sets[0].weight).toBe(62.5);
+        expect(details.steps[0].weight).toBe(62.5);
     });
 
     it("leaves defaults when there are no sets", () => {
@@ -309,7 +312,7 @@ describe("SessionUtils.detailsFromBackend - heart rate", () => {
 describe("SessionUtils.detailsFromBackend - input", () => {
     const backDetails = () =>
         makeDetails({
-            sets: [makeSet({ weight: 100 })],
+            steps: [makeSet({ weight: 100 })],
             coordinates: [
                 [semicircles(40), semicircles(-3)],
                 [semicircles(41), semicircles(-3)],

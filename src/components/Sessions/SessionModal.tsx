@@ -1,7 +1,7 @@
 import { useLoadingTask } from "@/hooks/useLoadingTask";
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
 import { BackendClient } from "@/utils/backend/client";
-import { SessionSetsUpdate } from "@/utils/backend/models";
+import { SessionStepsUpdate } from "@/utils/backend/models";
 import { useContext, useState } from "react";
 import {
     Button,
@@ -35,12 +35,12 @@ export function SessionModal({ session, onClose, onUpdate }: Props) {
 
     const changed =
         notes != originalSession.notes ||
-        localSession.sets.some(
-            (serie, idx) =>
-                serie.reps != originalSession.sets[idx].reps ||
-                serie.weight != originalSession.sets[idx].weight ||
-                serie.ex_cat != originalSession.sets[idx].ex_cat ||
-                serie.ex_id != originalSession.sets[idx].ex_id,
+        localSession.steps.some(
+            (step, idx) =>
+                step.reps != originalSession.steps[idx].reps ||
+                step.weight != originalSession.steps[idx].weight ||
+                step.ex_cat != originalSession.steps[idx].ex_cat ||
+                step.ex_id != originalSession.steps[idx].ex_id,
         );
 
     const updateSerieExercise = (
@@ -49,11 +49,11 @@ export function SessionModal({ session, onClose, onUpdate }: Props) {
         newId: number,
     ) => {
         setLocalSession((prev) => {
-            const sets = prev.sets.map((s, i) =>
+            const steps = prev.steps.map((s, i) =>
                 i == idx ? { ...s, ex_cat: newCat, ex_id: newId } : s,
             );
 
-            return { ...prev, sets };
+            return { ...prev, steps };
         });
     };
 
@@ -63,12 +63,12 @@ export function SessionModal({ session, onClose, onUpdate }: Props) {
         value: number,
     ) => {
         setLocalSession((prev) => {
-            const sets = prev.sets.slice();
-            sets[idx] = { ...sets[idx], [field]: value };
+            const steps = prev.steps.slice();
+            steps[idx] = { ...steps[idx], [field]: value };
 
             return {
                 ...prev,
-                sets,
+                steps,
             };
         });
     };
@@ -79,21 +79,21 @@ export function SessionModal({ session, onClose, onUpdate }: Props) {
     };
 
     const saveChanges = () => {
-        const update: SessionSetsUpdate = {
+        const update: SessionStepsUpdate = {
             timestamp: localSession.timestamp,
             sets: [],
             notes: notes.length > 0 ? notes : null,
         };
-        localSession.sets.forEach((serie, serIdx) => {
+        localSession.steps.forEach((steps, serIdx) => {
             if (
-                originalSession.sets[serIdx].reps != serie.reps ||
-                originalSession.sets[serIdx].weight != serie.weight ||
-                originalSession.sets[serIdx].ex_cat != serie.ex_cat ||
-                originalSession.sets[serIdx].ex_id != serie.ex_id
+                originalSession.steps[serIdx].reps != steps.reps ||
+                originalSession.steps[serIdx].weight != steps.weight ||
+                originalSession.steps[serIdx].ex_cat != steps.ex_cat ||
+                originalSession.steps[serIdx].ex_id != steps.ex_id
             ) {
                 update.sets.push({
-                    ...serie,
-                    weight: toKg(serie.weight),
+                    ...steps,
+                    weight: toKg(steps.weight),
                 });
             }
         });
@@ -163,10 +163,10 @@ export function SessionModal({ session, onClose, onUpdate }: Props) {
                         <br />
                     </>
                 )}
-                {localSession.sets &&
-                    Object.keys(localSession.sets).length > 0 && (
+                {localSession.steps &&
+                    Object.keys(localSession.steps).length > 0 && (
                         <SessionSetsTable
-                            series={localSession.sets}
+                            series={localSession.steps}
                             onUpdateSerieRepsWeight={updateSerieRepsWeight}
                             onUpdateSerieExercise={updateSerieExercise}
                         />

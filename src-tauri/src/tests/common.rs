@@ -9,7 +9,7 @@ use crate::{
         additional_data::{AdditionalData, AdditionalDataRepository},
         lap::{Lap, LapRepository},
         session::{Session, SessionRepository},
-        set::{Set, SetRepository},
+        session_step::{SessionStep, SessionStepRepository},
     },
     schema_ddls,
 };
@@ -44,7 +44,7 @@ pub fn session(date: u32) -> Session {
         workout: None,
         sport: STRENGTH_SPORT,
         sub_sport: STRENGTH_SUB_SPORT,
-        sets: Vec::new(),
+        steps: Vec::new(),
         laps: Vec::new(),
         device_obj: None,
         additional_data: None,
@@ -54,17 +54,21 @@ pub fn session(date: u32) -> Session {
     }
 }
 
-pub fn set(session: u32, idx: u8, exercise: (u16, u16), reps: u16, weight: f32) -> Set {
-    Set {
+pub fn set(session: u32, idx: u8, exercise: (u16, u16), reps: u16, weight: f32) -> SessionStep {
+    SessionStep {
         session,
         idx,
-        ex_cat: exercise.0,
-        ex_id: exercise.1,
+        ex_cat: Some(exercise.0),
+        ex_id: Some(exercise.1),
         reps,
+        reps_ref: None,
         weight,
+        weight_ref: None,
         pr: false,
         exercise: None,
         duration: 0,
+        duration_ref: None,
+        rest: false,
     }
 }
 
@@ -81,7 +85,7 @@ pub fn additional_data(session: u32) -> AdditionalData {
 }
 
 pub fn insert_session(tx: &Transaction, mut session: Session) {
-    let mut sets = std::mem::take(&mut session.sets);
+    let mut sets = std::mem::take(&mut session.steps);
     let mut laps = std::mem::take(&mut session.laps);
     let additional_data = session.additional_data.take();
 
@@ -91,7 +95,7 @@ pub fn insert_session(tx: &Transaction, mut session: Session) {
         .expect("session insert");
 
     if !sets.is_empty() {
-        let mut insert = SetRepository::insert();
+        let mut insert = SessionStepRepository::insert();
         for set in &mut sets {
             insert = insert.item(set);
         }

@@ -23,7 +23,7 @@ export default function SessionsSection({
             <div className="section-container">
                 {sessions.map((session) => {
                     const { exercises, groupedSeries } =
-                        SessionUtils.groupByExercises(session.sets);
+                        SessionUtils.groupByExercises(session.steps);
                     return (
                         <NoPageBreak key={session.timestamp}>
                             <h4>

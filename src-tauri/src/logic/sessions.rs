@@ -13,13 +13,13 @@ use crate::{
         exercise::{self, ExerciseRepository},
         lap::LapRepository,
         session::{self, Session, SessionRepository},
-        set::{self, SetRepository, entity},
+        session_step::{self, SessionStepRepository, entity},
         workout::{self, Workout, WorkoutRepository},
         workout_step::WorkoutStepRepository,
     },
     dto::{
         notifications::{NotificationDefinition, NotificationKind},
-        sessions::{SessionDetails, SessionListItem, SessionLocation, SessionSetsUpdate},
+        sessions::{SessionDetails, SessionListItem, SessionLocation, SessionStepsUpdate},
     },
     fit::parser::FitParser,
     logic::{
@@ -128,16 +128,24 @@ pub fn session_set_flags(
     min_date: Option<i32>,
     max_date: Option<i32>,
 ) -> rusqlite_orm::errors::Result<HashMap<u32, bool>> {
-    let mut select_builder = SetRepository::select()
-        .distinct(&[set::entity::columns::SESSION, set::entity::columns::PR]);
+    let mut select_builder = SessionStepRepository::select().distinct(&[
+        session_step::entity::columns::SESSION,
+        session_step::entity::columns::PR,
+    ]);
 
     // `where_` replaces the previous condition, so bounds must be combined in a single `And`
     let mut conditions = Vec::new();
     if let Some(min_date) = min_date {
-        conditions.push(Where::Gte(set::entity::columns::SESSION, min_date.into()));
+        conditions.push(Where::Gte(
+            session_step::entity::columns::SESSION,
+            min_date.into(),
+        ));
     }
     if let Some(max_date) = max_date {
-        conditions.push(Where::Lte(set::entity::columns::SESSION, max_date.into()));
+        conditions.push(Where::Lte(
+            session_step::entity::columns::SESSION,
+            max_date.into(),
+        ));
     }
     if !conditions.is_empty() {
         select_builder = select_builder.where_(Where::And(conditions));
@@ -145,8 +153,8 @@ pub fn session_set_flags(
 
     let mut flags: HashMap<u32, bool> = HashMap::new();
     for row in select_builder.fetch_in(conn)? {
-        let session = row_int(&row, set::entity::columns::SESSION.as_ref()) as u32;
-        let pr = row_int(&row, set::entity::columns::PR.as_ref()) != 0;
+        let session = row_int(&row, session_step::entity::columns::SESSION.as_ref()) as u32;
+        let pr = row_int(&row, session_step::entity::columns::PR.as_ref()) != 0;
         *flags.entry(session).or_default() |= pr;
     }
     Ok(flags)
@@ -196,7 +204,7 @@ pub fn fetch_session_details(
 ) -> rusqlite_orm::errors::Result<SessionDetails> {
     let mut session = SessionRepository::select_by_id_in(conn, timestamp)?.unwrap();
 
-    session.fetch_sets_relationship_in(conn)?;
+    session.fetch_steps_relationship_in(conn)?;
 
     if session.device.is_some() {
         session.fetch_device_obj_relationship_in(conn)?;
@@ -210,7 +218,8 @@ pub fn fetch_session_details(
         session.fetch_laps_relationship_in(conn)?;
     }
 
-    let condition_set: HashSet<(_, _)> = session.sets.iter().map(|r| (r.ex_cat, r.ex_id)).collect();
+    let condition_set: HashSet<(_, _)> =
+        session.steps.iter().map(|r| (r.ex_cat, r.ex_id)).collect();
 
     let in_conditions: Vec<Vec<Value>> = condition_set
         .into_iter()
@@ -231,20 +240,18 @@ pub fn fetch_session_details(
             .fetch_in(conn)?;
 
         for exercise in &mut exercises {
-            if exercise.category != u16::MAX {
-                exercise.fetch_muscles_relationship_in(conn)?;
-            }
+            exercise.fetch_muscles_relationship_in(conn)?;
         }
 
         exercises
     };
-    session.sets.sort_by_key(|s| s.idx);
+    session.steps.sort_by_key(|s| s.idx);
     session.laps.sort_by_key(|l| l.idx);
 
     Ok(SessionDetails::from((
         &session,
         exercises.as_slice(),
-        session.sets.as_slice(),
+        session.steps.as_slice(),
         session.laps.as_slice(),
     )))
 }
@@ -255,7 +262,7 @@ pub fn fetch_session_details(
 pub async fn save_session_changes(
     app: AppHandle,
     settings: State<'_, SettingsLock>,
-    details: SessionSetsUpdate,
+    details: SessionStepsUpdate,
 ) -> Result<(), String> {
     info!(
         "Saving changes on session {}...",
@@ -272,7 +279,7 @@ pub async fn save_session_changes(
 
             let mut exercises = HashSet::new();
 
-            SetRepository::select()
+            SessionStepRepository::select()
                 .columns(&[entity::columns::EX_CAT, entity::columns::EX_ID])
                 .where_(Where::And(vec![
                     Where::Eq(entity::columns::SESSION, details.timestamp.into()),
@@ -291,7 +298,7 @@ pub async fn save_session_changes(
                 });
 
             for serie in &details.sets {
-                SetRepository::update()
+                SessionStepRepository::update()
                     .set(entity::columns::REPS, serie.reps.into())
                     .set(entity::columns::WEIGHT, serie.weight.into())
                     .set(entity::columns::EX_CAT, serie.ex_cat.into())
@@ -301,7 +308,11 @@ pub async fn save_session_changes(
                         Where::Eq(entity::columns::IDX, serie.idx.into()),
                     ]))
                     .execute_in(tx)?;
-                exercises.insert((serie.ex_cat, serie.ex_id));
+                if let Some(cat) = serie.ex_cat
+                    && let Some(id) = serie.ex_id
+                {
+                    exercises.insert((cat, id));
+                }
             }
 
             update_prs(tx, exercises, &[details.timestamp], Some(lang))?;
@@ -456,7 +467,7 @@ where
 {
     let mut success = Vec::new();
     let mut done = Vec::new();
-    let mut handled_exercises = HashSet::new();
+    let mut handled_exercises: HashSet<(u16, u16)> = HashSet::new();
 
     let (mut sessions, failed): (Vec<_>, Vec<_>) = files.par_iter().partition_map(|file| {
         info!("Parsing session file {}", file.as_ref().display());
@@ -533,8 +544,12 @@ where
                 session.device = session.device.take().filter(|s| known_devices.contains(s));
                 insert_session(tx, session, &mut handled_workouts)?;
 
-                for serie in &session.sets {
-                    handled_exercises.insert((serie.ex_cat, serie.ex_id));
+                for serie in &session.steps {
+                    if let Some(cat) = serie.ex_cat
+                        && let Some(id) = serie.ex_id
+                    {
+                        handled_exercises.insert((cat, id));
+                    }
                 }
 
                 let date = session.date;
@@ -591,7 +606,7 @@ pub fn insert_session(
     session: &mut Session,
     handled_workouts: &mut HashSet<String>,
 ) -> Result<(), DatabaseError> {
-    let mut series = std::mem::take(&mut session.sets);
+    let mut series = std::mem::take(&mut session.steps);
     let mut laps = std::mem::take(&mut session.laps);
     let mut add_data = session.additional_data.take();
 
@@ -635,7 +650,7 @@ pub fn insert_session(
     SessionRepository::insert().item(session).execute_in(tx)?;
 
     if !series.is_empty() {
-        let mut insert = SetRepository::insert();
+        let mut insert = SessionStepRepository::insert();
         for serie in &mut series {
             insert = insert.item(serie);
         }
@@ -656,7 +671,7 @@ pub fn insert_session(
         insert.execute_in(tx)?;
     }
 
-    session.sets = series;
+    session.steps = series;
     session.laps = laps;
     session.additional_data = add_data;
 
@@ -859,18 +874,18 @@ pub fn heatmap_data(database: &DatabasePool) -> Result<Vec<Vec<(u32, u16)>>, Str
                 ])
                 .where_(Where::Gte(session::entity::columns::DATE, ts.into()))
                 .fetch_in(conn)?;
-            let prs = SetRepository::select()
-                .columns(&[set::entity::columns::SESSION])
+            let prs = SessionStepRepository::select()
+                .columns(&[session_step::entity::columns::SESSION])
                 .where_(Where::And(vec![
-                    Where::Eq(set::entity::columns::PR, true.into()),
-                    Where::Gte(set::entity::columns::SESSION, ts.into()),
+                    Where::Eq(session_step::entity::columns::PR, true.into()),
+                    Where::Gte(session_step::entity::columns::SESSION, ts.into()),
                 ]))
                 .fetch_in(conn)?;
 
             let mut pr_counts: HashMap<u32, u16> = HashMap::new();
             for pr in &prs {
                 *pr_counts
-                    .entry(row_int(pr, set::entity::columns::SESSION.as_ref()) as u32)
+                    .entry(row_int(pr, session_step::entity::columns::SESSION.as_ref()) as u32)
                     .or_default() += 1;
             }
 
@@ -905,7 +920,7 @@ pub fn merge_sessions(
         .expect("Error on database query");
     to.fetch_laps_relationship(database)
         .expect("Error on database query");
-    to.fetch_sets_relationship(database)
+    to.fetch_steps_relationship(database)
         .expect("Error on database query");
 
     let mut from = SessionRepository::select_by_id(database, from_date)
@@ -915,7 +930,7 @@ pub fn merge_sessions(
         .expect("Error on database query");
     from.fetch_laps_relationship(database)
         .expect("Error on database query");
-    from.fetch_sets_relationship(database)
+    from.fetch_steps_relationship(database)
         .expect("Error on database query");
 
     to.total_elapsed_time += from.total_elapsed_time;
@@ -975,11 +990,11 @@ pub fn merge_sessions(
         to.laps.push(lap);
     }
 
-    for set in &from.sets {
+    for set in &from.steps {
         let mut set = set.clone();
         set.session = to.date;
-        set.idx = to.sets.len() as u8;
-        to.sets.push(set);
+        set.idx = to.steps.len() as u8;
+        to.steps.push(set);
     }
 
     database.run_in_transaction(|tx| {
@@ -988,7 +1003,19 @@ pub fn merge_sessions(
 
         insert_session(tx, &mut to, &mut HashSet::new())?;
 
-        let handled_exercises = to.sets.iter().map(|s| (s.ex_cat, s.ex_id)).collect();
+        let handled_exercises = to
+            .steps
+            .iter()
+            .filter_map(|s| {
+                if let Some(cat) = s.ex_cat
+                    && let Some(id) = s.ex_id
+                {
+                    Some((cat, id))
+                } else {
+                    None
+                }
+            })
+            .collect();
         update_prs(tx, handled_exercises, &[to.date], None)?;
 
         Ok(())

@@ -1,9 +1,17 @@
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
-import { SxProps, TextField, Theme } from "@mui/material";
+import { InputAdornment, SxProps, TextField, Theme } from "@mui/material";
 import React, { JSX, useContext, useState } from "react";
+import {
+    centeredLabelSx,
+    centeredOutlineSx,
+    referenceInputStyle,
+    referenceOutlineSx,
+} from "./centeredFieldStyles";
 
 type Props = {
     value: number | undefined | null;
+    // Read-only target shown after the value ("80/100"); the value may exceed it
+    reference?: number | null;
     // Clearing the field reports null instead of reverting
     allowEmpty?: boolean;
     error?: boolean;
@@ -14,6 +22,7 @@ type Props = {
 
 export function WeightField({
     value,
+    reference,
     allowEmpty = false,
     error,
     sx,
@@ -44,6 +53,9 @@ export function WeightField({
         onChange(weight);
     };
 
+    const hasReference = reference != null;
+    const displayed = input ?? value ?? "";
+
     return (
         <TextField
             label={translate("weight") + " (" + getWeightUnit() + ")"}
@@ -52,7 +64,7 @@ export function WeightField({
             size="small"
             sx={sx}
             style={style}
-            value={input ?? value ?? ""}
+            value={displayed}
             slotProps={{
                 htmlInput: {
                     className: "no-spinner",
@@ -60,6 +72,22 @@ export function WeightField({
                     min: 0,
                     max: 999,
                     step: 0.1,
+                    style: hasReference
+                        ? referenceInputStyle(String(displayed))
+                        : { textAlign: "center" },
+                },
+                input: {
+                    sx: hasReference ? referenceOutlineSx : centeredOutlineSx,
+                    endAdornment: hasReference ? (
+                        <InputAdornment position="end" sx={{ ml: 0 }}>
+                            {`/${reference}`}
+                        </InputAdornment>
+                    ) : undefined,
+                },
+                inputLabel: {
+                    sx: centeredLabelSx,
+                    // An empty field would otherwise draw the label over the reference
+                    shrink: hasReference ? true : undefined,
                 },
             }}
             onChange={onInputChange}

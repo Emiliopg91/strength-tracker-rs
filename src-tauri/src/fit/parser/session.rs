@@ -1,7 +1,7 @@
 use crate::{
     dao::{
         additional_data::AdditionalData, device::Device, exercise::Exercise, session::Session,
-        set::Set, sport::Sport, sub_sport::SubSport,
+        session_step::SessionStep, sport::Sport, sub_sport::SubSport,
     },
     fit::parser::{
         FitParser,
@@ -23,7 +23,7 @@ impl TryFrom<FitParser> for Session {
         let mut session_data = SessionAccumulator::new();
         let mut records = RecordAccumulator::new();
         let mut exercises = Vec::new();
-        let mut series_data = Vec::new();
+        let mut sets_data = Vec::new();
         let mut laps = Vec::new();
         let mut workout = WorkoutAccumulator::default();
         let mut max_heart_rate = None;
@@ -71,7 +71,7 @@ impl TryFrom<FitParser> for Session {
                         }
                         MesgNum::SET => {
                             let set_obj = mesgdef::Set::from(msg);
-                            handle_set_message(set_obj, &mut series_data);
+                            handle_set_message(set_obj, &mut sets_data);
                         }
                         MesgNum::LAP => {
                             let lap_obj = mesgdef::Lap::from(msg);
@@ -88,48 +88,65 @@ impl TryFrom<FitParser> for Session {
             Ok(())
         })?;
 
-        let mut serie_idx = 0;
-        let mut series: Vec<_> = series_data
+        let workout_obj = workout.build().ok();
+
+        let mut step_idx = 0;
+        let mut steps: Vec<_> = sets_data
             .into_iter()
             .map(|(idx, reps, weight, duration)| {
+                let wkt_step = workout_obj.as_ref().and_then(|w| w.steps.get(idx));
+                // Workout steps store time in milliseconds, session steps in seconds
+                let duration_ref = wkt_step
+                    .and_then(|s| s.time.flatten())
+                    .map(|time| time / 1000);
+
                 let res = if let Some(exercise) = exercises.get(idx)
                     && let Some(exercise) = exercise
                 {
-                    Set {
+                    SessionStep {
                         session: session_data.timestamp,
-                        idx: serie_idx,
-                        ex_cat: exercise.category,
-                        ex_id: exercise.id,
+                        idx: step_idx,
+                        ex_cat: Some(exercise.category),
+                        ex_id: Some(exercise.id),
                         reps,
+                        reps_ref: wkt_step.and_then(|s| s.reps.flatten()),
                         weight,
+                        // Workout steps without a target weight store it as 0
+                        weight_ref: wkt_step.and_then(|s| s.weight).filter(|w| *w > 0_f32),
                         pr: false,
                         exercise: Some(exercise.clone()),
                         duration,
+                        duration_ref,
+                        rest: false,
                     }
                 } else {
-                    Set {
+                    SessionStep {
                         session: session_data.timestamp,
-                        idx: serie_idx,
-                        ex_cat: u16::MAX,
-                        ex_id: 0,
+                        idx: step_idx,
+                        ex_cat: None,
+                        ex_id: None,
                         reps: 0,
+                        reps_ref: None,
                         weight: 0_f32,
+                        weight_ref: None,
                         pr: false,
                         exercise: None,
                         duration,
+                        duration_ref,
+                        rest: true,
                     }
                 };
-                serie_idx += 1;
+                step_idx += 1;
                 res
             })
             .collect();
 
-        // Drop trailing rest sets while the last two are both rests
-        while let [.., a, b] = series.as_slice()
-            && a.ex_cat == u16::MAX
-            && b.ex_cat == u16::MAX
+        // Drop trailing rest steps while the last two are both rests
+        while let [.., a, b] = steps.as_slice()
+            && a.rest
+            && b.rest
         {
-            series.pop();
+            steps.pop();
         }
 
         let mut lap_idx = 0;
@@ -155,12 +172,12 @@ impl TryFrom<FitParser> for Session {
         Ok(Session {
             date: session_data.timestamp,
             name: session_data.workout.clone().unwrap_or_default(),
-            workout_obj: workout.build().ok(),
+            workout_obj,
             workout: session_data.workout,
             total_elapsed_time: session_data.total_elapsed_time,
             active_time: session_data.active_time,
             active_calories: session_data.total_calories - session_data.metabolic_calories,
-            sets: series,
+            steps,
             training_load: session_data.training_load,
             sport: session_data.sub_sport_obj.sport,
             sub_sport: session_data.sub_sport_obj.id,
@@ -199,20 +216,20 @@ fn handle_lap_message(
     Ok(())
 }
 
-fn handle_set_message(msg: mesgdef::Set, series_data: &mut Vec<(usize, u16, f32, u32)>) {
+fn handle_set_message(msg: mesgdef::Set, sets_data: &mut Vec<(usize, u16, f32, u32)>) {
     let ex_idx = msg.wkt_step_index.0 as usize;
     if msg.repetitions != u16::MAX
         && msg.wkt_step_index.0 != u16::MAX
         && let Some(weight) = msg.weight_scaled()
     {
-        series_data.push((
+        sets_data.push((
             ex_idx,
             msg.repetitions,
             weight as f32,
             msg.duration_scaled().unwrap_or(0_f64) as u32,
         ));
     } else {
-        series_data.push((
+        sets_data.push((
             ex_idx,
             0,
             0_f32,

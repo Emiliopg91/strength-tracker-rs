@@ -17,7 +17,7 @@ use crate::{
     dao::{
         exercise::{self, ExerciseRepository},
         session::{self, SessionRepository, entity},
-        set::{self, SetRepository},
+        session_step::{self, SessionStepRepository},
         workout::{self, Workout, WorkoutRepository},
         workout_device::{self, WorkoutDeviceRepository},
         workout_step::{self, WorkoutStepRepository},
@@ -203,14 +203,14 @@ pub async fn get_workout_details(
             let mut time = 0_u32;
             let mut volume = 0_f32;
 
-            let series = SetRepository::select()
+            let series = SessionStepRepository::select()
                 .columns(&[
-                    set::entity::columns::SESSION,
-                    set::entity::columns::REPS,
-                    set::entity::columns::WEIGHT,
+                    session_step::entity::columns::SESSION,
+                    session_step::entity::columns::REPS,
+                    session_step::entity::columns::WEIGHT,
                 ])
                 .where_(Where::InSub(
-                    set::entity::columns::SESSION,
+                    session_step::entity::columns::SESSION,
                     SessionRepository::select()
                         .columns(&[entity::columns::DATE])
                         .where_(Where::Eq(entity::columns::NAME, name.clone().into()))
@@ -221,9 +221,9 @@ pub async fn get_workout_details(
             let mut volume_by_session = HashMap::new();
             for serie in &series {
                 *volume_by_session
-                    .entry(row_int(serie, set::entity::columns::SESSION.as_ref()) as u32)
-                    .or_insert(0.0) += row_int(serie, set::entity::columns::REPS.as_ref()) as f32
-                    * row_f64(serie, set::entity::columns::WEIGHT.as_ref()) as f32;
+                    .entry(row_int(serie, session_step::entity::columns::SESSION.as_ref()) as u32)
+                    .or_insert(0.0) += row_int(serie, session_step::entity::columns::REPS.as_ref()) as f32
+                    * row_f64(serie, session_step::entity::columns::WEIGHT.as_ref()) as f32;
             }
 
             let mut session_list = Vec::new();

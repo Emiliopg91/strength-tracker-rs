@@ -161,9 +161,14 @@ pub async fn get_report_data(
             // Sorted and deduplicated; rest sets and unknown exercises (u16::MAX) are skipped
             let trained: BTreeSet<(u16, u16)> = session_details
                 .iter()
-                .flat_map(|d| &d.sets)
-                .filter(|set| !set.rest && set.ex_cat != u16::MAX)
-                .map(|set| (set.ex_cat, set.ex_id))
+                .flat_map(|d| &d.steps)
+                .filter_map(|set| {
+                    if !set.rest {
+                        Some((set.ex_cat.unwrap(), set.ex_id.unwrap()))
+                    } else {
+                        None
+                    }
+                })
                 .collect();
 
             let mut exercises: Vec<_> = trained

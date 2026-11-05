@@ -759,7 +759,6 @@ async fn send_workout_to_device(
                     if step.notes.as_deref().is_none_or(str::is_empty)
                         && let Some(id) = step.ex_id
                         && let Some(cat) = step.ex_cat
-                        && cat != u16::MAX
                     {
                         Some((idx, (cat, id)))
                     } else {

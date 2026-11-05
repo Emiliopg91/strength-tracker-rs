@@ -33,14 +33,18 @@ pub async fn get_settings(settings: State<'_, SettingsLock>) -> Result<Settings,
     Ok(settings.read().unwrap().clone())
 }
 
-/// Called once the frontend has mounted: starts the USB device watcher and reveals the main window.
+/// Called once the frontend has mounted: reveals the main window and, without waiting for the
+/// network, syncs the Connect devices and then starts the USB device watcher.
 #[traced_command]
 #[tauri::command]
 pub async fn notify_frontend_ready(app: AppHandle) {
     info!("UI ready");
 
-    get_devices_from_connect(&app).await;
-    start_device_watcher(&app);
+    let app_cl = app.clone();
+    tauri::async_runtime::spawn(async move {
+        get_devices_from_connect(&app_cl).await;
+        start_device_watcher(&app_cl);
+    });
 
     if !app.state::<SettingsLock>().read().unwrap().start_into_tray {
         let _ = show_main_window(&app);

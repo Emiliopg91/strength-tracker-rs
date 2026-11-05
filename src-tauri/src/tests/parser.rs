@@ -193,7 +193,7 @@ fn assert_session(session: &Session, expected: &Expected, sport: (u8, u8)) {
     assert_eq!(session.active_calories, expected.active_calories, "{ctx}");
     assert_eq!(session.training_load, expected.training_load, "{ctx}");
     assert_eq!((session.sport, session.sub_sport), sport, "{ctx}");
-    assert_eq!(session.sets.len(), expected.sets, "{ctx}");
+    assert_eq!(session.steps.len(), expected.sets, "{ctx}");
 
     let additional_data = session.additional_data.as_ref().expect(ctx);
     assert_eq!(additional_data.session, expected.date, "{ctx}");
@@ -224,10 +224,11 @@ fn parses_strength_sessions() {
             }
         }
 
-        for (idx, set) in session.sets.iter().enumerate() {
+        for (idx, set) in session.steps.iter().enumerate() {
             assert_eq!(set.session, expected.date);
             assert_eq!(set.idx as usize, idx);
-            assert_eq!(set.exercise.is_some(), set.ex_cat != u16::MAX);
+            assert_eq!(set.exercise.is_some(), set.ex_cat.is_some());
+            assert_eq!(set.rest, set.ex_cat.is_none());
         }
 
         let additional_data = session.additional_data.unwrap();
@@ -245,7 +246,7 @@ fn parses_strength_sessions() {
 fn parses_strength_sets_in_order() {
     let session = parse_fixture("strength_1");
     let sets: Vec<_> = session
-        .sets
+        .steps
         .iter()
         .take(4)
         .map(|s| (s.ex_cat, s.ex_id, s.reps, s.weight))
@@ -254,10 +255,10 @@ fn parses_strength_sets_in_order() {
     assert_eq!(
         sets,
         [
-            (8, 0, 10, 70.0),
-            (17, 27, 20, 36.0),
-            (u16::MAX, 0, 0, 0.0),
-            (8, 0, 8, 70.0)
+            (Some(8), Some(0), 10, 70.0),
+            (Some(17), Some(27), 20, 36.0),
+            (None, None, 0, 0.0),
+            (Some(8), Some(0), 8, 70.0)
         ]
     );
 }
@@ -265,11 +266,11 @@ fn parses_strength_sets_in_order() {
 #[test]
 fn parses_strength_sets_with_fractional_weight() {
     let session = parse_fixture("strength_2");
-    let last = session.sets.iter().rfind(|s| s.ex_cat != u16::MAX).unwrap();
+    let last = session.steps.iter().rfind(|s| !s.rest).unwrap();
 
     assert_eq!(
         (last.ex_cat, last.ex_id, last.reps, last.weight),
-        (37, 32, 15, 13.5)
+        (Some(37), Some(32), 15, 13.5)
     );
 }
 

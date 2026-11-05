@@ -118,15 +118,17 @@ fn initialize(app: &AppHandle) -> (DatabasePool, Settings, ConnectClient, MtpCli
             )
             .unwrap();
 
-            let connect_client = ConnectClient::new(app.clone());
-            let mtp_client = MtpClient {};
-
-            //merge_sessions(&database, _, _);
+            //crate::logic::sessions::merge_sessions(&database, _, _);
 
             #[cfg(debug_assertions)]
             let _ = database.run_in_transaction(|tx| Ok(update_all_prs(tx)?));
 
-            (database, settings, connect_client, mtp_client)
+            (
+                database,
+                settings,
+                ConnectClient::new(app.clone()),
+                MtpClient {},
+            )
         }
         Err(e) => {
             error!("Could not open database: {}", e);

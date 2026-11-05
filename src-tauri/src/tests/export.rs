@@ -41,7 +41,7 @@ fn export_contains_all_data() {
     let db = common::test_db();
 
     let mut strength = common::session(1);
-    strength.sets = vec![
+    strength.steps = vec![
         common::set(1, 0, (28, 0), 5, 100.0),
         common::set(1, 1, (28, 0), 5, 100.0),
         common::set(1, 2, (0, 0), 8, 60.0),

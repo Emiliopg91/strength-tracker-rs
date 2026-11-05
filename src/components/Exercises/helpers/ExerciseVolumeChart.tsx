@@ -1,5 +1,5 @@
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
-import { ExerciseDetails, SessionSet } from "@/utils/backend/models";
+import { ExerciseDetails, SessionStepDto } from "@/utils/backend/models";
 import { useContext } from "react";
 import {
     CartesianGrid,
@@ -15,7 +15,7 @@ import {
 
 type Props = {
     exercise: ExerciseDetails;
-    series: Record<string, SessionSet[]>;
+    series: Record<string, SessionStepDto[]>;
 };
 
 function ExerciseVolumeTooltip({
@@ -79,10 +79,10 @@ export function ExerciseVolumeChart({ series, exercise }: Props) {
     const dates = chartData.map(({ date }) => date);
     const minDate = Math.min(...dates);
     const maxDate = Math.max(...dates);
-    const minWeight = Math.min(...chartData.map(({ weight }) => weight)) / 1.3;
-    const maxWeight = Math.max(...chartData.map(({ weight }) => weight)) * 1.1;
-    const maxReps = Math.max(...chartData.map(({ reps }) => reps)) * 1.1;
-    const minReps = Math.min(...chartData.map(({ reps }) => reps)) / 1.3;
+    const minWeight = Math.min(...chartData.map(({ weight }) => weight));
+    const maxWeight = Math.max(...chartData.map(({ weight }) => weight));
+    const maxReps = Math.max(...chartData.map(({ reps }) => reps));
+    const minReps = Math.min(...chartData.map(({ reps }) => reps));
 
     return (
         <>

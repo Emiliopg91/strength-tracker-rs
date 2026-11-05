@@ -7,7 +7,7 @@ pub mod lap;
 pub mod muscle;
 pub mod muscle_exercise;
 pub mod session;
-pub mod set;
+pub mod session_step;
 pub mod settings;
 pub mod sport;
 pub mod sub_sport;

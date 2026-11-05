@@ -93,6 +93,10 @@
   margin: 10px 0;
 }
 
+.session-sets-values {
+  white-space: nowrap;
+}
+
 .session-sets-values-cell {
   vertical-align: top;
 }
@@ -111,4 +115,10 @@
 
 #session-details-table td {
   vertical-align: top;
+}
+
+.trophy-icon {
+  position: relative !important;
+  top: -2px !important;
+  margin-left: 2px;
 }

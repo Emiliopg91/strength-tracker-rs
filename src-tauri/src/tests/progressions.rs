@@ -3,7 +3,7 @@ use rusqlite_orm::{dao::Repository, database::DatabasePool, types::where_clause:
 use crate::{
     dao::{
         exercise::{self, ExerciseRepository},
-        workout::{Workout, WorkoutRepository},
+        workout::{self, Workout, WorkoutRepository},
         workout_step::{WorkoutStep, WorkoutStepRepository},
     },
     dto::exercises::ProgressionSuggestion,
@@ -48,7 +48,7 @@ fn disable_progression(db: &DatabasePool, exercise: (u16, u16)) {
 fn log_session(db: &DatabasePool, date: u32, exercise: (u16, u16), sets: &[(u16, f32)]) {
     db.run_in_transaction(|tx| {
         let mut session = common::session(date);
-        session.sets = sets
+        session.steps = sets
             .iter()
             .enumerate()
             .map(|(idx, &(reps, weight))| common::set(date, idx as u8, exercise, reps, weight))
@@ -320,6 +320,23 @@ fn steps_already_at_suggestion_give_no_suggestion() {
     configure(&db, BENCH, false, "8-10-12");
     log_session(&db, 1, BENCH, &[(12, 100.0), (12, 100.0)]);
     program(&db, BENCH, 102.0, 8);
+
+    assert_eq!(suggestion(&db, BENCH), None);
+}
+
+#[test]
+fn steps_of_disabled_workouts_give_no_suggestion() {
+    let db = common::test_db();
+    configure(&db, BENCH, false, "8-10-12");
+    log_session(&db, 1, BENCH, &[(12, 100.0), (11, 100.0)]);
+    program(&db, BENCH, 100.0, 10);
+    db.run_in_transaction(|tx| {
+        WorkoutRepository::update()
+            .set(workout::entity::columns::ENABLED, false.into())
+            .execute_in(tx)?;
+        Ok(())
+    })
+    .unwrap();
 
     assert_eq!(suggestion(&db, BENCH), None);
 }

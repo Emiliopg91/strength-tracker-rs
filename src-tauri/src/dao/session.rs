@@ -5,12 +5,12 @@ use crate::dao::{
     additional_data::{self, AdditionalData},
     device::{self, Device},
     lap::{self, Lap},
-    set,
+    session_step,
     sub_sport::{self, SubSport},
     workout::{self, Workout},
 };
 
-use super::set::Set;
+use super::session_step::SessionStep;
 
 #[derive(Entity, Clone, Serialize, Deserialize)]
 #[primary_key(date)]
@@ -28,8 +28,8 @@ pub struct Session {
     pub sub_sport: u8,
     pub show_exercises_chart: bool,
 
-    #[relationship((date, set::entity::columns::SESSION))]
-    pub sets: Vec<Set>,
+    #[relationship((date, session_step::entity::columns::SESSION))]
+    pub steps: Vec<SessionStep>,
 
     #[relationship((date, lap::entity::columns::SESSION))]
     pub laps: Vec<Lap>,

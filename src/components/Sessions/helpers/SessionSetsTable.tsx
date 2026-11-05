@@ -1,5 +1,5 @@
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
-import { SessionSet } from "@/utils/backend/models";
+import { SessionStepDto } from "@/utils/backend/models";
 import { Fragment, useContext, useState } from "react";
 import { FormControlLabel, Switch } from "@mui/material";
 import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
@@ -10,7 +10,7 @@ import { WeightField } from "@/components/Fields/WeightField";
 import { SessionUtils } from "@/utils/SessionUtils";
 
 type Props = {
-    series: SessionSet[];
+    series: SessionStepDto[];
     onUpdateSerieRepsWeight: (
         idx: number,
         field: "reps" | "weight",
@@ -149,11 +149,14 @@ export function SessionSetsTable({
                                                         />
                                                     )}
                                                 </td>
-                                                <td>
+                                                <td className="session-sets-values">
                                                     <RepetitionsField
                                                         label="repetitions"
                                                         allowEmpty
                                                         value={serie.reps}
+                                                        reference={
+                                                            serie.reps_ref
+                                                        }
                                                         sx={{
                                                             width: 100,
                                                             mt: 1,
@@ -171,14 +174,17 @@ export function SessionSetsTable({
                                                     <WeightField
                                                         allowEmpty
                                                         sx={{
-                                                            width: 100,
-                                                            px: 1,
+                                                            width: 104,
+                                                            ml: 1,
                                                             mt: 1,
                                                         }}
                                                         style={{
                                                             marginTop: "5px",
                                                         }}
                                                         value={serie.weight}
+                                                        reference={
+                                                            serie.weight_ref
+                                                        }
                                                         onChange={(e) => {
                                                             updateSerieWeight(
                                                                 idx,
@@ -275,6 +281,7 @@ export function SessionSetsTable({
                                             idx === 0
                                                 ? "group-cell-first"
                                                 : undefined,
+                                            "session-sets-values",
                                         ]
                                             .filter(Boolean)
                                             .join(" ")}
@@ -283,6 +290,7 @@ export function SessionSetsTable({
                                             label="repetitions"
                                             allowEmpty
                                             value={serie.reps}
+                                            reference={serie.reps_ref}
                                             sx={{ width: 100 }}
                                             style={{ marginTop: "5px" }}
                                             onChange={(e) => {
@@ -291,9 +299,10 @@ export function SessionSetsTable({
                                         />
                                         <WeightField
                                             allowEmpty
-                                            sx={{ width: 100, px: 1 }}
+                                            sx={{ width: 104, ml: 1 }}
                                             style={{ marginTop: "5px" }}
                                             value={serie.weight}
+                                            reference={serie.weight_ref}
                                             onChange={(e) => {
                                                 updateSerieWeightOld(idxS, e);
                                             }}
@@ -340,8 +349,8 @@ export function SessionSetsTable({
             )}
             <table>
                 <colgroup>
-                    <col className="col-320" />
-                    <col className="col-230" />
+                    <col className="col-310" />
+                    <col className="col-240" />
                 </colgroup>
                 {groupedSets && groupedBySerie()}
                 {!groupedSets && groupedByExercises()}

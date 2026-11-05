@@ -1,5 +1,9 @@
 import { Marker } from "react-leaflet";
-import { SessionDetails, SessionListItem, SessionSet } from "./backend/models";
+import {
+    SessionDetails,
+    SessionListItem,
+    SessionStepDto,
+} from "./backend/models";
 import L from "leaflet";
 
 const SEMICIRCLE_TO_DEGREES = 180.0 / 2 ** 31;
@@ -64,12 +68,17 @@ export class SessionUtils {
         details: SessionFrontDetails,
         fromKg: (weight: number) => number,
     ) {
-        if (details.sets) {
-            details.sets.forEach((_, idx) => {
-                const copy = { ...details.sets[idx] };
+        if (details.steps) {
+            details.steps.forEach((_, idx) => {
+                const copy = { ...details.steps[idx] };
                 copy.weight = Number(fromKg(copy.weight).toFixed(1));
-                details.sets[idx] = copy;
+                details.steps[idx] = copy;
                 details.volume += copy.reps * copy.weight;
+                if (copy.weight_ref !== null) {
+                    copy.weight_ref = Number(
+                        fromKg(copy.weight_ref).toFixed(1),
+                    );
+                }
             });
         }
     }
@@ -458,7 +467,7 @@ export class SessionUtils {
         return Math.trunc((100 * weight) / (101.3 - 2.67123 * r));
     }
 
-    public static maxE1rm(sets: SessionSet[], unilateral: boolean): number {
+    public static maxE1rm(sets: SessionStepDto[], unilateral: boolean): number {
         return sets.reduce(
             (max, s) =>
                 Math.max(
@@ -469,12 +478,12 @@ export class SessionUtils {
         );
     }
 
-    public static groupByExercises(series: SessionSet[]): {
+    public static groupByExercises(series: SessionStepDto[]): {
         exercises: string[];
-        groupedSeries: Record<string, [number, SessionSet][]>;
+        groupedSeries: Record<string, [number, SessionStepDto][]>;
     } {
         const exercises: string[] = [];
-        const groupedSeries: Record<string, [number, SessionSet][]> = {};
+        const groupedSeries: Record<string, [number, SessionStepDto][]> = {};
 
         let idx = 0;
         for (let i = 0; i < series.length; i++) {

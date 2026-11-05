@@ -7,7 +7,7 @@ use rusqlite_orm::{
 };
 
 use crate::{
-    dao::set::{self, Set, SetRepository},
+    dao::session_step::{self, SessionStep, SessionStepRepository},
     logic::exercises::update_prs,
     tests::common,
 };
@@ -17,26 +17,26 @@ const BENCH: (u16, u16) = (0, 0);
 
 fn pr_sets(db: &DatabasePool) -> Vec<(u32, u8, u16, u16)> {
     db.run_in_connection(|conn| {
-        Ok(SetRepository::select()
-            .where_(Where::Eq(set::entity::columns::PR, true.into()))
-            .order_by(OrderBy::Asc(set::entity::columns::EX_CAT))
+        Ok(SessionStepRepository::select()
+            .where_(Where::Eq(session_step::entity::columns::PR, true.into()))
+            .order_by(OrderBy::Asc(session_step::entity::columns::EX_CAT))
             .fetch_in(conn)?
             .into_iter()
-            .map(|s| (s.session, s.idx, s.ex_cat, s.ex_id))
+            .map(|s| (s.session, s.idx, s.ex_cat.unwrap(), s.ex_id.unwrap()))
             .collect())
     })
     .unwrap()
 }
 
-fn insert_and_update(db: &DatabasePool, sessions: Vec<(u32, Vec<Set>)>) {
+fn insert_and_update(db: &DatabasePool, sessions: Vec<(u32, Vec<SessionStep>)>) {
     db.run_in_transaction(|tx| {
         let mut exercises = HashSet::new();
         for (date, sets) in &sessions {
             let mut session = common::session(*date);
             for s in sets {
-                exercises.insert((s.ex_cat, s.ex_id));
+                exercises.insert((s.ex_cat.unwrap(), s.ex_id.unwrap()));
             }
-            session.sets = sets.clone();
+            session.steps = sets.clone();
             common::insert_session(tx, session);
         }
         update_prs(tx, exercises, &[], None)?;

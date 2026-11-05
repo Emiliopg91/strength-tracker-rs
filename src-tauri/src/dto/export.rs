@@ -10,11 +10,11 @@ use crate::{
         device::{Device, DeviceRepository},
         lap::{Lap, LapRepository},
         session::{Session, SessionRepository},
-        set::{Set, SetRepository},
+        session_step::{SessionStep, SessionStepRepository},
         settings::{Settings, SettingsRepository},
         workout::{Workout, WorkoutRepository},
     },
-    dto::sessions::SessionSet,
+    dto::sessions::SessionStepDto,
     utils::translations::{Languages, translate},
 };
 
@@ -57,8 +57,8 @@ impl Export {
 
             let mut used_exercises = HashSet::new();
 
-            let mut series: HashMap<u32, Vec<Set>> = HashMap::new();
-            SetRepository::select()
+            let mut series: HashMap<u32, Vec<SessionStep>> = HashMap::new();
+            SessionStepRepository::select()
                 .fetch_in(conn)?
                 .into_iter()
                 .for_each(|s| {
@@ -79,10 +79,18 @@ impl Export {
 
             let exercises = used_exercises
                 .into_iter()
-                .map(|ue| ExerciseExport {
-                    category: ue.0,
-                    id: ue.1,
-                    name: translate(&format!("exercise_{}_{}", ue.0, ue.1), lang),
+                .filter_map(|ue| {
+                    if let Some(category) = ue.0
+                        && let Some(id) = ue.1
+                    {
+                        Some(ExerciseExport {
+                            category,
+                            id,
+                            name: translate(&format!("exercise_{}_{}", category, id), lang),
+                        })
+                    } else {
+                        None
+                    }
                 })
                 .collect();
 
@@ -121,11 +129,11 @@ pub struct SessionExport {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub heart_rates: Option<Vec<Option<u8>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub sets: Option<Vec<SessionSet>>,
+    pub sets: Option<Vec<SessionStepDto>>,
 }
 
-impl From<(&Session, Option<&AdditionalData>, Option<&Vec<Set>>)> for SessionExport {
-    fn from(values: (&Session, Option<&AdditionalData>, Option<&Vec<Set>>)) -> Self {
+impl From<(&Session, Option<&AdditionalData>, Option<&Vec<SessionStep>>)> for SessionExport {
+    fn from(values: (&Session, Option<&AdditionalData>, Option<&Vec<SessionStep>>)) -> Self {
         let mut heart_rates = None;
         let mut coordinates: Option<Vec<Option<(f64, f64)>>> = None;
         let mut series = None;
@@ -138,7 +146,7 @@ impl From<(&Session, Option<&AdditionalData>, Option<&Vec<Set>>)> for SessionExp
         if let Some(srs) = values.2
             && !srs.is_empty()
         {
-            let sers = srs.iter().map(SessionSet::from).collect();
+            let sers = srs.iter().map(SessionStepDto::from).collect();
 
             series = Some(sers);
         }

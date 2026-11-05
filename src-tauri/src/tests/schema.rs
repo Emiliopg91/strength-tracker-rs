@@ -3,7 +3,7 @@ use rusqlite_orm::{dao::Repository, ddls};
 use crate::{
     dao::{
         additional_data::AdditionalDataRepository, lap::LapRepository, session::SessionRepository,
-        set::SetRepository, workout::WorkoutRepository,
+        session_step::SessionStepRepository, workout::WorkoutRepository,
     },
     schema_ddls,
     tests::common,
@@ -52,7 +52,7 @@ fn session_roundtrip_with_relationships() {
 
     let mut session = common::session(1_700_000_000);
     session.workout = Some("Leg day".to_string());
-    session.sets = vec![common::set(1_700_000_000, 0, (28, 0), 5, 100.0)];
+    session.steps = vec![common::set(1_700_000_000, 0, (28, 0), 5, 100.0)];
     session.laps = vec![common::lap(1_700_000_000, 0, Some((1, 2)))];
     let mut data = common::additional_data(1_700_000_000);
     data.notes = Some("Felt strong".to_string());
@@ -77,7 +77,7 @@ fn session_roundtrip_with_relationships() {
     let stored = db
         .run_in_connection(|conn| {
             let mut s = SessionRepository::select_by_id_in(conn, 1_700_000_000_u32)?.unwrap();
-            s.fetch_sets_relationship_in(conn)?;
+            s.fetch_steps_relationship_in(conn)?;
             s.fetch_laps_relationship_in(conn)?;
             s.fetch_additional_data_relationship_in(conn)?;
             s.fetch_workout_obj_relationship_in(conn)?;
@@ -86,8 +86,8 @@ fn session_roundtrip_with_relationships() {
         .unwrap();
 
     assert_eq!(stored.name, session.name);
-    assert_eq!(stored.sets.len(), 1);
-    assert_eq!(stored.sets[0].weight, 100.0);
+    assert_eq!(stored.steps.len(), 1);
+    assert_eq!(stored.steps[0].weight, 100.0);
     assert_eq!(stored.laps.len(), 1);
     assert_eq!(stored.laps[0].start_latitude, Some(1));
     let data = stored.additional_data.unwrap();
@@ -101,7 +101,7 @@ fn deleting_a_session_cascades() {
     let db = common::test_db();
 
     let mut session = common::session(1);
-    session.sets = vec![common::set(1, 0, (28, 0), 5, 100.0)];
+    session.steps = vec![common::set(1, 0, (28, 0), 5, 100.0)];
     session.laps = vec![common::lap(1, 0, None)];
     session.additional_data = Some(common::additional_data(1));
 
@@ -115,7 +115,7 @@ fn deleting_a_session_cascades() {
     let (sets, laps, data) = db
         .run_in_connection(|conn| {
             Ok((
-                SetRepository::select().fetch_in(conn)?.len(),
+                SessionStepRepository::select().fetch_in(conn)?.len(),
                 LapRepository::select().fetch_in(conn)?.len(),
                 AdditionalDataRepository::select().fetch_in(conn)?.len(),
             ))
@@ -130,14 +130,16 @@ fn set_requires_known_exercise() {
     let db = common::test_db();
 
     let mut session = common::session(1);
-    session.sets = vec![common::set(1, 0, (9999, 9999), 5, 100.0)];
+    session.steps = vec![common::set(1, 0, (9999, 9999), 5, 100.0)];
 
     let res = db.run_in_transaction(|tx| {
-        let mut sets = std::mem::take(&mut session.sets);
+        let mut sets = std::mem::take(&mut session.steps);
         SessionRepository::insert()
             .item(&mut session.clone())
             .execute_in(tx)?;
-        SetRepository::insert().item(&mut sets[0]).execute_in(tx)?;
+        SessionStepRepository::insert()
+            .item(&mut sets[0])
+            .execute_in(tx)?;
         Ok(())
     });
 

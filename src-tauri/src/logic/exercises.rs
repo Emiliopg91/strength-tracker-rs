@@ -14,7 +14,7 @@ use crate::{
     dao::{
         exercise::{self, ExerciseRepository},
         session::{self, SessionRepository},
-        set::{self, SetRepository},
+        session_step::{self, SessionStepRepository},
         workout::{self, WorkoutRepository},
         workout_device::{self, WorkoutDeviceRepository},
         workout_step::{self, WorkoutStep, WorkoutStepRepository},
@@ -22,7 +22,7 @@ use crate::{
     dto::{
         exercises::{ExerciseDetails, ExerciseListItem, ProgressionSuggestion},
         notifications::{NotificationDefinition, NotificationKind},
-        sessions::SessionSet,
+        sessions::SessionStepDto,
     },
     logic::{
         connect::send_workout_connect, devices::push_pending_to_usb,
@@ -41,10 +41,10 @@ pub async fn get_exercises(
     info!("Getting exercises list...");
     let res = run_blocking(&app, move |database| {
         database.run_in_connection(|conn| {
-            let prs = SetRepository::select()
+            let prs = SessionStepRepository::select()
                 .where_(Where::And(vec![
-                    Where::Eq(set::entity::columns::PR, true.into()),
-                    Where::NotEq(set::entity::columns::EX_CAT, u16::MAX.into()),
+                    Where::Eq(session_step::entity::columns::PR, true.into()),
+                    Where::NotEq(session_step::entity::columns::REST, true.into()),
                 ]))
                 .fetch_in(conn)?;
             let exercises = ExerciseRepository::select()
@@ -68,20 +68,21 @@ pub async fn get_exercises(
             Ok(prs
                 .iter()
                 .map(|pr| ExerciseListItem {
-                    category: pr.ex_cat,
-                    id: pr.ex_id,
+                    category: pr.ex_cat.unwrap(),
+                    id: pr.ex_id.unwrap(),
                     reps: pr.reps,
                     weight: pr.weight,
                     date: pr.session,
                     unilateral: exercises
                         .iter()
-                        .find(|e| e.category == pr.ex_cat && e.id == pr.ex_id)
+                        .find(|e| e.category == pr.ex_cat.unwrap() && e.id == pr.ex_id.unwrap())
                         .unwrap()
                         .unilateral,
-                    progression: suggested_progressions.contains(&(pr.ex_cat, pr.ex_id)),
+                    progression: suggested_progressions
+                        .contains(&(pr.ex_cat.unwrap(), pr.ex_id.unwrap())),
                     notes: exercises
                         .iter()
-                        .find(|e| e.category == pr.ex_cat && e.id == pr.ex_id)
+                        .find(|e| e.category == pr.ex_cat.unwrap() && e.id == pr.ex_id.unwrap())
                         .unwrap()
                         .notes
                         .clone(),
@@ -147,13 +148,13 @@ pub fn fetch_exercise_details(
     exercise.fetch_muscles_relationship_in(conn)?;
     let mut res = ExerciseDetails::from(&exercise);
 
-    let series = SetRepository::select_by_exercise_in(
+    let series = SessionStepRepository::select_by_exercise_in(
         conn,
-        category,
-        id,
+        Some(category),
+        Some(id),
         Some(&[
-            OrderBy::Desc(set::entity::columns::SESSION),
-            OrderBy::Asc(set::entity::columns::IDX),
+            OrderBy::Desc(session_step::entity::columns::SESSION),
+            OrderBy::Asc(session_step::entity::columns::IDX),
         ]),
     )?;
 
@@ -184,11 +185,11 @@ pub fn fetch_exercise_details(
         let mut conditions = Vec::new();
         conditions.push(Where::InSub(
             session::entity::columns::DATE,
-            SetRepository::select()
-                .distinct(&[set::entity::columns::SESSION])
+            SessionStepRepository::select()
+                .distinct(&[session_step::entity::columns::SESSION])
                 .where_(Where::And(vec![
-                    Where::Eq(set::entity::columns::EX_CAT, category.into()),
-                    Where::Eq(set::entity::columns::EX_ID, id.into()),
+                    Where::Eq(session_step::entity::columns::EX_CAT, category.into()),
+                    Where::Eq(session_step::entity::columns::EX_ID, id.into()),
                 ]))
                 .to_subquery(),
         ));
@@ -228,7 +229,7 @@ pub fn fetch_exercise_details(
             }
 
             let entry = res.series.entry(ex_str.clone()).or_default();
-            entry.push(SessionSet::from(&serie));
+            entry.push(SessionStepDto::from(&serie));
         }
 
         res.chart_session = chart_session;
@@ -246,9 +247,7 @@ pub async fn get_exercises_catalog(app: AppHandle) -> Result<HashMap<u16, Vec<u1
         db.run_in_connection(|conn| Ok(ExerciseRepository::select().fetch_in(conn)?))?
             .iter()
             .for_each(|e| {
-                if e.category != u16::MAX {
-                    catalog.entry(e.category).or_default().push(e.id);
-                }
+                catalog.entry(e.category).or_default().push(e.id);
             });
 
         Ok(catalog)
@@ -262,21 +261,24 @@ pub fn update_all_prs(
     tx: &rusqlite_orm::rusqlite::Transaction,
 ) -> rusqlite_orm::errors::Result<()> {
     let mut exercises = HashSet::new();
-    SetRepository::select()
-        .distinct(&[set::entity::columns::EX_CAT, set::entity::columns::EX_ID])
+    SessionStepRepository::select()
+        .distinct(&[
+            session_step::entity::columns::EX_CAT,
+            session_step::entity::columns::EX_ID,
+        ])
         .fetch_in(tx)?
         .iter()
-        .map(|r| {
-            (
-                match r.get(set::entity::columns::EX_CAT.as_ref()) {
+        .filter_map(|r| {
+            Some((
+                match r.get(session_step::entity::columns::EX_CAT.as_ref()) {
                     Some(Value::Int64(val)) => *val as u16,
-                    _ => unreachable!(),
+                    _ => return None,
                 },
-                match r.get(set::entity::columns::EX_ID.as_ref()) {
+                match r.get(session_step::entity::columns::EX_ID.as_ref()) {
                     Some(Value::Int64(val)) => *val as u16,
-                    _ => unreachable!(),
+                    _ => return None,
                 },
-            )
+            ))
         })
         .for_each(|e| {
             exercises.insert(e);
@@ -299,41 +301,45 @@ pub fn update_prs(
     let mut update_true_conditions = vec![];
 
     for exer in &exercises {
-        if exer.0 != u16::MAX {
-            update_false_conditions.push(vec![exer.0.into(), exer.1.into()]);
-            if let Some(pr) = SetRepository::select()
-                .where_(Where::And(vec![
-                    Where::Eq(set::entity::columns::EX_CAT, exer.0.into()),
-                    Where::Eq(set::entity::columns::EX_ID, exer.1.into()),
-                ]))
-                .order_by(OrderBy::Desc(set::entity::columns::WEIGHT))
-                .order_by(OrderBy::Desc(set::entity::columns::REPS))
-                .order_by(OrderBy::Asc(set::entity::columns::SESSION))
-                .order_by(OrderBy::Asc(set::entity::columns::IDX))
-                .limit(1)
-                .fetch_one_in(tx)?
-            {
-                update_true_conditions.push(vec![pr.session.into(), pr.idx.into()]);
-                new_prs = new_prs || sessions.contains(&pr.session);
-            }
+        update_false_conditions.push(vec![exer.0.into(), exer.1.into()]);
+        if let Some(pr) = SessionStepRepository::select()
+            .where_(Where::And(vec![
+                Where::Eq(session_step::entity::columns::EX_CAT, exer.0.into()),
+                Where::Eq(session_step::entity::columns::EX_ID, exer.1.into()),
+            ]))
+            .order_by(OrderBy::Desc(session_step::entity::columns::WEIGHT))
+            .order_by(OrderBy::Desc(session_step::entity::columns::REPS))
+            .order_by(OrderBy::Asc(session_step::entity::columns::SESSION))
+            .order_by(OrderBy::Asc(session_step::entity::columns::IDX))
+            .limit(1)
+            .fetch_one_in(tx)?
+        {
+            update_true_conditions.push(vec![pr.session.into(), pr.idx.into()]);
+            new_prs = new_prs || sessions.contains(&pr.session);
         }
     }
 
     if !update_true_conditions.is_empty() {
-        SetRepository::update()
-            .set(set::entity::columns::PR, false.into())
+        SessionStepRepository::update()
+            .set(session_step::entity::columns::PR, false.into())
             .where_(Where::And(vec![
                 Where::InMultiple(
-                    vec![set::entity::columns::EX_CAT, set::entity::columns::EX_ID],
+                    vec![
+                        session_step::entity::columns::EX_CAT,
+                        session_step::entity::columns::EX_ID,
+                    ],
                     update_false_conditions,
                 ),
-                Where::Eq(set::entity::columns::PR, true.into()),
+                Where::Eq(session_step::entity::columns::PR, true.into()),
             ]))
             .execute_in(tx)?;
-        SetRepository::update()
-            .set(set::entity::columns::PR, true.into())
+        SessionStepRepository::update()
+            .set(session_step::entity::columns::PR, true.into())
             .where_(Where::InMultiple(
-                vec![set::entity::columns::SESSION, set::entity::columns::IDX],
+                vec![
+                    session_step::entity::columns::SESSION,
+                    session_step::entity::columns::IDX,
+                ],
                 update_true_conditions,
             ))
             .execute_in(tx)?;
@@ -522,29 +528,32 @@ pub fn fetch_progression_suggestion(
         return Ok(None);
     }
 
-    let latest_subquery = SetRepository::select()
-        .columns(&[set::entity::columns::SESSION])
+    let latest_subquery = SessionStepRepository::select()
+        .columns(&[session_step::entity::columns::SESSION])
         .where_(Where::And(vec![
-            Where::Eq(set::entity::columns::EX_CAT, category.into()),
-            Where::Eq(set::entity::columns::EX_ID, id.into()),
+            Where::Eq(session_step::entity::columns::EX_CAT, category.into()),
+            Where::Eq(session_step::entity::columns::EX_ID, id.into()),
         ]))
-        .order_by(OrderBy::Desc(set::entity::columns::SESSION))
+        .order_by(OrderBy::Desc(session_step::entity::columns::SESSION))
         .limit(1)
         .to_subquery();
 
-    let sets: Vec<_> = SetRepository::select()
-        .columns(&[set::entity::columns::WEIGHT, set::entity::columns::REPS])
+    let sets: Vec<_> = SessionStepRepository::select()
+        .columns(&[
+            session_step::entity::columns::WEIGHT,
+            session_step::entity::columns::REPS,
+        ])
         .where_(Where::And(vec![
-            Where::Eq(set::entity::columns::EX_CAT, category.into()),
-            Where::Eq(set::entity::columns::EX_ID, id.into()),
-            Where::EqSub(set::entity::columns::SESSION, latest_subquery),
+            Where::Eq(session_step::entity::columns::EX_CAT, category.into()),
+            Where::Eq(session_step::entity::columns::EX_ID, id.into()),
+            Where::EqSub(session_step::entity::columns::SESSION, latest_subquery),
         ]))
         .fetch_in(conn)?
         .iter()
         .map(|r| {
             (
-                row_f64(r, set::entity::columns::WEIGHT.as_ref()) as f32,
-                row_int(r, set::entity::columns::REPS.as_ref()) as u16,
+                row_f64(r, session_step::entity::columns::WEIGHT.as_ref()) as f32,
+                row_int(r, session_step::entity::columns::REPS.as_ref()) as u16,
             )
         })
         .collect();
@@ -586,12 +595,20 @@ pub fn fetch_progression_suggestion(
         reps: if exercise.unilateral { reps * 2 } else { reps },
     };
 
+    // Steps of disabled workouts don't count: they alone would suggest what is already programmed
     let pending = WorkoutStepRepository::select()
         .where_(Where::And(vec![
             Where::Eq(workout_step::entity::columns::EX_CAT, category.into()),
             Where::Eq(workout_step::entity::columns::EX_ID, id.into()),
             Where::NotNull(workout_step::entity::columns::REPS),
             below_suggestion(&suggestion),
+            Where::InSub(
+                workout_step::entity::columns::WORKOUT,
+                WorkoutRepository::select()
+                    .columns(&[workout::entity::columns::NAME])
+                    .where_(Where::Eq(workout::entity::columns::ENABLED, true.into()))
+                    .to_subquery(),
+            ),
         ]))
         .count_in(conn)?;
 
