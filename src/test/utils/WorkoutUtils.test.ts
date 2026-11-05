@@ -47,7 +47,7 @@ describe("WorkoutUtils", () => {
     });
 
     it("keeps the time, in seconds, on time-based exercises", () => {
-        const steps = parse(exerciseStep({ time: 60000 }));
+        const steps = parse(exerciseStep({ time: 60 }));
 
         expect(steps[0]).toMatchObject({ reps: null, time: 60 });
         expect(WorkoutUtils.validateSteps(steps)).toBe(true);

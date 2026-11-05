@@ -11,6 +11,8 @@ use crate::{
     connect::ConnectClient,
     dao::{
         device::{Device, DeviceRepository},
+        session::Session,
+        settings::WeightUnit,
         settings::settings_keys::CLOSE_TO_TRAY,
         workout::Workout,
         workout_device::WorkoutDeviceRepository,
@@ -22,9 +24,11 @@ use crate::{
         exercises::ProgressionSuggestion,
         sessions::{SessionStepDto, SessionStepsUpdate},
     },
+    fit::parser::FitParser,
     logic::{app, body_metrics, connect, devices, exercises, report, sessions, workouts},
     mtp::MtpClient,
     tests::common,
+    utils::translations::Languages,
 };
 
 const BENCH: (u16, u16) = (0, 1);
@@ -352,7 +356,7 @@ fn session_changes_are_saved_and_records_recomputed() {
 
     let details = block_on(sessions::get_session_details(app.handle(), &settings, date)).unwrap();
     let mut sets: Vec<SessionStepDto> = details.steps;
-    sets[0].weight = 70.0;
+    sets[0].weight = Some(70.0);
 
     block_on(sessions::save_session_changes(
         app.handle(),
@@ -366,7 +370,7 @@ fn session_changes_are_saved_and_records_recomputed() {
     .unwrap();
 
     let details = block_on(sessions::get_session_details(app.handle(), &settings, date)).unwrap();
-    assert_eq!(details.steps[0].weight, 70.0);
+    assert_eq!(details.steps[0].weight, Some(70.0));
     assert_eq!(details.notes, "Felt strong");
 
     let records = block_on(exercises::get_exercises(app.handle(), &settings)).unwrap();
@@ -411,4 +415,71 @@ fn workouts_are_saved_edited_and_toggled() {
     assert_eq!(listed.len(), 1);
     assert!(!listed[0].enabled);
     assert!(listed[0].has_steps);
+}
+
+#[test]
+fn stored_session_is_written_as_fit() {
+    let app = test_app();
+    let date = 1_700_000_000;
+    insert_session(&app, date, 10, 60.0);
+    let path = std::env::temp_dir().join(format!(
+        "gtrs-test-session-download-{}.fit",
+        std::process::id()
+    ));
+
+    block_on(sessions::write_session_fit(
+        app.handle(),
+        date,
+        path.clone(),
+        Languages::English,
+        WeightUnit::Kilograms,
+    ))
+    .unwrap();
+    let written = FitParser::from_file(&path).and_then(Session::try_from);
+    let _ = std::fs::remove_file(&path);
+    let written = written.unwrap();
+
+    assert_eq!(written.date, date);
+    assert_eq!(written.steps.len(), 1);
+    assert_eq!(written.steps[0].reps, Some(10));
+    assert_eq!(written.steps[0].weight, Some(60.0));
+    assert_eq!(written.steps[0].ex_cat, Some(BENCH.0));
+    assert_eq!(written.steps[0].ex_id, Some(BENCH.1));
+}
+
+#[test]
+fn missing_session_fails_to_write_as_fit() {
+    let app = test_app();
+    let path = std::env::temp_dir().join(format!(
+        "gtrs-test-session-download-missing-{}.fit",
+        std::process::id()
+    ));
+
+    let res = block_on(sessions::write_session_fit(
+        app.handle(),
+        1,
+        path.clone(),
+        Languages::English,
+        WeightUnit::Kilograms,
+    ));
+
+    assert!(res.is_err());
+    assert!(!path.exists());
+}
+
+#[test]
+fn session_file_name_is_date_then_name() {
+    let date = chrono::TimeZone::with_ymd_and_hms(&chrono::Local, 2026, 11, 4, 10, 37, 58)
+        .unwrap()
+        .timestamp() as u32;
+
+    assert_eq!(
+        sessions::session_file_name(date, "Progresion 1 - Pierna"),
+        "2026-11-04 Progresion 1 - Pierna.fit"
+    );
+    assert_eq!(
+        sessions::session_file_name(date, "Push/Pull"),
+        "2026-11-04 Push-Pull.fit"
+    );
+    assert_eq!(sessions::session_file_name(date, "  "), "2026-11-04.fit");
 }

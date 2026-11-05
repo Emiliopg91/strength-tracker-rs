@@ -50,7 +50,7 @@ fn step_message(step: &WorkoutStep, weight_unit: WeightUnit) -> Message {
             match step.time {
                 Some(Some(time)) => {
                     msg.duration_type = WktStepDuration::TIME;
-                    msg.duration_value = time;
+                    msg.duration_value = time * 1000;
                 }
                 _ => msg.duration_type = WktStepDuration::OPEN,
             }
@@ -69,7 +69,7 @@ fn step_message(step: &WorkoutStep, weight_unit: WeightUnit) -> Message {
             };
             if let Some(Some(time)) = step.time {
                 msg.duration_type = WktStepDuration::TIME;
-                msg.duration_value = time;
+                msg.duration_value = time * 1000;
             } else {
                 match step.reps.flatten() {
                     Some(reps) => {

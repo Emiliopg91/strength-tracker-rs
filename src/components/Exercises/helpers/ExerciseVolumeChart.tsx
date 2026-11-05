@@ -65,8 +65,8 @@ export function ExerciseVolumeChart({ series, exercise }: Props) {
             let count = 0;
             let weight = 0;
             series[k].forEach((s) => {
-                count += s.reps;
-                weight = Math.max(weight, s.weight);
+                count += s.reps ?? 0;
+                weight = Math.max(weight, s.weight ?? 0);
             });
             chartData.push({
                 date: date.getTime(),

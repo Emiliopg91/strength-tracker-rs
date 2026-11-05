@@ -71,9 +71,11 @@ export class SessionUtils {
         if (details.steps) {
             details.steps.forEach((_, idx) => {
                 const copy = { ...details.steps[idx] };
-                copy.weight = Number(fromKg(copy.weight).toFixed(1));
+                if (copy.weight !== null) {
+                    copy.weight = Number(fromKg(copy.weight).toFixed(1));
+                }
                 details.steps[idx] = copy;
-                details.volume += copy.reps * copy.weight;
+                details.volume += (copy.reps ?? 0) * (copy.weight ?? 0);
                 if (copy.weight_ref !== null) {
                     copy.weight_ref = Number(
                         fromKg(copy.weight_ref).toFixed(1),
@@ -472,7 +474,11 @@ export class SessionUtils {
             (max, s) =>
                 Math.max(
                     max,
-                    SessionUtils.estimate1rm(s.weight, s.reps, unilateral),
+                    SessionUtils.estimate1rm(
+                        s.weight ?? 0,
+                        s.reps ?? 0,
+                        unilateral,
+                    ),
                 ),
             0,
         );

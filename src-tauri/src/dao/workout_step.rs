@@ -32,6 +32,7 @@ pub struct WorkoutStep {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub weight: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// In seconds; FIT files carry it in milliseconds
     pub time: Option<Option<u32>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub begin_idx: Option<u16>,

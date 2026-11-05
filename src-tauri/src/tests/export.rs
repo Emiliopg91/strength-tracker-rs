@@ -92,3 +92,23 @@ fn export_contains_all_data() {
     assert_eq!(run["coordinates"].as_array().unwrap().len(), 1);
     assert_eq!(run["heart_rates"][0], 120);
 }
+
+#[test]
+fn save_path_gets_its_extension_only_when_missing() {
+    use std::path::PathBuf;
+
+    use crate::logic::ensure_extension;
+
+    assert_eq!(
+        ensure_extension(PathBuf::from("/tmp/backup"), "json"),
+        PathBuf::from("/tmp/backup.json")
+    );
+    assert_eq!(
+        ensure_extension(PathBuf::from("/tmp/backup.JSON"), "json"),
+        PathBuf::from("/tmp/backup.JSON")
+    );
+    assert_eq!(
+        ensure_extension(PathBuf::from("/tmp/v1.2"), "json"),
+        PathBuf::from("/tmp/v1.2.json")
+    );
+}

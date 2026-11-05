@@ -549,7 +549,9 @@ export function ExerciseModal({
                                                 >
                                                     {serie.reps}x
                                                     {formatNumber(
-                                                        fromKg(serie.weight),
+                                                        fromKg(
+                                                            serie.weight ?? 0,
+                                                        ),
                                                         1,
                                                     ) +
                                                         " " +

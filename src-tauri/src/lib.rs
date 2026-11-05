@@ -40,7 +40,7 @@ use crate::{
         add_body_measures,
         app::{hide_main_window, show_main_window},
         apply_progression_suggestion, connect_logged_user, connect_login, connect_logout,
-        delete_body_metric, export_database, get_body_measures, get_environment,
+        delete_body_metric, download_session, export_database, get_body_measures, get_environment,
         get_exercise_details, get_exercises, get_exercises_catalog, get_heatmap_data,
         get_progression_status, get_progression_suggestion, get_registered_devices,
         get_report_data, get_session_details, get_sessions, get_settings, get_translations,
@@ -324,6 +324,7 @@ pub fn run(log_level: LevelFilter) {
             //Sessions
             get_sessions,
             get_session_details,
+            download_session,
             save_session_changes,
             import_from_files,
             get_heatmap_data,

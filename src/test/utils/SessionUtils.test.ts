@@ -56,6 +56,29 @@ const makeSet = (overrides: Partial<SessionStepDto> = {}): SessionStepDto => ({
 });
 
 describe("SessionUtils.detailsFromBackend - sets", () => {
+    it("keeps rest steps without reps nor weight out of the volume", () => {
+        const details = SessionUtils.detailsFromBackend(
+            makeDetails({
+                steps: [
+                    makeSet({ idx: 0, reps: 10, weight: 50 }),
+                    makeSet({
+                        idx: 1,
+                        ex_cat: null,
+                        ex_id: null,
+                        kind: StepType.Rest,
+                        reps: null,
+                        weight: null,
+                    }),
+                ],
+            }),
+            (kg) => kg,
+        );
+
+        expect(details.volume).toBe(500);
+        expect(details.steps[1].reps).toBeNull();
+        expect(details.steps[1].weight).toBeNull();
+    });
+
     it("computes volume across all sets", () => {
         const details = SessionUtils.detailsFromBackend(
             makeDetails({

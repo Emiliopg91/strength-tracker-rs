@@ -156,7 +156,7 @@ impl WorkoutStep {
                     } else {
                         EndCondition::lap_button()
                     },
-                    end_condition_value: step.time.flatten().map(|time| (time / 1000) as f64),
+                    end_condition_value: step.time.flatten().map(|time| time as f64),
                     description: step.notes.clone(),
                     category: None,
                     exercise_name: None,
@@ -176,7 +176,7 @@ impl WorkoutStep {
                     // Time wins over reps, as in the FIT writer, so both paths build the same step
                     let (end_condition, end_condition_value) =
                         match (step.time.flatten(), step.reps.flatten()) {
-                            (Some(time), _) => (EndCondition::time(), Some((time / 1000) as f64)),
+                            (Some(time), _) => (EndCondition::time(), Some(time as f64)),
                             (None, Some(reps)) => (EndCondition::reps(), Some(reps as f64)),
                             (None, None) => (EndCondition::lap_button(), None),
                         };

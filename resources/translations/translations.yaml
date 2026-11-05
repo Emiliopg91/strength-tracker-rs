@@ -28,6 +28,15 @@ error_import_sessions:
 ok_update_session:
   en: Session updated succesfully
   es: Sesión actualizada correctamente
+download_session:
+  en: Download FIT file
+  es: Descargar archivo FIT
+ok_session_download:
+  en: Session downloaded succesfully
+  es: Sesión descargada correctamente
+error_session_download:
+  en: Error downloading session
+  es: Error descargando sesión
 error_update_session:
   en: Error updating session
   es: Error actualizando sesión
@@ -424,6 +433,12 @@ records:
 select_files_import:
   en: Select files to import
   es: Seleccione archivos a importar
+select_file_save_json:
+  en: Save as JSON
+  es: Guardar como JSON
+select_file_save_fit:
+  en: Save as FIT
+  es: Guardar como FIT
 select_file_save_pdf:
   en: Save as PDF
   es: Guardar como PDF

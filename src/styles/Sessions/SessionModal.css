@@ -77,6 +77,13 @@
   text-align: center;
 }
 
+.session-download-button {
+  /* Left of .modal-close-button, which takes 40px at right: 8px */
+  position: absolute;
+  right: 48px;
+  top: 8px;
+}
+
 .session-sets-actions {
   padding: 5px;
 }

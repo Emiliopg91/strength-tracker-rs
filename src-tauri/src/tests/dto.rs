@@ -25,7 +25,7 @@ fn session_set_from_set() {
 
     let dto = SessionStepDto::from(&set);
     assert_eq!((dto.ex_cat, dto.ex_id, dto.idx), (Some(5), Some(7), 3));
-    assert_eq!((dto.reps, dto.weight, dto.pr), (8, 62.5, true));
+    assert_eq!((dto.reps, dto.weight, dto.pr), (Some(8), Some(62.5), true));
 }
 
 #[test]

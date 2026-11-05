@@ -94,7 +94,8 @@ export default function ExercisesSection({ exercises }: Props): JSX.Element {
                                                                 <td>
                                                                     {formatNumber(
                                                                         fromKg(
-                                                                            serie.weight,
+                                                                            serie.weight ??
+                                                                                0,
                                                                         ),
                                                                         1,
                                                                     ) +

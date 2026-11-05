@@ -260,10 +260,10 @@ fn parses_strength_sets_in_order() {
     assert_eq!(
         sets,
         [
-            (Some(8), Some(0), 10, 70.0),
-            (Some(17), Some(27), 20, 36.0),
-            (None, None, 0, 0.0),
-            (Some(8), Some(0), 8, 70.0)
+            (Some(8), Some(0), Some(10), Some(70.0)),
+            (Some(17), Some(27), Some(20), Some(36.0)),
+            (None, None, None, None),
+            (Some(8), Some(0), Some(8), Some(70.0))
         ]
     );
 }
@@ -279,7 +279,7 @@ fn parses_strength_sets_with_fractional_weight() {
 
     assert_eq!(
         (last.ex_cat, last.ex_id, last.reps, last.weight),
-        (Some(37), Some(32), 15, 13.5)
+        (Some(37), Some(32), Some(15), Some(13.5))
     );
 }
 

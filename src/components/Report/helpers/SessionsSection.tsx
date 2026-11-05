@@ -128,7 +128,8 @@ export default function SessionsSection({
                                                                     </td>
                                                                     <td>
                                                                         {fromKg(
-                                                                            set.weight,
+                                                                            set.weight ??
+                                                                                0,
                                                                         ) +
                                                                             " " +
                                                                             getWeightUnit()}

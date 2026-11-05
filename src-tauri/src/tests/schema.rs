@@ -128,7 +128,7 @@ fn session_roundtrip_with_relationships() {
 
     assert_eq!(stored.name, session.name);
     assert_eq!(stored.steps.len(), 1);
-    assert_eq!(stored.steps[0].weight, 100.0);
+    assert_eq!(stored.steps[0].weight, Some(100.0));
     assert_eq!(stored.laps.len(), 1);
     assert_eq!(stored.laps[0].start_latitude, Some(1));
     let data = stored.additional_data.unwrap();
@@ -185,4 +185,169 @@ fn set_requires_known_exercise() {
     });
 
     assert!(res.is_err());
+}
+
+#[test]
+fn migration_27_nulls_reps_and_weight_only_on_rest_steps() {
+    let db = DatabaseConnectionBuilder::default()
+        .enable_foreign_keys()
+        .build("test")
+        .unwrap();
+    let before: Vec<_> = schema_ddls()
+        .into_iter()
+        .filter(|d| d.version < 27)
+        .collect();
+    db.create_schema(&before).unwrap();
+
+    db.run_in_transaction(|tx| {
+        common::insert_session(tx, common::session(1));
+        tx.execute_batch(
+            "INSERT INTO SESSION_STEP (session, idx, exercise_category, exercise_id, reps, weight, pr, duration, kind)
+             VALUES (1, 0, 0, 1, 10, 50, 1, 60, 'Exercise'),
+                    (1, 1, NULL, NULL, 0, 0, 0, 90, 'Rest'),
+                    (1, 2, NULL, NULL, 0, 0, 0, 30, 'Warmup');",
+        )?;
+        Ok(())
+    })
+    .unwrap();
+
+    db.create_schema(&schema_ddls()).unwrap();
+
+    let mut steps = db
+        .run_in_connection(|conn| Ok(SessionStepRepository::select().fetch_in(conn)?))
+        .unwrap();
+    steps.sort_by_key(|s| s.idx);
+
+    let values: Vec<_> = steps
+        .iter()
+        .map(|s| (s.reps, s.weight, s.pr, s.duration, s.kind.clone()))
+        .collect();
+    assert_eq!(
+        values,
+        [
+            (Some(10), Some(50.0), true, Some(60), StepType::Exercise),
+            (None, None, false, Some(90), StepType::Rest),
+            (Some(0), Some(0.0), false, Some(30), StepType::Warmup),
+        ]
+    );
+
+    let indexes: i64 = db
+        .run_in_connection(|conn| {
+            Ok(conn.query_row(
+                "SELECT count(*) FROM sqlite_master WHERE type = 'index' AND tbl_name = 'SESSION_STEP' AND sql IS NOT NULL",
+                [],
+                |r| r.get(0),
+            )?)
+        })
+        .unwrap();
+    assert_eq!(indexes, 4);
+}
+
+#[test]
+fn migration_27_keeps_the_children_of_rebuilt_tables() {
+    let db = DatabaseConnectionBuilder::default()
+        .enable_foreign_keys()
+        .build("test")
+        .unwrap();
+    let before: Vec<_> = schema_ddls()
+        .into_iter()
+        .filter(|d| d.version < 27)
+        .collect();
+    db.create_schema(&before).unwrap();
+
+    db.run_in_transaction(|tx| {
+        common::insert_session(tx, common::session(1));
+        tx.execute_batch(
+            "INSERT INTO LAP (session, idx) VALUES (1, 0);
+             INSERT INTO ADDITIONAL_DATA (session, max_hr) VALUES (1, 190);
+             INSERT INTO SESSION_STEP (session, idx, exercise_category, exercise_id, reps, weight, pr, duration, kind)
+             VALUES (1, 0, 0, 1, 10, 50, 0, 60, 'Exercise');
+             INSERT INTO WORKOUT (name) VALUES ('Push');
+             INSERT INTO WORKOUT_STEP (workout, idx, kind, exercise_category, exercise_id) VALUES ('Push', 0, 'Exercise', 0, 1);",
+        )?;
+        Ok(())
+    })
+    .unwrap();
+    let count = |table: &str| -> i64 {
+        db.run_in_connection(|conn| {
+            Ok(conn.query_row(&format!("SELECT count(*) FROM {table}"), [], |r| r.get(0))?)
+        })
+        .unwrap()
+    };
+    let tables = [
+        "SESSION",
+        "LAP",
+        "ADDITIONAL_DATA",
+        "SESSION_STEP",
+        "WORKOUT",
+        "WORKOUT_STEP",
+        "MUSCLE",
+        "MUSCLE_EXERCISE",
+        "EXERCISE",
+        "SUB_SPORT",
+    ];
+    let expected: Vec<_> = tables.iter().map(|t| count(t)).collect();
+    assert!(expected.iter().all(|c| *c > 0));
+
+    db.create_schema(&schema_ddls()).unwrap();
+
+    assert_eq!(
+        tables.iter().map(|t| count(t)).collect::<Vec<_>>(),
+        expected
+    );
+}
+
+#[test]
+fn catalogs_in_use_cannot_be_deleted() {
+    let db = common::test_db();
+    db.run_in_transaction(|tx| {
+        let mut session = common::session(1);
+        session.steps = vec![common::set(1, 0, (0, 1), 10, 50.0)];
+        common::insert_session(tx, session);
+        Ok(())
+    })
+    .unwrap();
+    let run = |sql: &str| {
+        db.run_in_transaction(|tx| {
+            tx.execute_batch(sql)?;
+            Ok(())
+        })
+    };
+
+    assert!(run("DELETE FROM SUB_SPORT WHERE sport = 10 AND id = 20").is_err());
+    assert!(run("DELETE FROM EXERCISE WHERE category = 0 AND id = 1").is_err());
+}
+
+#[test]
+fn migration_27_turns_workout_step_time_into_seconds() {
+    let db = DatabaseConnectionBuilder::default()
+        .enable_foreign_keys()
+        .build("test")
+        .unwrap();
+    let before: Vec<_> = schema_ddls()
+        .into_iter()
+        .filter(|d| d.version < 27)
+        .collect();
+    db.create_schema(&before).unwrap();
+    db.run_in_transaction(|tx| {
+        tx.execute_batch(
+            "INSERT INTO WORKOUT (name) VALUES ('Push');
+             INSERT INTO WORKOUT_STEP (workout, idx, kind, time)
+             VALUES ('Push', 0, 'Rest', 90000), ('Push', 1, 'Rest', NULL);",
+        )?;
+        Ok(())
+    })
+    .unwrap();
+
+    db.create_schema(&schema_ddls()).unwrap();
+
+    let mut steps = db
+        .run_in_connection(|conn| {
+            let mut stmt = conn.prepare("SELECT time FROM WORKOUT_STEP ORDER BY idx")?;
+            let rows = stmt.query_map([], |r| r.get::<_, Option<u32>>(0))?;
+            Ok(rows.collect::<Result<Vec<_>, _>>()?)
+        })
+        .unwrap();
+    assert_eq!(steps.remove(0), Some(90));
+    assert_eq!(steps.remove(0), None);
 }

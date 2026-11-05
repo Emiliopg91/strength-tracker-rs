@@ -14,6 +14,7 @@ use crate::{
         lap::LapRepository,
         session::{self, Session, SessionRepository},
         session_step::{self, SessionStepRepository, entity},
+        settings::WeightUnit,
         workout::{self, Workout, WorkoutRepository},
         workout_step::WorkoutStepRepository,
     },
@@ -21,12 +22,15 @@ use crate::{
         notifications::{NotificationDefinition, NotificationKind},
         sessions::{SessionDetails, SessionListItem, SessionLocation, SessionStepsUpdate},
     },
-    fit::parser::FitParser,
+    fit::{parser::FitParser, writer::FitWriter},
     logic::{
-        exercises::update_prs, list_fit_files, notifications::show_notification, report_error,
-        row_int, row_text, run_blocking, settle_pending_files,
+        ask_save_path, exercises::update_prs, list_fit_files, notifications::show_notification,
+        report_error, row_int, row_text, run_blocking, settle_pending_files,
     },
-    utils::translations::{Languages, translate, translate_and_replace},
+    utils::{
+        constants,
+        translations::{Languages, translate, translate_and_replace},
+    },
 };
 use chrono::{Datelike, Days, Local, Months, TimeZone, offset::LocalResult};
 use curl_rest::StatusCode;
@@ -191,6 +195,105 @@ pub async fn get_session_details<R: Runtime>(
 }
 
 /// Loads one session with its sets (sorted), device, additional data and laps (sorted).
+/// File name for an exported session: its local date followed by its name.
+pub fn session_file_name(timestamp: u32, name: &str) -> String {
+    let date = Local
+        .timestamp_opt(timestamp as i64, 0)
+        .unwrap()
+        .format("%Y-%m-%d");
+    let name = name.trim().replace('/', "-");
+
+    if name.is_empty() {
+        format!("{date}.fit")
+    } else {
+        format!("{date} {name}.fit")
+    }
+}
+
+/// Asks where to save the session as a FIT file and writes it there.
+pub async fn download_session<R: Runtime>(
+    app: &AppHandle<R>,
+    settings: &SettingsLock,
+    timestamp: u32,
+) -> Result<(), String> {
+    let (lang, weight_unit) = {
+        let settings = settings.read().unwrap();
+        (settings.language, settings.weight_unit)
+    };
+
+    // Without a name the file is just named after the date; a failure surfaces when writing the file
+    let name = run_blocking(app, move |database| {
+        SessionRepository::select_by_id(database, timestamp)
+            .ok()
+            .flatten()
+            .map(|session| session.name)
+    })
+    .await
+    .unwrap_or_default();
+    let default_file = constants::HOME_DIR.join(session_file_name(timestamp, &name));
+    let Some(file) = ask_save_path(
+        &default_file,
+        "FIT (*.fit) | *.fit",
+        "fit",
+        &translate("select_file_save_fit", lang),
+    )
+    .await?
+    else {
+        return Ok(());
+    };
+
+    match write_session_fit(app, timestamp, file.clone(), lang, weight_unit).await {
+        Ok(()) => {
+            show_notification(NotificationDefinition {
+                title: translate("ok_session_download", lang),
+                body: translate_and_replace(
+                    "export_file_path",
+                    &[&file.display().to_string()],
+                    lang,
+                ),
+                kind: NotificationKind::Temporal,
+            });
+            Ok(())
+        }
+        Err(e) => Err(report_error(
+            e,
+            lang,
+            "error_session_download",
+            "Error downloading session",
+        )),
+    }
+}
+
+/// Encodes the stored session as a FIT file at `path`.
+pub async fn write_session_fit<R: Runtime>(
+    app: &AppHandle<R>,
+    timestamp: u32,
+    path: PathBuf,
+    lang: Languages,
+    weight_unit: WeightUnit,
+) -> Result<(), String> {
+    run_blocking(app, move |database| {
+        let session = database
+            .run_in_connection(|conn| {
+                let mut session = SessionRepository::select_by_id_in(conn, timestamp)?
+                    .ok_or_else(|| format!("Session {timestamp} not found"))?;
+                session.fetch_steps_relationship_in(conn)?;
+                session.fetch_laps_relationship_in(conn)?;
+                session.fetch_additional_data_relationship_in(conn)?;
+                if session.workout.is_some() {
+                    session.fetch_workout_obj_relationship_in(conn)?;
+                }
+                Ok(session)
+            })
+            .map_err(|e| e.to_string())?;
+
+        FitWriter::from(&session)
+            .write(path, lang, weight_unit)
+            .map_err(|e| e.to_string())
+    })
+    .await
+}
+
 pub fn fetch_session_details(
     conn: &rusqlite_orm::rusqlite::Connection,
     timestamp: u32,

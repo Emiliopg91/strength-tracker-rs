@@ -67,8 +67,9 @@ pub async fn get_exercises<R: Runtime>(
                 .map(|pr| ExerciseListItem {
                     category: pr.ex_cat.unwrap(),
                     id: pr.ex_id.unwrap(),
-                    reps: pr.reps,
-                    weight: pr.weight,
+                    // Rest steps, the only ones without these, can't be personal records
+                    reps: pr.reps.unwrap_or_default(),
+                    weight: pr.weight.unwrap_or_default(),
                     date: pr.session,
                     unilateral: exercises
                         .iter()
@@ -173,8 +174,8 @@ pub fn fetch_exercise_details(
             .collect();
 
         let pr = series.iter().find(|s| s.pr).unwrap();
-        res.reps = pr.reps;
-        res.weight = pr.weight;
+        res.reps = pr.reps.unwrap_or_default();
+        res.weight = pr.weight.unwrap_or_default();
         res.pr_date = pr.session;
 
         let mut conditions = Vec::new();

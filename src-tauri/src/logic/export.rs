@@ -10,7 +10,7 @@ use crate::{
         export::Export,
         notifications::{NotificationDefinition, NotificationKind},
     },
-    logic::{notifications::show_notification, report_error, run_blocking},
+    logic::{ask_save_path, notifications::show_notification, report_error, run_blocking},
     rclone::providers::CloudProvider,
     utils::{
         constants,
@@ -60,16 +60,27 @@ pub async fn upload_to_cloud(
     }
 }
 
-/// Exports the whole database to a timestamped JSON file in the user's home directory and notifies on success/failure.
+/// Asks where to save the whole database as a JSON file, writes it there and notifies on success/failure.
 pub async fn export_database<R: Runtime>(
     app: &AppHandle<R>,
     settings: &SettingsLock,
 ) -> Result<(), String> {
-    let path = constants::HOME_DIR.join(format!(
+    let default_file = constants::HOME_DIR.join(format!(
         "{}-{}.json",
         *constants::APP_NAME,
         Local::now().format("%Y-%m-%d-%H-%M-%S")
     ));
+    let dialog_lang = settings.read().unwrap().language;
+    let Some(path) = ask_save_path(
+        &default_file,
+        "JSON (*.json) | *.json",
+        "json",
+        &translate("select_file_save_json", dialog_lang),
+    )
+    .await?
+    else {
+        return Ok(());
+    };
     info!("Exporting database to {}...", path.display());
 
     let export_path = path.clone();

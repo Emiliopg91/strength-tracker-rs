@@ -79,6 +79,47 @@ where
         .expect("blocking DB task panicked")
 }
 
+/// Adds `extension` to `path` unless it already ends in it.
+pub(crate) fn ensure_extension(mut path: PathBuf, extension: &str) -> PathBuf {
+    if path
+        .extension()
+        .is_none_or(|ext| !ext.eq_ignore_ascii_case(extension))
+    {
+        path.as_mut_os_string().push(format!(".{extension}"));
+    }
+    path
+}
+
+/// Asks where to save a file, starting at `default_file`. Returns `None` if the user cancels.
+pub(crate) async fn ask_save_path(
+    default_file: &Path,
+    filter: &str,
+    extension: &str,
+    title: &str,
+) -> Result<Option<PathBuf>, String> {
+    let output = tokio::process::Command::new("zenity")
+        .args([
+            "--file-selection",
+            "--save",
+            &format!("--filename={}", default_file.display()),
+            &format!("--file-filter={filter}"),
+            &format!("--title={title}"),
+        ])
+        .output()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !output.status.success() {
+        return Ok(None);
+    }
+
+    let path = String::from_utf8(output.stdout).map_err(|e| e.to_string())?;
+    Ok(Some(ensure_extension(
+        PathBuf::from(path.trim_end_matches('\n')),
+        extension,
+    )))
+}
+
 /// Lists the `.fit` files directly inside `dir`, which leaves out those already marked as failed.
 pub(crate) fn list_fit_files(dir: &Path) -> Vec<PathBuf> {
     fs::read_dir(dir)
@@ -173,6 +214,16 @@ pub async fn get_session_details(
     timestamp: u32,
 ) -> Result<SessionDetails, String> {
     sessions::get_session_details(&app, &settings, timestamp).await
+}
+
+#[traced_command]
+#[tauri::command]
+pub async fn download_session(
+    app: AppHandle,
+    settings: State<'_, SettingsLock>,
+    timestamp: u32,
+) -> Result<(), String> {
+    sessions::download_session(&app, &settings, timestamp).await
 }
 
 #[traced_command]

@@ -101,10 +101,7 @@ impl TryFrom<FitParser> for Session {
             .into_iter()
             .map(|(idx, reps, weight, duration)| {
                 let wkt_step = workout_obj.as_ref().and_then(|w| w.steps.get(idx));
-                // Workout steps store time in milliseconds, session steps in seconds
-                let duration_ref = wkt_step
-                    .and_then(|s| s.time.flatten())
-                    .map(|time| time / 1000);
+                let duration_ref = wkt_step.and_then(|s| s.time.flatten());
                 let has_exercise = matches!(exercises.get(idx), Some(Some(_)));
                 let kind = set_kind(wkt_step, has_exercise);
 
@@ -116,9 +113,9 @@ impl TryFrom<FitParser> for Session {
                         idx: step_idx,
                         ex_cat: Some(exercise.category),
                         ex_id: Some(exercise.id),
-                        reps,
+                        reps: Some(reps),
                         reps_ref: wkt_step.and_then(|s| s.reps.flatten()),
-                        weight,
+                        weight: Some(weight),
                         // Workout steps without a target weight store it as 0
                         weight_ref: wkt_step.and_then(|s| s.weight).filter(|w| *w > 0_f32),
                         pr: false,
@@ -133,9 +130,10 @@ impl TryFrom<FitParser> for Session {
                         idx: step_idx,
                         ex_cat: None,
                         ex_id: None,
-                        reps: 0,
+                        // Other kinds without exercise, like warm-ups, are still done sets
+                        reps: (kind != StepType::Rest).then_some(0),
                         reps_ref: None,
-                        weight: 0_f32,
+                        weight: (kind != StepType::Rest).then_some(0_f32),
                         weight_ref: None,
                         pr: false,
                         exercise: None,
@@ -235,7 +233,7 @@ fn handle_lap_message(
     Ok(())
 }
 
-fn handle_set_message(msg: mesgdef::Set, sets_data: &mut Vec<(usize, u16, f32, u32)>) {
+fn handle_set_message(msg: mesgdef::Set, sets_data: &mut Vec<(usize, u16, f32, Option<u32>)>) {
     let ex_idx = msg.wkt_step_index.0 as usize;
     if msg.repetitions != u16::MAX
         && msg.wkt_step_index.0 != u16::MAX
@@ -245,15 +243,10 @@ fn handle_set_message(msg: mesgdef::Set, sets_data: &mut Vec<(usize, u16, f32, u
             ex_idx,
             msg.repetitions,
             weight as f32,
-            msg.duration_scaled().unwrap_or(0_f64) as u32,
+            msg.duration_scaled().map(|d| d as u32),
         ));
     } else {
-        sets_data.push((
-            ex_idx,
-            0,
-            0_f32,
-            msg.duration_scaled().unwrap_or(0_f64) as u32,
-        ));
+        sets_data.push((ex_idx, 0, 0_f32, msg.duration_scaled().map(|d| d as u32)));
     }
 }
 

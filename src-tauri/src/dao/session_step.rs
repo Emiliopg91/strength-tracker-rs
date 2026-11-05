@@ -23,12 +23,12 @@ pub struct SessionStep {
     pub ex_cat: Option<u16>,
     #[column("exercise_id")]
     pub ex_id: Option<u16>,
-    pub reps: u16,
+    pub reps: Option<u16>,
     pub reps_ref: Option<u16>,
-    pub weight: f32,
+    pub weight: Option<f32>,
     pub weight_ref: Option<f32>,
     pub pr: bool,
-    pub duration: u32,
+    pub duration: Option<u32>,
     pub duration_ref: Option<u32>,
     pub kind: StepType,
 

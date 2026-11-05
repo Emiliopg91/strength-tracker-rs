@@ -28,7 +28,9 @@ export function SessionSetsTable({
     // Without catalog the exercise name is rendered as plain text instead of a selector
     const { exercisesCatalog } = useContext(AppContext);
 
-    const [hasRests] = useState(series.find((s) => s.kind == StepType.Rest) !== undefined);
+    const [hasRests] = useState(
+        series.find((s) => s.kind == StepType.Rest) !== undefined,
+    );
 
     const [groupedSets, setGroupedSets] = useState(false);
 
@@ -112,7 +114,8 @@ export function SessionSetsTable({
                                                                 ) +
                                                                 ": "}
                                                             {formatDuration(
-                                                                serie.duration,
+                                                                serie.duration ??
+                                                                    0,
                                                             )}
                                                         </small>
                                                     </span>

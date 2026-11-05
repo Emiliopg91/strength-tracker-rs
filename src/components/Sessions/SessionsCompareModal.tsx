@@ -172,7 +172,7 @@ export function SessionsCompareModal({ sessions, onClose }: Props) {
                                                 {set.reps +
                                                     " x " +
                                                     formatNumber(
-                                                        set.weight,
+                                                        set.weight ?? 0,
                                                         1,
                                                     ) +
                                                     " " +

@@ -10,8 +10,10 @@ import {
     DialogTitle,
     IconButton,
     TextareaAutosize,
+    Tooltip,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
+import DownloadIcon from "@mui/icons-material/Download";
 import { SessionFrontDetails } from "@/utils/SessionUtils";
 import { SessionMap } from "./helpers/SessionMap";
 import { SessionDetailsTable } from "./helpers/SessionDetailsTable";
@@ -93,7 +95,7 @@ export function SessionModal({ session, onClose, onUpdate }: Props) {
             ) {
                 update.sets.push({
                     ...steps,
-                    weight: toKg(steps.weight),
+                    weight: steps.weight === null ? null : toKg(steps.weight),
                 });
             }
         });
@@ -101,6 +103,10 @@ export function SessionModal({ session, onClose, onUpdate }: Props) {
             onUpdate();
             onClose();
         });
+    };
+
+    const downloadSession = () => {
+        withLoading(BackendClient.downloadSession(localSession.timestamp));
     };
 
     return (
@@ -121,6 +127,18 @@ export function SessionModal({ session, onClose, onUpdate }: Props) {
                             )}
                     </span>
                 )}
+                <Tooltip title={translate("download_session")}>
+                    {/* A disabled button fires no events, the tooltip needs this wrapper */}
+                    <span className="session-download-button">
+                        <IconButton
+                            aria-label={translate("download_session")}
+                            disabled={changed}
+                            onClick={downloadSession}
+                        >
+                            <DownloadIcon />
+                        </IconButton>
+                    </span>
+                </Tooltip>
                 <IconButton onClick={onClose} className="modal-close-button">
                     <CloseIcon />
                 </IconButton>

@@ -171,16 +171,16 @@ export interface SessionLocation {
 
 // From src-tauri/src/dto/sessions.rs:51
 export interface SessionStepDto {
-  duration: number;
+  duration: number | null;
   duration_ref: number | null;
   ex_cat: number | null;
   ex_id: number | null;
   idx: number;
   kind: StepType;
   pr: boolean;
-  reps: number;
+  reps: number | null;
   reps_ref: number | null;
-  weight: number;
+  weight: number | null;
   weight_ref: number | null;
 }
 
@@ -202,7 +202,7 @@ export interface Settings {
   weight_unit: WeightUnit;
 }
 
-// From src-tauri/src/dao/workout_step.rs:46
+// From src-tauri/src/dao/workout_step.rs:47
 export enum StepType {
 	Exercise = "Exercise",
 	Warmup = "Warmup",

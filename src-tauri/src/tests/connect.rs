@@ -62,9 +62,9 @@ fn reps(idx: u16, reps: u16, weight: Option<f32>) -> WorkoutStep {
     }
 }
 
-fn rest(idx: u16, time_ms: Option<u32>) -> WorkoutStep {
+fn rest(idx: u16, time: Option<u32>) -> WorkoutStep {
     WorkoutStep {
-        time: Some(time_ms),
+        time: Some(time),
         ..step(idx, StepType::Rest)
     }
 }
@@ -202,7 +202,7 @@ fn exercise_without_weight_omits_weight_fields() {
 #[test]
 fn timed_exercise_ends_on_time_in_seconds() {
     let step = WorkoutStep {
-        time: Some(Some(45_000)),
+        time: Some(Some(45)),
         ..exercise_step(0)
     };
     let json = steps_json(&[step]);
@@ -214,7 +214,7 @@ fn timed_exercise_ends_on_time_in_seconds() {
 #[test]
 fn time_wins_over_reps_like_the_fit_writer() {
     let step = WorkoutStep {
-        time: Some(Some(30_000)),
+        time: Some(Some(30)),
         ..reps(0, 10, None)
     };
     let json = steps_json(&[step]);
@@ -252,7 +252,7 @@ fn open_exercise_ends_on_lap_button() {
 
 #[test]
 fn rest_with_and_without_time() {
-    let json = steps_json(&[rest(0, Some(90_000)), rest(1, None)]);
+    let json = steps_json(&[rest(0, Some(90)), rest(1, None)]);
 
     assert_eq!(json[0]["stepType"]["stepTypeKey"], "rest");
     assert_eq!(json[0]["endCondition"]["conditionTypeKey"], "time");
@@ -268,7 +268,7 @@ fn rest_with_and_without_time() {
 fn flat_steps_are_numbered_in_order_without_parent() {
     let json = steps_json(&[
         reps(0, 10, Some(60.0)),
-        rest(1, Some(90_000)),
+        rest(1, Some(90)),
         reps(2, 8, Some(65.0)),
     ]);
 
@@ -278,11 +278,7 @@ fn flat_steps_are_numbered_in_order_without_parent() {
 
 #[test]
 fn repeat_group_wraps_its_range() {
-    let json = steps_json(&[
-        reps(0, 10, Some(60.0)),
-        rest(1, Some(90_000)),
-        repeat(2, 0, 3),
-    ]);
+    let json = steps_json(&[reps(0, 10, Some(60.0)), rest(1, Some(90)), repeat(2, 0, 3)]);
 
     assert_eq!(json.as_array().unwrap().len(), 1);
     let group = &json[0];
@@ -310,7 +306,7 @@ fn steps_around_a_repeat_keep_their_place() {
     let json = steps_json(&[
         reps(0, 15, None),
         reps(1, 10, Some(60.0)),
-        rest(2, Some(90_000)),
+        rest(2, Some(90)),
         repeat(3, 1, 4),
         rest(4, None),
     ]);
@@ -355,7 +351,7 @@ fn nested_repeats_are_numbered_depth_first() {
     let json = steps_json(&[
         reps(0, 15, None),
         reps(1, 10, Some(60.0)),
-        rest(2, Some(60_000)),
+        rest(2, Some(60)),
         repeat(3, 1, 2),
         reps(4, 12, Some(20.0)),
         repeat(5, 1, 3),

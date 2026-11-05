@@ -67,7 +67,7 @@ export class WorkoutUtils {
                 kind: StepType.Rest,
                 time:
                     step.time !== null && step.time !== undefined
-                        ? step.time / 1000
+                        ? step.time
                         : null,
                 reps:
                     step.reps !== null && step.reps !== undefined
@@ -87,7 +87,7 @@ export class WorkoutUtils {
                     step.reps == null &&
                     step.time !== null &&
                     step.time !== undefined
-                        ? step.time / 1000
+                        ? step.time
                         : null,
                 reps:
                     step.reps !== null && step.reps !== undefined
@@ -196,7 +196,7 @@ export class WorkoutUtils {
                 workout,
                 idx: idx,
                 kind: StepType.Rest,
-                time: leaf.time != null ? leaf.time * 1000 : null,
+                time: leaf.time,
                 begin_idx: null,
                 ex_cat: null,
                 ex_id: null,
@@ -213,7 +213,7 @@ export class WorkoutUtils {
                 workout,
                 idx: idx,
                 kind: leaf.kind,
-                time: leaf.time != null ? leaf.time * 1000 : null,
+                time: leaf.time,
                 ex_cat: leaf.ex_cat,
                 ex_id: leaf.ex_id,
                 reps: leaf.reps,

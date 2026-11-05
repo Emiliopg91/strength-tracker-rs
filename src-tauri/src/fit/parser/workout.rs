@@ -89,7 +89,7 @@ impl WorkoutAccumulator {
             _ => match msg.intensity {
                 Intensity::REST => {
                     let duration = match msg.duration_type {
-                        WktStepDuration::TIME => Some(msg.duration_value),
+                        WktStepDuration::TIME => Some(msg.duration_value / 1000),
                         _ => None,
                     };
                     let notes = if !msg.notes.is_empty() {
@@ -120,7 +120,7 @@ impl WorkoutAccumulator {
                         _ => None,
                     };
                     let time = match msg.duration_type {
-                        WktStepDuration::TIME => Some(msg.duration_value),
+                        WktStepDuration::TIME => Some(msg.duration_value / 1000),
                         _ => None,
                     };
                     let notes = if !msg.notes.is_empty() {

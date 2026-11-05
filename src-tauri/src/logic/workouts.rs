@@ -19,7 +19,7 @@ use crate::{
         session_step::{self, SessionStepRepository},
         workout::{self, Workout, WorkoutRepository},
         workout_device::{self, WorkoutDeviceRepository},
-        workout_step::{self, WorkoutStepRepository},
+        workout_step::{self, StepType, WorkoutStepRepository},
     },
     dto::{
         notifications::{NotificationDefinition, NotificationKind},
@@ -204,13 +204,17 @@ pub async fn get_workout_details<R: Runtime>(
                     session_step::entity::columns::REPS,
                     session_step::entity::columns::WEIGHT,
                 ])
-                .where_(Where::InSub(
-                    session_step::entity::columns::SESSION,
-                    SessionRepository::select()
-                        .columns(&[entity::columns::DATE])
-                        .where_(Where::Eq(entity::columns::NAME, name.clone().into()))
-                        .to_subquery(),
-                ))
+                .where_(Where::And(vec![
+                    // Rest steps have neither reps nor weight
+                    Where::NotEq(session_step::entity::columns::KIND, StepType::Rest.into()),
+                    Where::InSub(
+                        session_step::entity::columns::SESSION,
+                        SessionRepository::select()
+                            .columns(&[entity::columns::DATE])
+                            .where_(Where::Eq(entity::columns::NAME, name.clone().into()))
+                            .to_subquery(),
+                    ),
+                ]))
                 .fetch_in(conn)?;
 
             let mut volume_by_session = HashMap::new();

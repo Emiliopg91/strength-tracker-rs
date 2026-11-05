@@ -1,4 +1,5 @@
 pub mod errors;
+pub mod session;
 pub mod workout;
 
 use std::{fs::File, io::BufWriter, path::Path};
