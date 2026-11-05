@@ -36,4 +36,3 @@ export const referenceInputStyle = (text: string): CSSProperties => ({
     paddingLeft: 0,
     textAlign: "right",
 });
-

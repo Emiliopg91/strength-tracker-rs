@@ -222,7 +222,8 @@ pub async fn get_workout_details(
             for serie in &series {
                 *volume_by_session
                     .entry(row_int(serie, session_step::entity::columns::SESSION.as_ref()) as u32)
-                    .or_insert(0.0) += row_int(serie, session_step::entity::columns::REPS.as_ref()) as f32
+                    .or_insert(0.0) += row_int(serie, session_step::entity::columns::REPS.as_ref())
+                    as f32
                     * row_f64(serie, session_step::entity::columns::WEIGHT.as_ref()) as f32;
             }
 
