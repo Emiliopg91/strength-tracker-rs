@@ -3,8 +3,7 @@ use std::{collections::HashMap, thread, time::Duration};
 use rusqlite_orm::database::DatabasePool;
 use semver::Version;
 use serde_json::Value;
-use strength_tracker_rs_macros::traced_command;
-use tauri::{AppHandle, Manager, State, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager, Runtime, WebviewWindowBuilder};
 use tauri_plugin_autostart::ManagerExt;
 
 use crate::{
@@ -27,17 +26,13 @@ use crate::{
 use tauri_plugin_log::log::{debug, info};
 
 /// Returns the current in-memory app settings.
-#[traced_command]
-#[tauri::command]
-pub async fn get_settings(settings: State<'_, SettingsLock>) -> Result<Settings, String> {
+pub async fn get_settings(settings: &SettingsLock) -> Result<Settings, String> {
     Ok(settings.read().unwrap().clone())
 }
 
 /// Called once the frontend has mounted: reveals the main window and, without waiting for the
 /// network, syncs the Connect devices and then starts the USB device watcher.
-#[traced_command]
-#[tauri::command]
-pub async fn notify_frontend_ready(app: AppHandle) {
+pub async fn notify_frontend_ready<R: Runtime>(app: &AppHandle<R>) {
     info!("UI ready");
 
     let app_cl = app.clone();
@@ -47,7 +42,7 @@ pub async fn notify_frontend_ready(app: AppHandle) {
     });
 
     if !app.state::<SettingsLock>().read().unwrap().start_into_tray {
-        let _ = show_main_window(&app);
+        let _ = show_main_window(app);
     }
 
     let app_cl = app.clone();
@@ -60,7 +55,7 @@ pub async fn notify_frontend_ready(app: AppHandle) {
     std::thread::spawn(move || check_for_update(&app_cl));
 }
 
-pub fn show_main_window(app: &AppHandle) -> tauri::Result<()> {
+pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     if let Some(w) = app.get_webview_window("main") {
         w.show()?;
         w.unminimize()?;
@@ -84,7 +79,7 @@ pub fn show_main_window(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-pub fn hide_main_window(app: &AppHandle) -> tauri::Result<()> {
+pub fn hide_main_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     if let Some(w) = app.get_webview_window("main") {
         w.hide()?;
         return Ok(());
@@ -93,8 +88,6 @@ pub fn hide_main_window(app: &AppHandle) -> tauri::Result<()> {
 }
 
 /// Reports whether this is a debug or release build.
-#[traced_command]
-#[tauri::command]
 pub async fn get_environment() -> AppEnvironment {
     if cfg!(debug_assertions) {
         AppEnvironment::Debug
@@ -104,15 +97,19 @@ pub async fn get_environment() -> AppEnvironment {
 }
 
 /// Updates a single named setting: persists it to the DB, applies any side effect (e.g. autostart toggle), and refreshes `SETTINGS_INST`.
-#[traced_command]
-#[tauri::command]
-pub async fn update_settings_value(app: AppHandle, name: &str, value: &str) -> Result<(), String> {
+pub async fn update_settings_value<R: Runtime>(
+    app: &AppHandle<R>,
+    name: &str,
+    value: &str,
+) -> Result<(), String> {
     let name = name.to_string();
     let value = value.to_string();
+    let app_cl = app.clone();
 
     let lang = app.state::<SettingsLock>().read().unwrap().language;
 
     let res = tokio::task::spawn_blocking(move || {
+        let app = app_cl;
         let database = app.state::<DatabasePool>();
         let settings = app.state::<SettingsLock>();
         match name.as_str() {
@@ -196,11 +193,7 @@ pub async fn update_settings_value(app: AppHandle, name: &str, value: &str) -> R
 }
 
 /// Returns every translation key resolved to the current UI language, for the frontend's i18n bootstrap.
-#[traced_command(log_payload = false)]
-#[tauri::command]
-pub async fn get_translations(
-    settings: State<'_, SettingsLock>,
-) -> Result<HashMap<String, String>, String> {
+pub async fn get_translations(settings: &SettingsLock) -> Result<HashMap<String, String>, String> {
     let lang = settings.read().unwrap().language;
     Ok(TRANSLATIONS
         .keys()
@@ -208,7 +201,7 @@ pub async fn get_translations(
         .collect())
 }
 
-fn check_for_update(app: &AppHandle) {
+fn check_for_update<R: Runtime>(app: &AppHandle<R>) {
     thread::sleep(Duration::from_secs(5));
 
     loop {

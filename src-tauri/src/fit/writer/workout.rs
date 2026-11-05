@@ -33,8 +33,40 @@ fn step_message(step: &WorkoutStep, weight_unit: WeightUnit) -> Message {
     msg.target_type = WktStepTarget::OPEN;
 
     match step.kind {
-        StepType::Exercise => {
-            msg.intensity = Intensity::ACTIVE;
+        StepType::Repeat => {
+            msg.duration_type = WktStepDuration::REPEAT_UNTIL_STEPS_CMPLT;
+            msg.duration_value = step.begin_idx.unwrap() as u32;
+            msg.target_value = step.reps.flatten().unwrap() as u32;
+        }
+        StepType::Rest => {
+            msg.intensity = Intensity::REST;
+            msg.secondary_target_type = WktStepTarget::OPEN;
+            msg.weight_display_unit = match weight_unit {
+                WeightUnit::Kilograms => FitBaseUnit::KILOGRAM,
+                WeightUnit::Pounds => FitBaseUnit::POUND,
+            };
+            msg.notes = truncate_utf8(step.notes.as_deref().unwrap_or_default(), 200).into();
+
+            match step.time {
+                Some(Some(time)) => {
+                    msg.duration_type = WktStepDuration::TIME;
+                    msg.duration_value = time;
+                }
+                _ => msg.duration_type = WktStepDuration::OPEN,
+            }
+        }
+        StepType::Exercise
+        | StepType::Cooldown
+        | StepType::Recovery
+        | StepType::Warmup
+        | StepType::Other => {
+            msg.intensity = match step.kind {
+                StepType::Warmup => Intensity::WARMUP,
+                StepType::Cooldown => Intensity::COOLDOWN,
+                StepType::Recovery => Intensity::RECOVERY,
+                StepType::Other => Intensity::OTHER,
+                _ => Intensity::ACTIVE,
+            };
             if let Some(Some(time)) = step.time {
                 msg.duration_type = WktStepDuration::TIME;
                 msg.duration_value = time;
@@ -63,28 +95,6 @@ fn step_message(step: &WorkoutStep, weight_unit: WeightUnit) -> Message {
             if let Some(weight) = step.weight {
                 msg.set_exercise_weight_scaled(weight as f64);
             }
-        }
-        StepType::Rest => {
-            msg.intensity = Intensity::REST;
-            msg.secondary_target_type = WktStepTarget::OPEN;
-            msg.weight_display_unit = match weight_unit {
-                WeightUnit::Kilograms => FitBaseUnit::KILOGRAM,
-                WeightUnit::Pounds => FitBaseUnit::POUND,
-            };
-            msg.notes = truncate_utf8(step.notes.as_deref().unwrap_or_default(), 200).into();
-
-            match step.time {
-                Some(Some(time)) => {
-                    msg.duration_type = WktStepDuration::TIME;
-                    msg.duration_value = time;
-                }
-                _ => msg.duration_type = WktStepDuration::OPEN,
-            }
-        }
-        StepType::Repeat => {
-            msg.duration_type = WktStepDuration::REPEAT_UNTIL_STEPS_CMPLT;
-            msg.duration_value = step.begin_idx.unwrap() as u32;
-            msg.target_value = step.reps.flatten().unwrap() as u32;
         }
     }
 

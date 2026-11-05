@@ -12,9 +12,8 @@ use rusqlite_orm::{
     errors::DatabaseError,
     types::{order_by::OrderBy, value::Value, where_clause::Where},
 };
-use strength_tracker_rs_macros::traced_command;
 
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tauri_plugin_log::log::{error, info};
 
 use crate::{
@@ -48,7 +47,7 @@ use crate::{
 };
 
 /// Spawns a background task that watches USB hotplug events and keeps the device list/DB/frontend in sync.
-pub fn start_device_watcher(app: &AppHandle) {
+pub fn start_device_watcher<R: Runtime>(app: &AppHandle<R>) {
     info!("Starting device monitor...");
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
@@ -91,8 +90,8 @@ pub fn start_device_watcher(app: &AppHandle) {
     });
 }
 
-async fn on_device_disconnected(
-    app: &AppHandle,
+async fn on_device_disconnected<R: Runtime>(
+    app: &AppHandle<R>,
     serial: &str,
     devices: &mut HashMap<String, Device>,
 ) {
@@ -115,8 +114,8 @@ async fn on_device_disconnected(
     }
 }
 
-async fn on_device_connected(
-    app: &AppHandle,
+async fn on_device_connected<R: Runtime>(
+    app: &AppHandle<R>,
     device: &mut Device,
     devices: &mut HashMap<String, Device>,
 ) {
@@ -186,7 +185,7 @@ async fn on_device_connected(
 
 /// Runs a sync between `start_loading` and `finish_loading`, then emits `sessions_added` if it
 /// imported any session. Each event is emitted only here, as the TS listener is generated per call.
-async fn with_loading(app: &AppHandle, sync: impl Future<Output = usize>) {
+async fn with_loading<R: Runtime>(app: &AppHandle<R>, sync: impl Future<Output = usize>) {
     let _ = app.emit("start_loading", ());
     let imported = sync.await;
     let _ = app.emit("finish_loading", ());
@@ -197,7 +196,7 @@ async fn with_loading(app: &AppHandle, sync: impl Future<Output = usize>) {
 
 /// Uploads the pending workouts of every device plugged in by USB. The rest keep them pending for
 /// the next plug: Connect only gets the workout itself, never a delivery to a device.
-pub async fn push_pending_to_usb(app: &AppHandle) {
+pub async fn push_pending_to_usb<R: Runtime>(app: &AppHandle<R>) {
     let mtp_client = app.state::<MtpLock>();
     // Bound in its own statement so the MTP lock is released before pushing
     let connected = mtp_client.lock().await.get_connected_devices().await;
@@ -242,7 +241,10 @@ pub fn pending_connect_devices(
 
 /// Delivers a just enabled `workout` through Connect to the linked devices still waiting for it,
 /// so call it after `push_pending_to_usb` for USB to take precedence.
-pub async fn send_enabled_workout_to_connect_devices(app: &AppHandle, workout: &str) {
+pub async fn send_enabled_workout_to_connect_devices<R: Runtime>(
+    app: &AppHandle<R>,
+    workout: &str,
+) {
     if app
         .state::<ConnectLock>()
         .lock()
@@ -279,7 +281,7 @@ pub async fn send_enabled_workout_to_connect_devices(app: &AppHandle, workout: &
 }
 
 /// Delete the pending workouts of every currently connected device.
-pub async fn delete_pending_from_connected(app: &AppHandle) {
+pub async fn delete_pending_from_connected<R: Runtime>(app: &AppHandle<R>) {
     let mtp_client = app.state::<MtpLock>();
     // Bound in its own statement so the MTP lock is released before pushing
     let connected = mtp_client.lock().await.get_connected_devices().await;
@@ -297,7 +299,7 @@ pub async fn delete_pending_from_connected(app: &AppHandle) {
 static PUSH_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 /// Uploads by USB to `device` the workouts queued while it was unplugged, removing each queue entry once sent.
-async fn push_pending_workouts(app: &AppHandle, serial: &str) {
+async fn push_pending_workouts<R: Runtime>(app: &AppHandle<R>, serial: &str) {
     // Held for the whole run: a waiting caller re-reads the queue after this one has cleared it
     let _guard = PUSH_LOCK.lock().await;
     let serial = serial.to_string();
@@ -359,7 +361,7 @@ async fn push_pending_workouts(app: &AppHandle, serial: &str) {
 }
 
 /// Removes the queue entry of a workout just sent to the device `serial` and notifies it.
-async fn finish_push(app: &AppHandle, workout: &str, serial: &str, lang: Languages) {
+async fn finish_push<R: Runtime>(app: &AppHandle<R>, workout: &str, serial: &str, lang: Languages) {
     let device = serial.to_string();
     let wkt = workout.to_string();
     if let Err(e) = run_blocking(app, move |db| {
@@ -390,7 +392,7 @@ async fn finish_push(app: &AppHandle, workout: &str, serial: &str, lang: Languag
 }
 
 /// Deletes from `device` the disabled workouts queued while it was disconnected, removing each queue entry once deleted.
-async fn delete_pending_workouts(app: &AppHandle, serial: &str) {
+async fn delete_pending_workouts<R: Runtime>(app: &AppHandle<R>, serial: &str) {
     // Held for the whole run: a waiting caller re-reads the queue after this one has cleared it
     let _guard = PUSH_LOCK.lock().await;
     let serial = serial.to_string();
@@ -486,8 +488,8 @@ async fn delete_pending_workouts(app: &AppHandle, serial: &str) {
 }
 
 /// Lists the workouts recorded in sessions of `serial` that have no steps stored yet.
-async fn list_pending_workouts(
-    app: &AppHandle,
+async fn list_pending_workouts<R: Runtime>(
+    app: &AppHandle<R>,
     serial: &str,
 ) -> Result<Vec<String>, DatabaseError> {
     let serial_q = serial.to_string();
@@ -530,8 +532,8 @@ async fn list_pending_workouts(
 
 /// Stores the steps of the `pending_workouts` found among the `.fit` files waiting in `dir`,
 /// settling them afterwards.
-fn store_pending_workouts(
-    app: &AppHandle,
+fn store_pending_workouts<R: Runtime>(
+    app: &AppHandle<R>,
     db: &DatabasePool,
     dir: &Path,
     serial: &str,
@@ -600,7 +602,7 @@ fn store_pending_workouts(
 }
 
 /// Downloads from `device` the step definitions of workouts that have sessions recorded on it but no steps stored yet.
-async fn download_pending_workouts(app: &AppHandle, serial: &str) {
+async fn download_pending_workouts<R: Runtime>(app: &AppHandle<R>, serial: &str) {
     let pending_workouts = match list_pending_workouts(app, serial).await {
         Ok(pending) => pending,
         Err(e) => {
@@ -637,11 +639,9 @@ async fn download_pending_workouts(app: &AppHandle, serial: &str) {
     }
 }
 
-#[traced_command]
-#[tauri::command]
-pub async fn send_to_device(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
+pub async fn send_to_device<R: Runtime>(
+    app: &AppHandle<R>,
+    settings: &SettingsLock,
     workout: &str,
     serial: &str,
 ) -> Result<(), String> {
@@ -659,7 +659,7 @@ pub async fn send_to_device(
         .map_err(|e| e.to_string())?;
 
     let res: Result<bool, String> = if connected {
-        match send_workout_to_device(&app, lang, weight_unit, workout, serial).await {
+        match send_workout_to_device(app, lang, weight_unit, workout, serial).await {
             Ok(_) => {
                 // Register the pair so later changes (e.g. progressions) get re-sent to this device
                 let mut entry = WorkoutDevice {
@@ -668,7 +668,7 @@ pub async fn send_to_device(
                     pending: false,
                 };
 
-                if let Err(e) = run_blocking(&app, move |database| {
+                if let Err(e) = run_blocking(app, move |database| {
                     database.run_in_transaction(|tx| {
                         Ok(WorkoutDeviceRepository::insert()
                             .or_ignore()
@@ -692,7 +692,7 @@ pub async fn send_to_device(
             pending: true,
         };
 
-        run_blocking(&app, move |database| {
+        run_blocking(app, move |database| {
             database.run_in_transaction(|tx| {
                 Ok(WorkoutDeviceRepository::insert()
                     .or_replace()
@@ -737,8 +737,8 @@ pub async fn send_to_device(
     }
 }
 
-async fn send_workout_to_device(
-    app: &AppHandle,
+async fn send_workout_to_device<R: Runtime>(
+    app: &AppHandle<R>,
     lang: Languages,
     weight_unit: WeightUnit,
     workout: &str,
@@ -821,8 +821,8 @@ async fn send_workout_to_device(
     upload
 }
 
-async fn delete_workout_from_device(
-    app: &AppHandle,
+async fn delete_workout_from_device<R: Runtime>(
+    app: &AppHandle<R>,
     workout: &str,
     serial: &str,
 ) -> Result<bool, String> {
@@ -835,15 +835,11 @@ async fn delete_workout_from_device(
         .map_err(|e| e.to_string())
 }
 
-/// Tauri command wrapper around `_import_from_device`; returns the number of sessions imported.
-#[traced_command]
-#[tauri::command]
-pub async fn import_from_device(app: AppHandle, serial: &str) -> Result<usize, String> {
-    _import_from_device(&app, serial).await
-}
-
 /// Downloads new activity files from the given device since its last sync and imports them.
-pub async fn _import_from_device(app: &AppHandle, serial: &str) -> Result<usize, String> {
+pub async fn _import_from_device<R: Runtime>(
+    app: &AppHandle<R>,
+    serial: &str,
+) -> Result<usize, String> {
     info!("Starting import from device with S/N {}", serial);
     let mut latest_date = "1970-01-01-00-00-00".to_string();
     let lang = app.state::<SettingsLock>().read().unwrap().language;
@@ -921,10 +917,10 @@ pub async fn _import_from_device(app: &AppHandle, serial: &str) -> Result<usize,
     }
 }
 
-#[traced_command]
-#[tauri::command]
-pub async fn get_registered_devices(app: AppHandle) -> Result<Vec<DeviceListItem>, String> {
-    Ok(run_blocking(&app, |database| {
+pub async fn get_registered_devices<R: Runtime>(
+    app: &AppHandle<R>,
+) -> Result<Vec<DeviceListItem>, String> {
+    Ok(run_blocking(app, |database| {
         database.run_in_connection(|conn| Ok(DeviceRepository::select().fetch_in(conn)?))
     })
     .await

@@ -7,8 +7,7 @@ use rusqlite_orm::{
     errors::DatabaseError,
     types::{order_by::OrderBy, where_clause::Where},
 };
-use strength_tracker_rs_macros::traced_command;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tauri_plugin_log::log::{error, info};
 
 use crate::{
@@ -35,19 +34,17 @@ use crate::{
     utils::{constants, translations::translate},
 };
 
-#[traced_command]
-#[tauri::command]
-pub async fn import_from_connect(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
-    connect: State<'_, ConnectLock>,
+pub async fn import_from_connect<R: Runtime>(
+    app: &AppHandle<R>,
+    settings: &SettingsLock,
+    connect: &ConnectLock,
 ) -> Result<usize, String> {
     let lang = settings.read().unwrap().language;
     let lang_cl = lang;
 
     let app_cpy = app.clone();
     let res: Result<_, String> = async {
-        let (mut device, existing) = run_blocking(&app, |database| {
+        let (mut device, existing) = run_blocking(app, |database| {
             let device = DeviceRepository::select()
                 .where_(Where::Eq(device::entity::columns::SERIAL, "connect".into()))
                 .fetch_one(database)?
@@ -131,19 +128,17 @@ pub async fn import_from_connect(
     }
 }
 
-#[traced_command]
-#[tauri::command]
-pub async fn import_weight_from_connect(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
-    connect: State<'_, ConnectLock>,
+pub async fn import_weight_from_connect<R: Runtime>(
+    app: &AppHandle<R>,
+    settings: &SettingsLock,
+    connect: &ConnectLock,
 ) -> Result<usize, String> {
     let lang = settings.read().unwrap().language;
 
     let app_cpy = app.clone();
 
     let res: Result<usize, String> = async {
-        let existing = run_blocking(&app, |database| {
+        let existing = run_blocking(app, |database| {
             let existing: Vec<u32> = database.run_in_connection(|conn| {
                 Ok(BodyMetricRepository::select()
                     .columns(&[body_metric::entity::columns::DATE])
@@ -208,19 +203,13 @@ pub async fn import_weight_from_connect(
     }
 }
 
-#[traced_command]
-#[tauri::command]
-pub async fn connect_logged_user(
-    connect: State<'_, ConnectLock>,
-) -> Result<Option<String>, String> {
+pub async fn connect_logged_user(connect: &ConnectLock) -> Result<Option<String>, String> {
     Ok(connect.lock().await.logged_user())
 }
 
-#[traced_command]
-#[tauri::command]
-pub async fn connect_login(
-    app: AppHandle,
-    connect: State<'_, ConnectLock>,
+pub async fn connect_login<R: Runtime>(
+    app: &AppHandle<R>,
+    connect: &ConnectLock,
 ) -> Result<Option<String>, String> {
     let user = {
         let mut connect = connect.lock().await;
@@ -230,23 +219,21 @@ pub async fn connect_login(
 
     // Released the lock first: the discovery needs it
     if user.is_some() {
-        get_devices_from_connect(&app).await;
+        get_devices_from_connect(app).await;
     }
 
     Ok(user)
 }
 
-#[traced_command]
-#[tauri::command]
-pub async fn connect_logout(connect: State<'_, ConnectLock>) -> Result<(), String> {
+pub async fn connect_logout(connect: &ConnectLock) -> Result<(), String> {
     connect.lock().await.disconnect().map_err(|e| e.to_string())
 }
 
 /// Uploads `workout` to Connect, notifying the user if it fails.
-pub async fn send_workout_connect(
-    app: &AppHandle,
-    connect: &State<'_, ConnectLock>,
-    settings: &State<'_, SettingsLock>,
+pub async fn send_workout_connect<R: Runtime>(
+    app: &AppHandle<R>,
+    connect: &ConnectLock,
+    settings: &SettingsLock,
     workout: &str,
 ) -> Result<(), String> {
     let lang = settings.read().unwrap().language;
@@ -262,10 +249,10 @@ pub async fn send_workout_connect(
         })
 }
 
-async fn upload_workout_connect(
-    app: &AppHandle,
-    connect: &State<'_, ConnectLock>,
-    settings: &State<'_, SettingsLock>,
+async fn upload_workout_connect<R: Runtime>(
+    app: &AppHandle<R>,
+    connect: &ConnectLock,
+    settings: &SettingsLock,
     workout: &str,
 ) -> Result<(), String> {
     let weight_unit = settings.read().unwrap().weight_unit;
@@ -340,7 +327,7 @@ async fn upload_workout_connect(
 /// ones, refreshes the Connect-owned fields of known ones and clears the `connect` flag of those
 /// no longer listed. Emits `device_discovered` per added or changed device
 /// Does nothing if the device list cannot be fetched.
-pub async fn get_devices_from_connect(app_orig: &AppHandle) {
+pub async fn get_devices_from_connect<R: Runtime>(app_orig: &AppHandle<R>) {
     let connect = app_orig.state::<ConnectLock>();
 
     let devices = match connect.lock().await.list_devices().await {
@@ -420,7 +407,11 @@ pub async fn get_devices_from_connect(app_orig: &AppHandle) {
 
 /// Queues `workout` in Connect for delivery to the device `serial`, first uploading the workout
 /// to Connect if it has no Connect id yet.
-pub async fn _send_to_connect(app: &AppHandle, workout: &str, serial: &str) -> Result<(), String> {
+pub async fn _send_to_connect<R: Runtime>(
+    app: &AppHandle<R>,
+    workout: &str,
+    serial: &str,
+) -> Result<(), String> {
     let fetch_connect_id = || {
         let name = workout.to_string();
         run_blocking(app, move |database| {
@@ -433,7 +424,13 @@ pub async fn _send_to_connect(app: &AppHandle, workout: &str, serial: &str) -> R
     let connect_id = match fetch_connect_id().await.map_err(|e| e.to_string())? {
         Some(id) => id,
         None => {
-            send_workout_connect(app, &app.state(), &app.state(), workout).await?;
+            send_workout_connect(
+                app,
+                &app.state::<ConnectLock>(),
+                &app.state::<SettingsLock>(),
+                workout,
+            )
+            .await?;
             fetch_connect_id()
                 .await
                 .map_err(|e| e.to_string())?
@@ -453,16 +450,14 @@ pub async fn _send_to_connect(app: &AppHandle, workout: &str, serial: &str) -> R
         .map_err(|e| e.to_string())
 }
 
-#[traced_command]
-#[tauri::command]
-pub async fn send_to_connect(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
+pub async fn send_to_connect<R: Runtime>(
+    app: &AppHandle<R>,
+    settings: &SettingsLock,
     workout: &str,
     serial: &str,
 ) -> Result<(), String> {
     let res: Result<_, Box<dyn std::error::Error>> = async {
-        _send_to_connect(&app, workout, serial).await?;
+        _send_to_connect(app, workout, serial).await?;
 
         // Register the pair so later changes (e.g. progressions) get re-sent once plugged by USB
         let mut entry = WorkoutDevice {
@@ -470,7 +465,7 @@ pub async fn send_to_connect(
             workout: workout.to_string(),
             pending: false,
         };
-        run_blocking(&app, move |database| {
+        run_blocking(app, move |database| {
             database.run_in_transaction(|tx| {
                 Ok(WorkoutDeviceRepository::insert()
                     .or_replace()

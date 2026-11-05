@@ -6,6 +6,7 @@ use rusqlite_orm::{
     },
     types::value::Value,
 };
+use rustyfit::profile::typedef::Intensity;
 use serde::{Deserialize, Serialize};
 
 use crate::dao::exercise::{self, Exercise};
@@ -41,10 +42,14 @@ pub struct WorkoutStep {
     pub exercise: Option<Exercise>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum StepType {
     Exercise,
+    Warmup,
+    Recovery,
+    Cooldown,
     Rest,
+    Other,
     Repeat,
 }
 
@@ -52,8 +57,12 @@ impl ToSql for StepType {
     fn to_sql(&self) -> rusqlite_orm::rusqlite::Result<ToSqlOutput<'_>> {
         Ok(ToSqlOutput::from(match self {
             StepType::Exercise => "Exercise",
+            StepType::Warmup => "Warmup",
+            StepType::Recovery => "Recovery",
+            StepType::Cooldown => "Cooldown",
             StepType::Rest => "Rest",
             StepType::Repeat => "Repeat",
+            StepType::Other => "Other",
         }))
     }
 }
@@ -62,8 +71,12 @@ impl FromSql for StepType {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
         match value.as_str()? {
             "Exercise" => Ok(StepType::Exercise),
+            "Warmup" => Ok(StepType::Warmup),
+            "Recovery" => Ok(StepType::Recovery),
+            "Cooldown" => Ok(StepType::Cooldown),
             "Rest" => Ok(StepType::Rest),
             "Repeat" => Ok(StepType::Repeat),
+            "Other" => Ok(StepType::Other),
             other => Err(FromSqlError::Other(
                 format!("Invalid StepType '{other}'").into(),
             )),
@@ -76,11 +89,28 @@ impl From<StepType> for Value {
         Value::Text(
             match value {
                 StepType::Exercise => "Exercise",
+                StepType::Warmup => "Warmup",
+                StepType::Recovery => "Recovery",
+                StepType::Cooldown => "Cooldown",
                 StepType::Rest => "Rest",
                 StepType::Repeat => "Repeat",
+                StepType::Other => "Other",
             }
             .to_string(),
         )
+    }
+}
+
+impl From<Intensity> for StepType {
+    fn from(value: Intensity) -> Self {
+        match value {
+            Intensity::ACTIVE => StepType::Exercise,
+            Intensity::WARMUP => StepType::Warmup,
+            Intensity::RECOVERY => StepType::Recovery,
+            Intensity::COOLDOWN => StepType::Cooldown,
+            Intensity::REST => StepType::Rest,
+            Intensity::OTHER | _ => StepType::Other,
+        }
     }
 }
 
@@ -115,19 +145,20 @@ impl WorkoutStep {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn exercise(
+    pub fn active(
         workout: &str,
         idx: u16,
-        ex_cat: u16,
-        ex_id: u16,
+        kind: Intensity,
+        exercise: Option<(u16, u16)>,
         weight: f32,
         reps: Option<u16>,
         time: Option<u32>,
         notes: Option<String>,
     ) -> Self {
         let mut inst = Self::new(workout, idx, StepType::Exercise);
-        inst.ex_cat = Some(ex_cat);
-        inst.ex_id = Some(ex_id);
+        inst.kind = kind.into();
+        inst.ex_cat = exercise.map(|(cat, _)| cat);
+        inst.ex_id = exercise.map(|(_, id)| id);
         inst.weight = Some(weight);
         inst.reps = Some(reps);
         inst.time = Some(time);

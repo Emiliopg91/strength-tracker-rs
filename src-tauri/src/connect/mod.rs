@@ -22,7 +22,6 @@ use std::{
     path::Path,
     time::Duration,
 };
-use tauri::{AppHandle, Emitter};
 
 use tauri_plugin_log::log::{error, info, warn};
 
@@ -95,16 +94,17 @@ struct DeviceMessage<'a> {
 }
 
 pub struct ConnectClient {
-    app: AppHandle,
+    /// Called with the logged user every time it changes.
+    on_user_change: Box<dyn Fn(Option<String>) + Send + Sync>,
     email: Option<String>,
     oauth1: Option<OAuth1Token>,
     oauth2: Option<OAuth2Token>,
 }
 
 impl ConnectClient {
-    pub fn new(app: AppHandle) -> Self {
+    pub fn new(on_user_change: impl Fn(Option<String>) + Send + Sync + 'static) -> Self {
         Self {
-            app,
+            on_user_change: Box::new(on_user_change),
             email: Self::read_keyring(KEYRING_EMAIL).unwrap_or(None),
             oauth1: Self::read_keyring(KEYRING_OAUTH1).unwrap_or(None),
             oauth2: Self::read_keyring(KEYRING_OAUTH2).unwrap_or(None),
@@ -123,7 +123,7 @@ impl ConnectClient {
         Self::delete_keyring(KEYRING_EMAIL)?;
         self.email = None;
 
-        let _ = self.app.emit("connect_logged", None::<String>);
+        (self.on_user_change)(None);
 
         Ok(())
     }
@@ -146,9 +146,7 @@ impl ConnectClient {
         self.oauth2 = Some(oauth2);
 
         info!("Logged in succesfully");
-        let email: Option<String> = Some(email.to_string());
-        let app: AppHandle = self.app.clone();
-        let _ = app.emit("connect_logged", email);
+        (self.on_user_change)(Some(email.to_string()));
 
         Ok(())
     }
@@ -657,6 +655,11 @@ impl ConnectClient {
     }
 
     fn read_keyring<T: DeserializeOwned>(key: &str) -> Result<Option<T>> {
+        // Tests must never see nor touch the credentials of the real user
+        if cfg!(test) {
+            return Ok(None);
+        }
+
         let entry = Self::keyring_entry(key)?;
         match entry.get_password() {
             Ok(json) => Ok(Some(serde_json::from_str(&json).map_err(|e| {
@@ -674,6 +677,10 @@ impl ConnectClient {
     }
 
     fn write_keyring<T: Serialize>(key: &str, value: &T) -> Result<()> {
+        if cfg!(test) {
+            return Ok(());
+        }
+
         let json = serde_json::to_string(value).map_err(|e| {
             log_error(
                 &format!("Error serializing key '{}'", key),
@@ -689,6 +696,10 @@ impl ConnectClient {
     }
 
     fn delete_keyring(key: &str) -> Result<()> {
+        if cfg!(test) {
+            return Ok(());
+        }
+
         match Self::keyring_entry(key)?.delete_credential() {
             Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
             Err(e) => Err(log_error(

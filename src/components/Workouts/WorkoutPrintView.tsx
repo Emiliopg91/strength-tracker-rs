@@ -174,7 +174,9 @@ function leafToHtml(
                 <td>
                     <b>
                         {translate(
-                            "exercise_" + leaf.ex_cat + "_" + leaf.ex_id,
+                            leaf.ex_cat != null
+                                ? "exercise_" + leaf.ex_cat + "_" + leaf.ex_id
+                                : "step_type_" + leaf.kind.toLowerCase(),
                         )}
                     </b>
                 </td>

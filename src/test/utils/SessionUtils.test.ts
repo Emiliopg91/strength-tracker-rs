@@ -4,6 +4,7 @@ import {
     SessionDetails,
     SessionListItem,
     SessionStepDto,
+    StepType,
 } from "@/utils/backend/models";
 import { KG_TO_LB } from "@/context/I18nSettingsContext";
 
@@ -46,7 +47,7 @@ const makeSet = (overrides: Partial<SessionStepDto> = {}): SessionStepDto => ({
     pr: false,
     reps: 10,
     reps_ref: null,
-    rest: false,
+    kind: StepType.Exercise,
     weight: 50,
     weight_ref: null,
     duration: 0,
@@ -497,5 +498,18 @@ describe("SessionUtils.maxE1rm", () => {
             ),
         );
         expect(SessionUtils.maxE1rm(sets, false)).toBe(101);
+    });
+});
+
+describe("SessionUtils.groupByExercises", () => {
+    it("skips steps without exercise but keeps warm-ups with one", () => {
+        const { exercises } = SessionUtils.groupByExercises([
+            makeSet({ kind: StepType.Warmup, ex_cat: null, ex_id: null }),
+            makeSet({ kind: StepType.Warmup, ex_cat: 1, ex_id: 2 }),
+            makeSet({ kind: StepType.Rest, ex_cat: null, ex_id: null }),
+            makeSet({ ex_cat: 3, ex_id: 4 }),
+        ]);
+
+        expect(exercises).toEqual(["1-2", "3-4"]);
     });
 });

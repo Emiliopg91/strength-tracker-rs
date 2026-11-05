@@ -19,13 +19,13 @@ export function SessionsCompareModal({ sessions, onClose }: Props) {
         formatTimeDate,
         formatNumber,
     } = useContext(I18nSettingsContext);
-    // Non-rest sets grouped by exercise ("cat-id"); exercises follow the order
+    // Sets with exercise grouped by exercise ("cat-id"); exercises follow the order
     // of their first set across sessions
     const exercises: string[] = [];
     const groupedSets = sessions.map((s) => {
         const groups: Record<string, SessionStepDto[]> = {};
         s.steps
-            .filter((step) => !step.rest)
+            .filter((step) => step.ex_cat != null)
             .sort((a, b) => a.idx - b.idx)
             .forEach((step) => {
                 const key = step.ex_cat + "-" + step.ex_id;

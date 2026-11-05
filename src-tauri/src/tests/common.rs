@@ -10,6 +10,7 @@ use crate::{
         lap::{Lap, LapRepository},
         session::{Session, SessionRepository},
         session_step::{SessionStep, SessionStepRepository},
+        workout_step::StepType,
     },
     schema_ddls,
 };
@@ -68,7 +69,7 @@ pub fn set(session: u32, idx: u8, exercise: (u16, u16), reps: u16, weight: f32) 
         exercise: None,
         duration: 0,
         duration_ref: None,
-        rest: false,
+        kind: StepType::Exercise,
     }
 }
 

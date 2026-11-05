@@ -81,7 +81,7 @@ export class WorkoutUtils {
             };
         } else {
             return {
-                kind: StepType.Exercise,
+                kind: step.kind,
                 // Reps take precedence over time in the editor, a leftover time would be hidden there
                 time:
                     step.reps == null &&
@@ -120,12 +120,15 @@ export class WorkoutUtils {
 
     // Leftover fields on rest steps are not checked here, they're dropped before sending to the backend
     public static leafErrors(leaf: LeafStep): LeafErrors {
-        const isExercise = leaf.kind == StepType.Exercise;
+        const isActive = leaf.kind != StepType.Rest;
         return {
             time: leaf.time != null && leaf.time <= 0,
-            exercise: isExercise && (leaf.ex_cat == null || leaf.ex_id == null),
-            weight: isExercise && leaf.weight != null && leaf.weight < 0,
-            reps: isExercise && leaf.reps != null && leaf.reps < 1,
+            // Only plain exercises require one, warm-ups and the like may go without
+            exercise:
+                leaf.kind == StepType.Exercise &&
+                (leaf.ex_cat == null || leaf.ex_id == null),
+            weight: isActive && leaf.weight != null && leaf.weight < 0,
+            reps: isActive && leaf.reps != null && leaf.reps < 1,
             notes: "",
         };
     }
@@ -209,7 +212,7 @@ export class WorkoutUtils {
             return {
                 workout,
                 idx: idx,
-                kind: StepType.Exercise,
+                kind: leaf.kind,
                 time: leaf.time != null ? leaf.time * 1000 : null,
                 ex_cat: leaf.ex_cat,
                 ex_id: leaf.ex_id,
@@ -227,6 +230,24 @@ export class WorkoutUtils {
                         : null,
                 exercise: null,
             };
+        }
+    }
+
+    public static getDefaultLeaf(kind: StepType): LeafStep {
+        switch (kind) {
+            case StepType.Rest:
+                return WorkoutUtils.DEFAULT_REST;
+            case StepType.Cooldown:
+                return WorkoutUtils.DEFAULT_COOLDOWN;
+            case StepType.Exercise:
+                return WorkoutUtils.DEFAULT_EXERCISE;
+            case StepType.Recovery:
+                return WorkoutUtils.DEFAULT_RECOVERY;
+            case StepType.Warmup:
+                return WorkoutUtils.DEFAULT_WARMUP;
+            case StepType.Other:
+            default:
+                return WorkoutUtils.DEFAULT_OTHER;
         }
     }
 
@@ -250,6 +271,26 @@ export class WorkoutUtils {
         weight: 0,
         notes: "",
         exercise: null,
+    };
+
+    public static DEFAULT_WARMUP: LeafStep = {
+        ...this.DEFAULT_EXERCISE,
+        kind: StepType.Warmup,
+    };
+
+    public static DEFAULT_COOLDOWN: LeafStep = {
+        ...this.DEFAULT_EXERCISE,
+        kind: StepType.Cooldown,
+    };
+
+    public static DEFAULT_RECOVERY: LeafStep = {
+        ...this.DEFAULT_EXERCISE,
+        kind: StepType.Recovery,
+    };
+
+    public static DEFAULT_OTHER: LeafStep = {
+        ...this.DEFAULT_EXERCISE,
+        kind: StepType.Other,
     };
 
     public static DEFAULT_GROUP: StepGroup = {

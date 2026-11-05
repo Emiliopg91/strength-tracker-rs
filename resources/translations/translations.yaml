@@ -442,9 +442,21 @@ actions:
 step_type_exercise:
   en: Exercise
   es: Ejercicio
+step_type_warmup:
+  en: Warm-up
+  es: Calentamiento
+step_type_cooldown:
+  en: Cool-down
+  es: Vuelta a la calma
+step_type_recovery:
+  en: Recovery
+  es: Recuperación
 step_type_rest:
   en: Rest
   es: Descanso
+step_type_other:
+  en: Other
+  es: Otro
 repeat:
   en: Repeat
   es: Repetir

@@ -1,7 +1,6 @@
 use std::{collections::BTreeSet, path::PathBuf, process::Command};
 
-use strength_tracker_rs_macros::traced_command;
-use tauri::{AppHandle, Manager, State, WebviewWindow, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager, Runtime, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_log::log::{error, info};
 
 use crate::{
@@ -20,9 +19,7 @@ const STRENGTH_SPORT: u8 = 10;
 const STRENGTH_SUB_SPORT: u8 = 20;
 
 /// Called by the report window once everything is rendered and painted: prints it to PDF.
-#[traced_command]
-#[tauri::command]
-pub async fn load_report(app: AppHandle, from: u32, to: u32) -> Result<(), String> {
+pub async fn load_report<R: Runtime>(app: &AppHandle<R>, from: u32, to: u32) -> Result<(), String> {
     let mut config = app
         .config()
         .app
@@ -35,7 +32,7 @@ pub async fn load_report(app: AppHandle, from: u32, to: u32) -> Result<(), Strin
     config.url = tauri::WebviewUrl::App(format!("{}?from={from}&to={to}", config.url).into());
 
     // Stays hidden: printing starts once the page calls `report_ready`
-    WebviewWindowBuilder::from_config(&app, &config)
+    WebviewWindowBuilder::from_config(app, &config)
         .map_err(|e| e.to_string())?
         .build()
         .map_err(|e| e.to_string())?;
@@ -44,8 +41,6 @@ pub async fn load_report(app: AppHandle, from: u32, to: u32) -> Result<(), Strin
 }
 
 /// Called by the report window once everything is rendered and painted: prints it to PDF.
-#[traced_command]
-#[tauri::command]
 pub async fn report_ready(window: WebviewWindow) -> Result<(), String> {
     info!("Report ready, printing");
     let res = print_to_pdf(window.clone()).await;
@@ -129,18 +124,16 @@ async fn print_to_pdf(w: WebviewWindow) -> Result<(), String> {
 }
 
 /// Gathers everything the report needs for the `[from, to]` range, reusing the commands' DB logic on one connection.
-#[traced_command(log_payload = false)]
-#[tauri::command]
-pub async fn get_report_data(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
+pub async fn get_report_data<R: Runtime>(
+    app: &AppHandle<R>,
+    settings: &SettingsLock,
     from: u32,
     to: u32,
 ) -> Result<ReportData, String> {
     info!("Getting report data...");
     let lang = settings.read().unwrap().language;
 
-    let res = run_blocking(&app, move |database| {
+    let res = run_blocking(app, move |database| {
         database.run_in_connection(|conn| {
             let mut sessions: Vec<_> = fetch_sessions(
                 conn,
@@ -158,17 +151,11 @@ pub async fn get_report_data(
                 .map(|s| fetch_session_details(conn, s.timestamp, false, false))
                 .collect::<Result<Vec<_>, _>>()?;
 
-            // Sorted and deduplicated; rest sets and unknown exercises (u16::MAX) are skipped
+            // Sorted and deduplicated; sets without exercise are skipped
             let trained: BTreeSet<(u16, u16)> = session_details
                 .iter()
                 .flat_map(|d| &d.steps)
-                .filter_map(|set| {
-                    if !set.rest {
-                        Some((set.ex_cat.unwrap(), set.ex_id.unwrap()))
-                    } else {
-                        None
-                    }
-                })
+                .filter_map(|set| Some((set.ex_cat?, set.ex_id?)))
                 .collect();
 
             let mut exercises: Vec<_> = trained

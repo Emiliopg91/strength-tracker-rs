@@ -1,8 +1,7 @@
 use std::{fs, io::BufWriter};
 
 use chrono::Local;
-use strength_tracker_rs_macros::traced_command;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Runtime};
 use tauri_plugin_log::log::info;
 
 use crate::{
@@ -19,10 +18,8 @@ use crate::{
     },
 };
 
-#[traced_command]
-#[tauri::command]
 pub async fn upload_to_cloud(
-    settings: State<'_, SettingsLock>,
+    settings: &SettingsLock,
     provider: CloudProvider,
 ) -> Result<(), String> {
     let lang = settings.read().unwrap().language;
@@ -64,11 +61,9 @@ pub async fn upload_to_cloud(
 }
 
 /// Exports the whole database to a timestamped JSON file in the user's home directory and notifies on success/failure.
-#[traced_command]
-#[tauri::command]
-pub async fn export_database(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
+pub async fn export_database<R: Runtime>(
+    app: &AppHandle<R>,
+    settings: &SettingsLock,
 ) -> Result<(), String> {
     let path = constants::HOME_DIR.join(format!(
         "{}-{}.json",
@@ -79,7 +74,7 @@ pub async fn export_database(
 
     let export_path = path.clone();
     let export_lang = settings.read().unwrap().language;
-    let res = run_blocking(&app, move |database| {
+    let res = run_blocking(app, move |database| {
         Export::from_database(database, export_lang)
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
             .and_then(|export| {

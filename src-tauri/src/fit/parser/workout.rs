@@ -100,13 +100,20 @@ impl WorkoutAccumulator {
                     self.steps
                         .push(WorkoutStep::rest(name, idx, duration, notes));
                 }
-                Intensity::ACTIVE => {
-                    let ex_cat = msg.exercise_category.0;
-                    let ex_id = if msg.exercise_name == u16::MAX {
-                        1
-                    } else {
-                        msg.exercise_name
-                    };
+                Intensity::ACTIVE
+                | Intensity::COOLDOWN
+                | Intensity::RECOVERY
+                | Intensity::WARMUP
+                | Intensity::OTHER => {
+                    // Warm-ups and the like usually come without exercise
+                    let exercise = (msg.exercise_category.0 != u16::MAX).then(|| {
+                        let ex_id = if msg.exercise_name == u16::MAX {
+                            1
+                        } else {
+                            msg.exercise_name
+                        };
+                        (msg.exercise_category.0, ex_id)
+                    });
                     let weight = msg.exercise_weight_scaled().unwrap_or(0_f64) as f32;
                     let reps = match msg.duration_type {
                         WktStepDuration::REPS => Some(msg.duration_value as u16),
@@ -121,8 +128,15 @@ impl WorkoutAccumulator {
                     } else {
                         None
                     };
-                    self.steps.push(WorkoutStep::exercise(
-                        name, idx, ex_cat, ex_id, weight, reps, time, notes,
+                    self.steps.push(WorkoutStep::active(
+                        name,
+                        idx,
+                        msg.intensity,
+                        exercise,
+                        weight,
+                        reps,
+                        time,
+                        notes,
                     ));
                 }
                 _ => {}

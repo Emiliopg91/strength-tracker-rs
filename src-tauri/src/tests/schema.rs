@@ -1,9 +1,9 @@
-use rusqlite_orm::{dao::Repository, ddls};
+use rusqlite_orm::{dao::Repository, database::builder::DatabaseConnectionBuilder, ddls};
 
 use crate::{
     dao::{
         additional_data::AdditionalDataRepository, lap::LapRepository, session::SessionRepository,
-        session_step::SessionStepRepository, workout::WorkoutRepository,
+        session_step::SessionStepRepository, workout::WorkoutRepository, workout_step::StepType,
     },
     schema_ddls,
     tests::common,
@@ -38,6 +38,47 @@ fn schema_ddls_are_sorted_with_hooks_on_their_migration() {
         .map(|d| d.version)
         .collect();
     assert_eq!(with_hooks, [21]);
+}
+
+#[test]
+fn migration_26_turns_rest_flag_into_kind() {
+    let db = DatabaseConnectionBuilder::default()
+        .enable_foreign_keys()
+        .build("test")
+        .unwrap();
+    let before: Vec<_> = schema_ddls()
+        .into_iter()
+        .filter(|d| d.version < 26)
+        .collect();
+    db.create_schema(&before).unwrap();
+
+    db.run_in_transaction(|tx| {
+        common::insert_session(tx, common::session(1));
+        tx.execute_batch(
+            "INSERT INTO SESSION_STEP (session, idx, exercise_category, exercise_id, reps, weight, pr, rest)
+             VALUES (1, 0, 0, 1, 10, 50, 0, 0), (1, 1, NULL, NULL, 0, 0, 0, 1);",
+        )?;
+        Ok(())
+    })
+    .unwrap();
+
+    db.create_schema(&schema_ddls()).unwrap();
+
+    let mut steps = db
+        .run_in_connection(|conn| Ok(SessionStepRepository::select().fetch_in(conn)?))
+        .unwrap();
+    steps.sort_by_key(|s| s.idx);
+    let kinds: Vec<_> = steps.into_iter().map(|s| s.kind).collect();
+    assert_eq!(kinds, [StepType::Exercise, StepType::Rest]);
+
+    let has_rest: bool = db
+        .run_in_connection(|conn| {
+            Ok(conn
+                .prepare("SELECT 1 FROM pragma_table_info('SESSION_STEP') WHERE name = 'rest'")?
+                .exists([])?)
+        })
+        .unwrap();
+    assert!(!has_rest);
 }
 
 #[test]

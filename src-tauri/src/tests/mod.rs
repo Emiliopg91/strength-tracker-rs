@@ -1,10 +1,12 @@
 mod additional_data;
+mod commands;
 mod common;
 mod connect;
 mod dto;
 mod dump;
 mod exercise_notes;
 mod export;
+mod fit_writer;
 mod home;
 mod import;
 mod notes;

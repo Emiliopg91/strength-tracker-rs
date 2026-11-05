@@ -3,8 +3,7 @@ use rusqlite_orm::{
     errors::DatabaseError,
     types::{order_by::OrderBy, where_clause::Where},
 };
-use strength_tracker_rs_macros::traced_command;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Runtime};
 use tauri_plugin_log::log::info;
 
 use crate::{
@@ -19,15 +18,13 @@ use crate::{
 };
 
 /// Returns all logged body measurements, newest first.
-#[traced_command]
-#[tauri::command]
-pub async fn get_body_measures(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
+pub async fn get_body_measures<R: Runtime>(
+    app: &AppHandle<R>,
+    settings: &SettingsLock,
 ) -> Result<Vec<BodyMetricListItem>, String> {
     info!("Getting body measures list...");
 
-    let res = run_blocking(&app, move |database| {
+    let res = run_blocking(app, move |database| {
         database.run_in_connection(|conn| Ok(fetch_body_measures(conn, None)?))
     })
     .await;
@@ -69,16 +66,14 @@ pub fn fetch_body_measures(
 }
 
 /// Inserts a new body measurement entry.
-#[traced_command]
-#[tauri::command]
-pub async fn add_body_measures(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
+pub async fn add_body_measures<R: Runtime>(
+    app: &AppHandle<R>,
+    settings: &SettingsLock,
     measures: BodyMetricListItem,
 ) -> Result<(), String> {
     info!("Adding body measures list...");
 
-    let res = run_blocking(&app, move |database| {
+    let res = run_blocking(app, move |database| {
         database.run_in_transaction(|tx| {
             BodyMetricRepository::insert()
                 .item(&mut BodyMetric::try_from(&measures).map_err(DatabaseError::Transaction)?)
@@ -104,14 +99,12 @@ pub async fn add_body_measures(
 }
 
 /// Deletes the body measurement logged on `date`, if any.
-#[traced_command]
-#[tauri::command]
-pub async fn delete_body_metric(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
+pub async fn delete_body_metric<R: Runtime>(
+    app: &AppHandle<R>,
+    settings: &SettingsLock,
     date: u32,
 ) -> Result<(), String> {
-    let res = run_blocking(&app, move |database| {
+    let res = run_blocking(app, move |database| {
         database.run_in_transaction(|tx| {
             BodyMetricRepository::delete()
                 .where_(Where::Eq(body_metric::entity::columns::DATE, date.into()))

@@ -1,7 +1,10 @@
 use rusqlite_orm::Entity;
 use serde::{Deserialize, Serialize};
 
-use crate::dao::exercise::{self};
+use crate::dao::{
+    exercise::{self},
+    workout_step::StepType,
+};
 
 use super::exercise::Exercise;
 
@@ -27,7 +30,7 @@ pub struct SessionStep {
     pub pr: bool,
     pub duration: u32,
     pub duration_ref: Option<u32>,
-    pub rest: bool,
+    pub kind: StepType,
 
     #[relationship((ex_cat, exercise::entity::columns::CATEGORY),(ex_id, exercise::entity::columns::ID))]
     #[allow(dead_code)]

@@ -74,10 +74,7 @@ export function WorkoutSetGroup({
 
     const addStep = (kind: StepType) => {
         setAddMenuAnchor(null);
-        const leaf =
-            kind == StepType.Rest
-                ? WorkoutUtils.DEFAULT_REST
-                : WorkoutUtils.DEFAULT_EXERCISE;
+        const leaf = WorkoutUtils.getDefaultLeaf(kind);
         setLeafs([...leafs, structuredClone(leaf)]);
     };
 
@@ -192,9 +189,33 @@ export function WorkoutSetGroup({
                                     {translate("step_type_exercise")}
                                 </ListItemText>
                             </MenuItem>
+                            <MenuItem onClick={() => addStep(StepType.Warmup)}>
+                                <ListItemText>
+                                    {translate("step_type_warmup")}
+                                </ListItemText>
+                            </MenuItem>
+                            <MenuItem
+                                onClick={() => addStep(StepType.Cooldown)}
+                            >
+                                <ListItemText>
+                                    {translate("step_type_cooldown")}
+                                </ListItemText>
+                            </MenuItem>
+                            <MenuItem
+                                onClick={() => addStep(StepType.Recovery)}
+                            >
+                                <ListItemText>
+                                    {translate("step_type_recovery")}
+                                </ListItemText>
+                            </MenuItem>
                             <MenuItem onClick={() => addStep(StepType.Rest)}>
                                 <ListItemText>
                                     {translate("step_type_rest")}
+                                </ListItemText>
+                            </MenuItem>
+                            <MenuItem onClick={() => addStep(StepType.Other)}>
+                                <ListItemText>
+                                    {translate("step_type_other")}
                                 </ListItemText>
                             </MenuItem>
                         </Menu>

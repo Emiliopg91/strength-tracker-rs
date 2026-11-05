@@ -487,7 +487,7 @@ export class SessionUtils {
 
         let idx = 0;
         for (let i = 0; i < series.length; i++) {
-            if (!series[i].rest) {
+            if (series[i].ex_cat != null) {
                 const ex_key = series[i].ex_cat + "-" + series[i].ex_id;
                 if (!exercises.includes(ex_key)) {
                     exercises.push(ex_key);

@@ -89,3 +89,6 @@ panic = "abort"
 codegen-units = 256
 incremental = true
 strip = false
+
+[dev-dependencies]
+tauri = { version = "^2", features = ["test"] }

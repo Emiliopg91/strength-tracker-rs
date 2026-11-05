@@ -1,7 +1,7 @@
 use std::fs;
 
 use crate::{
-    dao::{additional_data::AdditionalData, session::Session},
+    dao::{additional_data::AdditionalData, session::Session, workout_step::StepType},
     fit::parser::{FitParser, errors::ParseFitFileError},
     tests::common::{STRENGTH_SPORT, STRENGTH_SUB_SPORT},
 };
@@ -228,7 +228,12 @@ fn parses_strength_sessions() {
             assert_eq!(set.session, expected.date);
             assert_eq!(set.idx as usize, idx);
             assert_eq!(set.exercise.is_some(), set.ex_cat.is_some());
-            assert_eq!(set.rest, set.ex_cat.is_none());
+            if set.kind == StepType::Rest {
+                assert!(set.ex_cat.is_none());
+            }
+            if set.kind == StepType::Exercise {
+                assert!(set.ex_cat.is_some());
+            }
         }
 
         let additional_data = session.additional_data.unwrap();
@@ -266,7 +271,11 @@ fn parses_strength_sets_in_order() {
 #[test]
 fn parses_strength_sets_with_fractional_weight() {
     let session = parse_fixture("strength_2");
-    let last = session.steps.iter().rfind(|s| !s.rest).unwrap();
+    let last = session
+        .steps
+        .iter()
+        .rfind(|s| s.kind != StepType::Rest)
+        .unwrap();
 
     assert_eq!(
         (last.ex_cat, last.ex_id, last.reps, last.weight),

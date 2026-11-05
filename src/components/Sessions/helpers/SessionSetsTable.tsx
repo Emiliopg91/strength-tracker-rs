@@ -1,5 +1,5 @@
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
-import { SessionStepDto } from "@/utils/backend/models";
+import { SessionStepDto, StepType } from "@/utils/backend/models";
 import { Fragment, useContext, useState } from "react";
 import { FormControlLabel, Switch } from "@mui/material";
 import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
@@ -28,7 +28,7 @@ export function SessionSetsTable({
     // Without catalog the exercise name is rendered as plain text instead of a selector
     const { exercisesCatalog } = useContext(AppContext);
 
-    const [hasRests] = useState(series.find((s) => s.rest) !== undefined);
+    const [hasRests] = useState(series.find((s) => s.kind == StepType.Rest) !== undefined);
 
     const [groupedSets, setGroupedSets] = useState(false);
 
@@ -74,8 +74,8 @@ export function SessionSetsTable({
                         );
                         const isFirst = firstOfSerie;
                         const thisSerie = serieIdx;
-                        firstOfSerie = serie.rest;
-                        if (serie.rest) {
+                        firstOfSerie = serie.kind == StepType.Rest;
+                        if (firstOfSerie) {
                             serieIdx += 1;
                         }
 
@@ -95,7 +95,7 @@ export function SessionSetsTable({
 
                                 <tbody>
                                     <tr>
-                                        {serie.rest && (
+                                        {serie.ex_cat == null && (
                                             <td colSpan={2}>
                                                 <div
                                                     style={{
@@ -107,7 +107,8 @@ export function SessionSetsTable({
                                                         <small>
                                                             {"" +
                                                                 translate(
-                                                                    "step_type_rest",
+                                                                    "step_type_" +
+                                                                        serie.kind.toLowerCase(),
                                                                 ) +
                                                                 ": "}
                                                             {formatDuration(
@@ -120,7 +121,7 @@ export function SessionSetsTable({
                                             </td>
                                         )}
 
-                                        {!serie.rest && (
+                                        {serie.ex_cat != null && (
                                             <>
                                                 <td>
                                                     {!selected && (

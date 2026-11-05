@@ -119,7 +119,7 @@ export interface ReportData {
   sessions: SessionDetails[];
 }
 
-// From src-tauri/src/dto/sessions.rs:98
+// From src-tauri/src/dto/sessions.rs:101
 export interface SessionDetails {
   active_calories: number;
   active_time: number;
@@ -143,14 +143,14 @@ export interface SessionDetails {
   training_load: number;
 }
 
-// From src-tauri/src/dto/sessions.rs:81
+// From src-tauri/src/dto/sessions.rs:84
 export interface SessionLap {
   idx: number;
   start_latitude: number | null;
   start_longitude: number | null;
 }
 
-// From src-tauri/src/dto/sessions.rs:8
+// From src-tauri/src/dto/sessions.rs:11
 export interface SessionListItem {
   active_calories: number;
   has_record: boolean;
@@ -163,28 +163,28 @@ export interface SessionListItem {
   training_load: number;
 }
 
-// From src-tauri/src/dto/sessions.rs:227
+// From src-tauri/src/dto/sessions.rs:230
 export interface SessionLocation {
   location: string;
   session: number;
 }
 
-// From src-tauri/src/dto/sessions.rs:48
+// From src-tauri/src/dto/sessions.rs:51
 export interface SessionStepDto {
   duration: number;
   duration_ref: number | null;
   ex_cat: number | null;
   ex_id: number | null;
   idx: number;
+  kind: StepType;
   pr: boolean;
   reps: number;
   reps_ref: number | null;
-  rest: boolean;
   weight: number;
   weight_ref: number | null;
 }
 
-// From src-tauri/src/dto/sessions.rs:220
+// From src-tauri/src/dto/sessions.rs:223
 export interface SessionStepsUpdate {
   notes: string | null;
   sets: SessionStepDto[];
@@ -202,10 +202,14 @@ export interface Settings {
   weight_unit: WeightUnit;
 }
 
-// From src-tauri/src/dao/workout_step.rs:45
+// From src-tauri/src/dao/workout_step.rs:46
 export enum StepType {
 	Exercise = "Exercise",
+	Warmup = "Warmup",
+	Recovery = "Recovery",
+	Cooldown = "Cooldown",
 	Rest = "Rest",
+	Other = "Other",
 	Repeat = "Repeat",
 }
 
@@ -257,7 +261,7 @@ export interface WorkoutSession {
   volume: number;
 }
 
-// From src-tauri/src/dao/workout_step.rs:18
+// From src-tauri/src/dao/workout_step.rs:19
 export interface WorkoutStep {
   begin_idx: number | null;
   ex_cat: number | null;

@@ -1,7 +1,13 @@
 use crate::{
     dao::{
-        additional_data::AdditionalData, device::Device, exercise::Exercise, session::Session,
-        session_step::SessionStep, sport::Sport, sub_sport::SubSport,
+        additional_data::AdditionalData,
+        device::Device,
+        exercise::Exercise,
+        session::Session,
+        session_step::SessionStep,
+        sport::Sport,
+        sub_sport::SubSport,
+        workout_step::{StepType, WorkoutStep},
     },
     fit::parser::{
         FitParser,
@@ -99,6 +105,8 @@ impl TryFrom<FitParser> for Session {
                 let duration_ref = wkt_step
                     .and_then(|s| s.time.flatten())
                     .map(|time| time / 1000);
+                let has_exercise = matches!(exercises.get(idx), Some(Some(_)));
+                let kind = set_kind(wkt_step, has_exercise);
 
                 let res = if let Some(exercise) = exercises.get(idx)
                     && let Some(exercise) = exercise
@@ -117,7 +125,7 @@ impl TryFrom<FitParser> for Session {
                         exercise: Some(exercise.clone()),
                         duration,
                         duration_ref,
-                        rest: false,
+                        kind,
                     }
                 } else {
                     SessionStep {
@@ -133,7 +141,7 @@ impl TryFrom<FitParser> for Session {
                         exercise: None,
                         duration,
                         duration_ref,
-                        rest: true,
+                        kind,
                     }
                 };
                 step_idx += 1;
@@ -143,8 +151,8 @@ impl TryFrom<FitParser> for Session {
 
         // Drop trailing rest steps while the last two are both rests
         while let [.., a, b] = steps.as_slice()
-            && a.rest
-            && b.rest
+            && a.kind == StepType::Rest
+            && b.kind == StepType::Rest
         {
             steps.pop();
         }
@@ -188,6 +196,17 @@ impl TryFrom<FitParser> for Session {
             additional_data,
             show_exercises_chart: true,
         })
+    }
+}
+
+/// Sets of steps without exercise are rests, unless their workout step says otherwise.
+fn set_kind(wkt_step: Option<&WorkoutStep>, has_exercise: bool) -> StepType {
+    match wkt_step.map(|s| &s.kind) {
+        Some(
+            kind @ (StepType::Warmup | StepType::Cooldown | StepType::Recovery | StepType::Other),
+        ) => kind.clone(),
+        _ if has_exercise => StepType::Exercise,
+        _ => StepType::Rest,
     }
 }
 

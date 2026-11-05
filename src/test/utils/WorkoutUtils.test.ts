@@ -21,6 +21,24 @@ const parse = (step: WorkoutStep) =>
     WorkoutUtils.parseWorkoutSteps([step], (kg) => kg);
 
 describe("WorkoutUtils", () => {
+    it("only requires an exercise on plain exercise steps", () => {
+        const noExercise = { ex_cat: null, ex_id: null };
+
+        for (const kind of [
+            StepType.Warmup,
+            StepType.Cooldown,
+            StepType.Recovery,
+            StepType.Other,
+        ]) {
+            const steps = parse(exerciseStep({ ...noExercise, kind }));
+            expect(steps[0]).toMatchObject({ kind });
+            expect(WorkoutUtils.validateSteps(steps)).toBe(true);
+        }
+
+        const steps = parse(exerciseStep(noExercise));
+        expect(WorkoutUtils.validateSteps(steps)).toBe(false);
+    });
+
     it("drops a leftover zero time on rep-based exercises so they stay valid", () => {
         const steps = parse(exerciseStep({ reps: 30, time: 0 }));
 

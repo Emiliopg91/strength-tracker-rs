@@ -1,4 +1,5 @@
 use rusqlite_orm::{dao::Repository, database::DatabasePool};
+use rustyfit::profile::typedef::Intensity;
 
 use crate::{
     dao::{
@@ -34,11 +35,11 @@ fn program(db: &DatabasePool, name: &str, steps: &[((u16, u16), Option<&str>)]) 
             .iter()
             .enumerate()
             .map(|(idx, (exercise, notes))| {
-                WorkoutStep::exercise(
+                WorkoutStep::active(
                     name,
                     idx as u16,
-                    exercise.0,
-                    exercise.1,
+                    Intensity::ACTIVE,
+                    Some(*exercise),
                     60.0,
                     Some(10),
                     None,

@@ -5,8 +5,7 @@ use rusqlite_orm::{
     errors::DatabaseError,
     types::{order_by::OrderBy, value::Value, where_clause::Where},
 };
-use strength_tracker_rs_macros::traced_command;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Runtime};
 use tauri_plugin_log::log::info;
 
 use crate::{
@@ -17,7 +16,7 @@ use crate::{
         session_step::{self, SessionStepRepository},
         workout::{self, WorkoutRepository},
         workout_device::{self, WorkoutDeviceRepository},
-        workout_step::{self, WorkoutStep, WorkoutStepRepository},
+        workout_step::{self, StepType, WorkoutStep, WorkoutStepRepository},
     },
     dto::{
         exercises::{ExerciseDetails, ExerciseListItem, ProgressionSuggestion},
@@ -32,19 +31,17 @@ use crate::{
 };
 
 /// Returns every exercise in the catalog, each annotated with its current personal record.
-#[traced_command]
-#[tauri::command]
-pub async fn get_exercises(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
+pub async fn get_exercises<R: Runtime>(
+    app: &AppHandle<R>,
+    settings: &SettingsLock,
 ) -> Result<Vec<ExerciseListItem>, String> {
     info!("Getting exercises list...");
-    let res = run_blocking(&app, move |database| {
+    let res = run_blocking(app, move |database| {
         database.run_in_connection(|conn| {
             let prs = SessionStepRepository::select()
                 .where_(Where::And(vec![
                     Where::Eq(session_step::entity::columns::PR, true.into()),
-                    Where::NotEq(session_step::entity::columns::REST, true.into()),
+                    Where::NotEq(session_step::entity::columns::KIND, StepType::Rest.into()),
                 ]))
                 .fetch_in(conn)?;
             let exercises = ExerciseRepository::select()
@@ -107,11 +104,9 @@ pub async fn get_exercises(
 }
 
 /// Returns the personal record and full per-session set history for one exercise.
-#[traced_command]
-#[tauri::command]
-pub async fn get_exercise_details(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
+pub async fn get_exercise_details<R: Runtime>(
+    app: &AppHandle<R>,
+    settings: &SettingsLock,
     category: u16,
     id: u16,
 ) -> Result<ExerciseDetails, String> {
@@ -119,7 +114,7 @@ pub async fn get_exercise_details(
         "Getting details for exercise with category {} and id {}...",
         category, id
     );
-    let res = run_blocking(&app, move |database| {
+    let res = run_blocking(app, move |database| {
         database.run_in_connection(|conn| Ok(fetch_exercise_details(conn, category, id, None)?))
     })
     .await;
@@ -238,10 +233,10 @@ pub fn fetch_exercise_details(
     Ok(res)
 }
 
-#[traced_command]
-#[tauri::command]
-pub async fn get_exercises_catalog(app: AppHandle) -> Result<HashMap<u16, Vec<u16>>, String> {
-    run_blocking(&app, |db| {
+pub async fn get_exercises_catalog<R: Runtime>(
+    app: &AppHandle<R>,
+) -> Result<HashMap<u16, Vec<u16>>, String> {
+    run_blocking(app, |db| {
         let mut catalog: HashMap<u16, Vec<u16>> = HashMap::new();
 
         db.run_in_connection(|conn| Ok(ExerciseRepository::select().fetch_in(conn)?))?
@@ -356,16 +351,14 @@ pub fn update_prs(
     Ok(())
 }
 
-#[traced_command]
-#[tauri::command]
-pub async fn set_exercise_unilateral(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
+pub async fn set_exercise_unilateral<R: Runtime>(
+    app: &AppHandle<R>,
+    settings: &SettingsLock,
     category: u16,
     id: u16,
     value: bool,
 ) -> Result<(), String> {
-    let res: Result<_, String> = run_blocking(&app, move |database| {
+    let res: Result<_, String> = run_blocking(app, move |database| {
         ExerciseRepository::update()
             .set(exercise::entity::columns::UNILATERAL, value.into())
             .where_(Where::And(vec![
@@ -393,16 +386,14 @@ pub async fn set_exercise_unilateral(
     }
 }
 
-#[traced_command]
-#[tauri::command]
-pub async fn set_exercise_progression(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
+pub async fn set_exercise_progression<R: Runtime>(
+    app: &AppHandle<R>,
+    settings: &SettingsLock,
     category: u16,
     id: u16,
     value: bool,
 ) -> Result<(), String> {
-    let res: Result<_, String> = run_blocking(&app, move |database| {
+    let res: Result<_, String> = run_blocking(app, move |database| {
         ExerciseRepository::update()
             .set(exercise::entity::columns::PROGRESSION, value.into())
             .where_(Where::And(vec![
@@ -430,18 +421,16 @@ pub async fn set_exercise_progression(
     }
 }
 
-#[traced_command]
-#[tauri::command]
-pub async fn set_exercise_progression_parameters(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
+pub async fn set_exercise_progression_parameters<R: Runtime>(
+    app: &AppHandle<R>,
+    settings: &SettingsLock,
     category: u16,
     id: u16,
     reps: &str,
     weight: f32,
 ) -> Result<(), String> {
     let reps = reps.to_string();
-    let res: Result<_, String> = run_blocking(&app, move |database| {
+    let res: Result<_, String> = run_blocking(app, move |database| {
         ExerciseRepository::update()
             .set(exercise::entity::columns::REPS, reps.into())
             .set(exercise::entity::columns::WEIGHT, weight.into())
@@ -470,14 +459,12 @@ pub async fn set_exercise_progression_parameters(
     }
 }
 
-#[traced_command]
-#[tauri::command]
-pub async fn get_progression_status(
-    app: AppHandle,
+pub async fn get_progression_status<R: Runtime>(
+    app: &AppHandle<R>,
     category: u16,
     id: u16,
 ) -> Result<Option<ProgressionSuggestion>, String> {
-    run_blocking(&app, move |database| {
+    run_blocking(app, move |database| {
         database.run_in_connection(|conn| {
             Ok(WorkoutStepRepository::select()
                 .columns(&[
@@ -487,6 +474,7 @@ pub async fn get_progression_status(
                 .where_(Where::And(vec![
                     Where::Eq(workout_step::entity::columns::EX_CAT, category.into()),
                     Where::Eq(workout_step::entity::columns::EX_ID, id.into()),
+                    exercise_step(),
                 ]))
                 .order_by(OrderBy::Desc(workout_step::entity::columns::WEIGHT))
                 .order_by(OrderBy::Desc(workout_step::entity::columns::REPS))
@@ -501,14 +489,12 @@ pub async fn get_progression_status(
     .map_err(|e: DatabaseError| e.to_string())
 }
 
-#[traced_command]
-#[tauri::command]
-pub async fn get_progression_suggestion(
-    app: AppHandle,
+pub async fn get_progression_suggestion<R: Runtime>(
+    app: &AppHandle<R>,
     category: u16,
     id: u16,
 ) -> Result<Option<ProgressionSuggestion>, String> {
-    run_blocking(&app, move |database| {
+    run_blocking(app, move |database| {
         database.run_in_connection(|conn| Ok(fetch_progression_suggestion(conn, category, id)?))
     })
     .await
@@ -533,6 +519,10 @@ pub fn fetch_progression_suggestion(
         .where_(Where::And(vec![
             Where::Eq(session_step::entity::columns::EX_CAT, category.into()),
             Where::Eq(session_step::entity::columns::EX_ID, id.into()),
+            Where::Eq(
+                session_step::entity::columns::KIND,
+                StepType::Exercise.into(),
+            ),
         ]))
         .order_by(OrderBy::Desc(session_step::entity::columns::SESSION))
         .limit(1)
@@ -546,6 +536,10 @@ pub fn fetch_progression_suggestion(
         .where_(Where::And(vec![
             Where::Eq(session_step::entity::columns::EX_CAT, category.into()),
             Where::Eq(session_step::entity::columns::EX_ID, id.into()),
+            Where::Eq(
+                session_step::entity::columns::KIND,
+                StepType::Exercise.into(),
+            ),
             Where::EqSub(session_step::entity::columns::SESSION, latest_subquery),
         ]))
         .fetch_in(conn)?
@@ -600,6 +594,7 @@ pub fn fetch_progression_suggestion(
         .where_(Where::And(vec![
             Where::Eq(workout_step::entity::columns::EX_CAT, category.into()),
             Where::Eq(workout_step::entity::columns::EX_ID, id.into()),
+            exercise_step(),
             Where::NotNull(workout_step::entity::columns::REPS),
             below_suggestion(&suggestion),
             Where::InSub(
@@ -613,6 +608,14 @@ pub fn fetch_progression_suggestion(
         .count_in(conn)?;
 
     Ok((pending > 0).then_some(suggestion))
+}
+
+/// Only exercise steps progress: warm-ups and the like keep their own load.
+fn exercise_step() -> Where<WorkoutStep> {
+    Where::Eq(
+        workout_step::entity::columns::KIND,
+        StepType::Exercise.into(),
+    )
 }
 
 /// Steps programmed below `suggestion`; steps already at or above it are never lowered.
@@ -632,17 +635,15 @@ fn below_suggestion(suggestion: &ProgressionSuggestion) -> Where<WorkoutStep> {
     ])
 }
 
-#[traced_command]
-#[tauri::command]
-pub async fn apply_progression_suggestion(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
-    connect: State<'_, ConnectLock>,
+pub async fn apply_progression_suggestion<R: Runtime>(
+    app: &AppHandle<R>,
+    settings: &SettingsLock,
+    connect: &ConnectLock,
     category: u16,
     id: u16,
     suggestion: ProgressionSuggestion,
 ) -> Result<(), String> {
-    let res = run_blocking(&app, move |database| {
+    let res = run_blocking(app, move |database| {
         database
             .run_in_transaction(|tx| {
                 // Reps go first: the weight update would otherwise change which steps are below
@@ -651,6 +652,7 @@ pub async fn apply_progression_suggestion(
                     .where_(Where::And(vec![
                         Where::Eq(workout_step::entity::columns::EX_CAT, category.into()),
                         Where::Eq(workout_step::entity::columns::EX_ID, id.into()),
+                        exercise_step(),
                         Where::NotNull(workout_step::entity::columns::REPS),
                         below_suggestion(&suggestion),
                     ]))
@@ -663,6 +665,7 @@ pub async fn apply_progression_suggestion(
                     .where_(Where::And(vec![
                         Where::Eq(workout_step::entity::columns::EX_CAT, category.into()),
                         Where::Eq(workout_step::entity::columns::EX_ID, id.into()),
+                        exercise_step(),
                         Where::Lt(
                             workout_step::entity::columns::WEIGHT,
                             suggestion.weight.into(),
@@ -677,6 +680,7 @@ pub async fn apply_progression_suggestion(
                         .where_(Where::And(vec![
                             Where::Eq(workout_step::entity::columns::EX_CAT, category.into()),
                             Where::Eq(workout_step::entity::columns::EX_ID, id.into()),
+                            exercise_step(),
                         ]))
                         .fetch_in(tx)?
                         .iter()
@@ -699,6 +703,7 @@ pub async fn apply_progression_suggestion(
                                         category.into(),
                                     ),
                                     Where::Eq(workout_step::entity::columns::EX_ID, id.into()),
+                                    exercise_step(),
                                 ]))
                                 .to_subquery(),
                         ))
@@ -717,11 +722,11 @@ pub async fn apply_progression_suggestion(
             info!("Applied suggested progression");
             if connect.lock().await.logged_user().is_some() {
                 for wkt in &workouts {
-                    let _ = send_workout_connect(&app, &connect, &settings, wkt).await;
+                    let _ = send_workout_connect(app, connect, settings, wkt).await;
                 }
             }
             if modified {
-                push_pending_to_usb(&app).await;
+                push_pending_to_usb(app).await;
             }
             Ok(())
         }
@@ -734,12 +739,10 @@ pub async fn apply_progression_suggestion(
     }
 }
 
-#[traced_command]
-#[tauri::command]
-pub async fn save_exercise_notes(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
-    connect: State<'_, ConnectLock>,
+pub async fn save_exercise_notes<R: Runtime>(
+    app: &AppHandle<R>,
+    settings: &SettingsLock,
+    connect: &ConnectLock,
     category: u16,
     id: u16,
     notes: &str,
@@ -750,7 +753,7 @@ pub async fn save_exercise_notes(
         Some(notes.trim().to_string())
     };
 
-    let workouts = run_blocking(&app, move |database| {
+    let workouts = run_blocking(app, move |database| {
         database
             .run_in_transaction(|tx| Ok(update_exercise_notes(tx, category, id, notes.clone())?))
             .map_err(|e| e.to_string())
@@ -760,10 +763,10 @@ pub async fn save_exercise_notes(
     if !workouts.is_empty() {
         if connect.lock().await.logged_user().is_some() {
             for wkt in &workouts {
-                let _ = send_workout_connect(&app, &connect, &settings, wkt).await;
+                let _ = send_workout_connect(app, connect, settings, wkt).await;
             }
         }
-        push_pending_to_usb(&app).await;
+        push_pending_to_usb(app).await;
     }
 
     Ok(())

@@ -37,21 +37,18 @@ use rusqlite_orm::{
     errors::DatabaseError,
     types::{order_by::OrderBy, value::Value, where_clause::Where},
 };
-use strength_tracker_rs_macros::traced_command;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tauri_plugin_log::log::{error, info, warn};
 use tokio::process::Command;
 
 /// Returns every recorded session, newest first.
-#[traced_command]
-#[tauri::command]
-pub async fn get_sessions(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
+pub async fn get_sessions<R: Runtime>(
+    app: &AppHandle<R>,
+    settings: &SettingsLock,
     limit: Option<i32>,
 ) -> Result<Vec<SessionListItem>, String> {
     info!("Getting sessions list...");
-    let res = run_blocking(&app, move |database| {
+    let res = run_blocking(app, move |database| {
         database.run_in_connection(|conn| Ok(fetch_sessions(conn, limit, None, None, None)?))
     })
     .await;
@@ -161,11 +158,9 @@ pub fn session_set_flags(
 }
 
 /// Returns full details for one session (series grouped by exercise, heart rate, GPS, speeds, device).
-#[traced_command]
-#[tauri::command]
-pub async fn get_session_details(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
+pub async fn get_session_details<R: Runtime>(
+    app: &AppHandle<R>,
+    settings: &SettingsLock,
     timestamp: u32,
 ) -> Result<SessionDetails, String> {
     info!(
@@ -176,7 +171,7 @@ pub async fn get_session_details(
             .to_rfc3339()
     );
 
-    let res = run_blocking(&app, move |database| {
+    let res = run_blocking(app, move |database| {
         database.run_in_connection(|conn| Ok(fetch_session_details(conn, timestamp, true, true)?))
     })
     .await;
@@ -257,11 +252,9 @@ pub fn fetch_session_details(
 }
 
 /// Applies user edits (session notes and reps/weight/exercise of its series) and recomputes personal records.
-#[traced_command]
-#[tauri::command]
-pub async fn save_session_changes(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
+pub async fn save_session_changes<R: Runtime>(
+    app: &AppHandle<R>,
+    settings: &SettingsLock,
     details: SessionStepsUpdate,
 ) -> Result<(), String> {
     info!(
@@ -273,7 +266,7 @@ pub async fn save_session_changes(
     );
     let lang = settings.read().unwrap().language;
 
-    let res = run_blocking(&app, move |database| {
+    let res = run_blocking(app, move |database| {
         database.run_in_transaction(|tx| {
             update_session_notes(tx, details.timestamp, details.notes.as_deref())?;
 
@@ -341,12 +334,10 @@ pub async fn save_session_changes(
     }
 }
 
-/// Tauri command wrapper around `_import_from_device`; returns the number of sessions imported.
-#[traced_command]
-#[tauri::command]
-pub async fn import_from_files(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
+/// Asks the user for `.fit` files and imports them; returns the number of sessions imported.
+pub async fn import_from_files<R: Runtime>(
+    app: &AppHandle<R>,
+    settings: &SettingsLock,
 ) -> Result<usize, String> {
     let lang = { settings.read().unwrap().language };
     let output = Command::new("zenity")
@@ -372,6 +363,7 @@ pub async fn import_from_files(
     };
 
     if !files.is_empty() {
+        let app = app.clone();
         let res = tokio::task::spawn_blocking(move || _import_from_files(&app, files.as_slice()))
             .await
             .map_err(|e| e.to_string())
@@ -382,7 +374,10 @@ pub async fn import_from_files(
     Ok(0)
 }
 
-pub fn _import_from_files(app: &AppHandle, files: &[PathBuf]) -> Result<usize, String> {
+pub fn _import_from_files<R: Runtime>(
+    app: &AppHandle<R>,
+    files: &[PathBuf],
+) -> Result<usize, String> {
     let lang = app.state::<SettingsLock>().read().unwrap().language;
     let database = app.state::<DatabasePool>();
     let res = database
@@ -710,7 +705,7 @@ pub fn update_session_notes(
 static GELOCATION_MUTEX: Mutex<bool> = Mutex::new(false);
 
 /// Recover all pending workouts pending on geolocation
-pub fn update_pending_geolocation(app: &AppHandle, db: &DatabasePool) {
+pub fn update_pending_geolocation<R: Runtime>(app: &AppHandle<R>, db: &DatabasePool) {
     let _lock = GELOCATION_MUTEX.lock().unwrap();
     info!("Looking for pending geocode workouts...");
     match db.run_in_connection(|conn| {
@@ -845,10 +840,10 @@ pub fn update_pending_geolocation(app: &AppHandle, db: &DatabasePool) {
     }
 }
 
-#[traced_command]
-#[tauri::command]
-pub async fn get_heatmap_data(app: AppHandle) -> Result<Vec<Vec<(u32, u16)>>, String> {
-    run_blocking(&app, heatmap_data).await
+pub async fn get_heatmap_data<R: Runtime>(
+    app: &AppHandle<R>,
+) -> Result<Vec<Vec<(u32, u16)>>, String> {
+    run_blocking(app, heatmap_data).await
 }
 
 pub fn heatmap_data(database: &DatabasePool) -> Result<Vec<Vec<(u32, u16)>>, String> {

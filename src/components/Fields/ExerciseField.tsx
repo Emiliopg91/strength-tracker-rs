@@ -6,11 +6,19 @@ import { useContext } from "react";
 type Props = {
     selected: ExerciseOption | undefined;
     onChange: (opt: ExerciseOption) => void;
+    // Makes the field clearable
+    onClear?: () => void;
     error?: boolean;
     sx?: SxProps<Theme>;
 };
 
-export function ExerciseField({ selected, onChange, error, sx }: Props) {
+export function ExerciseField({
+    selected,
+    onChange,
+    onClear,
+    error,
+    sx,
+}: Props) {
     const { exercisesCatalog } = useContext(AppContext);
     const { translate } = useContext(I18nSettingsContext);
 
@@ -22,13 +30,13 @@ export function ExerciseField({ selected, onChange, error, sx }: Props) {
             // null instead of undefined keeps it controlled, otherwise MUI
             // ignores later values when the row gets reused for another step
             value={selected ?? (null as unknown as ExerciseOption)}
-            disableClearable
+            disableClearable={!onClear}
             groupBy={(opt) => translate("category_" + opt.ex_cat)}
             getOptionKey={(opt) => `${opt.ex_cat}-${opt.ex_id}`}
             isOptionEqualToValue={(a, b) =>
                 a.ex_cat == b.ex_cat && a.ex_id == b.ex_id
             }
-            onChange={(_, opt) => onChange(opt)}
+            onChange={(_, opt) => (opt ? onChange(opt) : onClear?.())}
             renderInput={(params) => (
                 <TextField
                     {...params}

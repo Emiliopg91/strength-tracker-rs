@@ -132,6 +132,21 @@ impl WorkoutStep {
             let idx = end - 1;
             let step = &steps[idx];
             match step.kind {
+                workout_step::StepType::Repeat => {
+                    let begin = step.begin_idx.unwrap() as usize;
+                    res.push(WorkoutStep::RepeatGroup(RepeatGroup {
+                        step_order: 0,
+                        child_step_id: 0,
+                        step_type: StepType::repeat(),
+                        end_condition: EndCondition::iterations(),
+                        end_condition_value: step.reps.flatten().unwrap() as f64,
+                        number_of_iterations: step.reps.flatten().unwrap(),
+                        smart_repeat: false,
+                        workout_steps: WorkoutStep::from_range(steps, begin..idx, weight_unit),
+                    }));
+                    end = begin;
+                    continue;
+                }
                 workout_step::StepType::Rest => res.push(WorkoutStep::Executable(ExecutableStep {
                     step_order: 0,
                     child_step_id: None,
@@ -148,7 +163,11 @@ impl WorkoutStep {
                     weight_unit: None,
                     weight_value: None,
                 })),
-                workout_step::StepType::Exercise => {
+                workout_step::StepType::Exercise
+                | workout_step::StepType::Cooldown
+                | workout_step::StepType::Recovery
+                | workout_step::StepType::Other
+                | workout_step::StepType::Warmup => {
                     // Weights are stored in kg, while Connect reads `weightValue` in `weightUnit`
                     let unit = match weight_unit {
                         settings::WeightUnit::Kilograms => WeightUnit::kilogram(),
@@ -164,7 +183,13 @@ impl WorkoutStep {
                     res.push(WorkoutStep::Executable(ExecutableStep {
                         step_order: 0,
                         child_step_id: None,
-                        step_type: StepType::interval(),
+                        step_type: match step.kind {
+                            workout_step::StepType::Warmup => StepType::warmup(),
+                            workout_step::StepType::Cooldown => StepType::cooldown(),
+                            workout_step::StepType::Recovery => StepType::recovery(),
+                            workout_step::StepType::Other => StepType::other(),
+                            _ => StepType::interval(),
+                        },
                         end_condition,
                         end_condition_value,
                         // Steps without their own notes inherit the exercise notes, as in the FIT upload
@@ -173,36 +198,18 @@ impl WorkoutStep {
                             .clone()
                             .filter(|notes| !notes.is_empty())
                             .or_else(|| step.exercise.as_ref().and_then(|e| e.notes.clone())),
-                        category: Some(
-                            step.exercise
-                                .clone()
-                                .unwrap()
-                                .exercise_category
-                                .unwrap()
-                                .name,
-                        ),
-                        exercise_name: Some(step.exercise.clone().unwrap().name),
+                        category: step
+                            .exercise
+                            .as_ref()
+                            .and_then(|e| e.exercise_category.as_ref())
+                            .map(|c| c.name.clone()),
+                        exercise_name: step.exercise.as_ref().map(|e| e.name.clone()),
                         // Rounded to 0.1, as the frontend displays it
                         weight_value: step.weight.map(|weight| {
                             (weight as f64 * 1000.0 / unit.factor * 10.0).round() / 10.0
                         }),
                         weight_unit: step.weight.map(|_| unit),
                     }))
-                }
-                workout_step::StepType::Repeat => {
-                    let begin = step.begin_idx.unwrap() as usize;
-                    res.push(WorkoutStep::RepeatGroup(RepeatGroup {
-                        step_order: 0,
-                        child_step_id: 0,
-                        step_type: StepType::repeat(),
-                        end_condition: EndCondition::iterations(),
-                        end_condition_value: step.reps.flatten().unwrap() as f64,
-                        number_of_iterations: step.reps.flatten().unwrap(),
-                        smart_repeat: false,
-                        workout_steps: WorkoutStep::from_range(steps, begin..idx, weight_unit),
-                    }));
-                    end = begin;
-                    continue;
                 }
             }
 
@@ -259,6 +266,30 @@ pub struct StepType {
 }
 
 impl StepType {
+    pub fn warmup() -> Self {
+        Self {
+            step_type_id: 1,
+            step_type_key: "warmup".to_string(),
+        }
+    }
+    pub fn cooldown() -> Self {
+        Self {
+            step_type_id: 2,
+            step_type_key: "cooldown".to_string(),
+        }
+    }
+    pub fn recovery() -> Self {
+        Self {
+            step_type_id: 4,
+            step_type_key: "recovery".to_string(),
+        }
+    }
+    pub fn other() -> Self {
+        Self {
+            step_type_id: 7,
+            step_type_key: "other".to_string(),
+        }
+    }
     pub fn interval() -> Self {
         Self {
             step_type_id: 3,

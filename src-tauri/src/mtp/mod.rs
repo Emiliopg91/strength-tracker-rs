@@ -206,6 +206,11 @@ async fn upload_file(storage: &Storage, parent: ObjectHandle, src: &Path) -> Res
 impl MtpClient {
     /// Lists MTP devices currently connected over USB, filtered to Garmin ones.
     pub async fn get_connected_devices(&self) -> Result<Vec<Device>> {
+        // Tests must never reach the devices plugged in the machine
+        if cfg!(test) {
+            return Ok(Vec::new());
+        }
+
         let mut res = Vec::new();
 
         let devices = MtpDevice::list_devices().map_err(MtpError::ListDevices)?;
@@ -234,6 +239,10 @@ impl MtpClient {
     /// True if a device with serial number `serial` is currently connected over USB. Does not
     /// open (claim) the device.
     pub async fn is_device_connected(&self, serial: &str) -> Result<bool> {
+        if cfg!(test) {
+            return Ok(false);
+        }
+
         let devices = MtpDevice::list_devices().map_err(MtpError::ListDevices)?;
 
         Ok(devices

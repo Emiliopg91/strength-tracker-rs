@@ -50,9 +50,9 @@ export function WorkoutSetLeaf({
     const typeLabelId = useId();
     const limitLabelId = useId();
     const [timeInput, setTimeInput] = useState<string | null>(null);
-    const isExercise = leaf.kind == StepType.Exercise;
+    const isActive = leaf.kind != StepType.Rest;
     const errors = WorkoutUtils.leafErrors(leaf);
-    const limit = isExercise
+    const limit = isActive
         ? leaf.reps != null
             ? LimitType.Reps
             : leaf.time != null
@@ -71,14 +71,7 @@ export function WorkoutSetLeaf({
         ) ?? undefined;
 
     const onTypeChange = (e: SelectChangeEvent<string>) => {
-        switch (e.target.value as StepType) {
-            case StepType.Exercise:
-                onChange(WorkoutUtils.DEFAULT_EXERCISE);
-                break;
-            case StepType.Rest:
-                onChange(WorkoutUtils.DEFAULT_REST);
-                break;
-        }
+        onChange(WorkoutUtils.getDefaultLeaf(e.target.value as StepType));
     };
 
     const onLimitChange = (e: SelectChangeEvent<number>) => {
@@ -154,8 +147,20 @@ export function WorkoutSetLeaf({
                 <MenuItem value={StepType.Exercise}>
                     {translate("step_type_exercise")}
                 </MenuItem>
+                <MenuItem value={StepType.Warmup}>
+                    {translate("step_type_warmup")}
+                </MenuItem>
+                <MenuItem value={StepType.Cooldown}>
+                    {translate("step_type_cooldown")}
+                </MenuItem>
+                <MenuItem value={StepType.Recovery}>
+                    {translate("step_type_recovery")}
+                </MenuItem>
                 <MenuItem value={StepType.Rest}>
                     {translate("step_type_rest")}
+                </MenuItem>
+                <MenuItem value={StepType.Other}>
+                    {translate("step_type_other")}
                 </MenuItem>
             </Select>
         </FormControl>
@@ -182,7 +187,7 @@ export function WorkoutSetLeaf({
                     <MenuItem value={LimitType.Lap}>
                         {translate("limit_type_lap")}
                     </MenuItem>
-                    {isExercise && (
+                    {isActive && (
                         <MenuItem value={LimitType.Reps}>
                             {translate("limit_type_reps")}
                         </MenuItem>
@@ -190,7 +195,7 @@ export function WorkoutSetLeaf({
                 </Select>
             </FormControl>
 
-            {isExercise && limit == LimitType.Reps && (
+            {isActive && limit == LimitType.Reps && (
                 <RepetitionsField
                     label="repetitions"
                     value={leaf.reps}
@@ -218,7 +223,7 @@ export function WorkoutSetLeaf({
                 />
             )}
 
-            {isExercise && (
+            {isActive && (
                 <WeightField
                     allowEmpty
                     error={errors.weight}
@@ -302,7 +307,7 @@ export function WorkoutSetLeaf({
         </Box>
     );
 
-    if (!isExercise) {
+    if (!isActive) {
         return (
             <Box
                 sx={{
@@ -339,6 +344,16 @@ export function WorkoutSetLeaf({
                     selected={selected}
                     error={errors.exercise}
                     onChange={(opt) => onExerciseChange(opt!)}
+                    onClear={
+                        leaf.kind != StepType.Exercise
+                            ? () =>
+                                  onChange({
+                                      ...leaf,
+                                      ex_cat: null,
+                                      ex_id: null,
+                                  })
+                            : undefined
+                    }
                     sx={{ width: 480 }}
                 />
             </Box>

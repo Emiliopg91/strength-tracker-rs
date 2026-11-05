@@ -1,10 +1,12 @@
 use rusqlite_orm::{dao::Repository, database::DatabasePool, types::where_clause::Where};
+use rustyfit::profile::typedef::Intensity;
 
 use crate::{
     dao::{
         exercise::{self, ExerciseRepository},
+        session_step::SessionStepRepository,
         workout::{self, Workout, WorkoutRepository},
-        workout_step::{WorkoutStep, WorkoutStepRepository},
+        workout_step::{StepType, WorkoutStep, WorkoutStepRepository},
     },
     dto::exercises::ProgressionSuggestion,
     logic::exercises::fetch_progression_suggestion,
@@ -75,11 +77,11 @@ fn program(db: &DatabasePool, exercise: (u16, u16), weight: f32, reps: u16) {
 
         let mut steps: Vec<_> = (0..3)
             .map(|idx| {
-                WorkoutStep::exercise(
+                WorkoutStep::active(
                     &name,
                     idx,
-                    exercise.0,
-                    exercise.1,
+                    Intensity::ACTIVE,
+                    Some(exercise),
                     weight,
                     Some(reps),
                     None,
@@ -348,6 +350,53 @@ fn disabled_progression_gives_no_suggestion() {
     disable_progression(&db, BENCH);
     log_session(&db, 1, BENCH, &[(12, 100.0), (12, 100.0)]);
     program(&db, BENCH, 100.0, 12);
+
+    assert_eq!(suggestion(&db, BENCH), None);
+}
+
+// Warm-ups and the like don't count
+
+#[test]
+fn light_warmup_set_in_session_does_not_block_the_suggestion() {
+    let db = common::test_db();
+    configure(&db, BENCH, false, "8-10-12");
+    log_session(&db, 1, BENCH, &[(12, 100.0), (12, 100.0)]);
+    db.run_in_transaction(|tx| {
+        let mut warmup = common::set(1, 2, BENCH, 15, 40.0);
+        warmup.kind = StepType::Warmup;
+        SessionStepRepository::insert()
+            .item(&mut warmup)
+            .execute_in(tx)?;
+        Ok(())
+    })
+    .unwrap();
+    program(&db, BENCH, 100.0, 12);
+
+    assert_eq!(suggestion(&db, BENCH), suggested(102.0, 8));
+}
+
+#[test]
+fn programmed_warmup_alone_does_not_trigger_the_suggestion() {
+    let db = common::test_db();
+    configure(&db, BENCH, false, "8-10-12");
+    log_session(&db, 1, BENCH, &[(10, 100.0), (10, 100.0)]);
+    program(&db, BENCH, 100.0, 12);
+    db.run_in_transaction(|tx| {
+        WorkoutStepRepository::insert()
+            .item(&mut WorkoutStep::active(
+                "Plan 0-1",
+                3,
+                Intensity::WARMUP,
+                Some(BENCH),
+                40.0,
+                Some(15),
+                None,
+                None,
+            ))
+            .execute_in(tx)?;
+        Ok(())
+    })
+    .unwrap();
 
     assert_eq!(suggestion(&db, BENCH), None);
 }

@@ -21,7 +21,7 @@ use rusqlite_orm::database::{
 };
 use rusqlite_orm::ddls;
 use tauri::{
-    AppHandle, Manager, RunEvent, WindowEvent,
+    AppHandle, Emitter, Manager, RunEvent, WindowEvent,
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
@@ -37,32 +37,20 @@ use crate::{
     dao::body_metric::migration_21,
     dto::app::Settings,
     logic::{
-        app::{
-            get_environment, get_settings, get_translations, hide_main_window,
-            notify_frontend_ready, show_main_window, update_settings_value,
-        },
-        body_metrics::{add_body_measures, delete_body_metric, get_body_measures},
-        connect::{
-            connect_logged_user, connect_login, connect_logout, import_from_connect,
-            import_weight_from_connect, send_to_connect,
-        },
-        devices::{get_registered_devices, import_from_device, send_to_device},
-        exercises::{
-            apply_progression_suggestion, get_exercise_details, get_exercises,
-            get_exercises_catalog, get_progression_status, get_progression_suggestion,
-            save_exercise_notes, set_exercise_progression, set_exercise_progression_parameters,
-            set_exercise_unilateral,
-        },
-        export::{export_database, upload_to_cloud},
-        report::{get_report_data, load_report, report_ready},
-        sessions::{
-            _import_from_files, get_heatmap_data, get_session_details, get_sessions,
-            import_from_files, save_session_changes,
-        },
-        workouts::{
-            get_workout_details, get_workout_list, load_workout_page, save_workout,
-            set_workout_status, workout_print_ready,
-        },
+        add_body_measures,
+        app::{hide_main_window, show_main_window},
+        apply_progression_suggestion, connect_logged_user, connect_login, connect_logout,
+        delete_body_metric, export_database, get_body_measures, get_environment,
+        get_exercise_details, get_exercises, get_exercises_catalog, get_heatmap_data,
+        get_progression_status, get_progression_suggestion, get_registered_devices,
+        get_report_data, get_session_details, get_sessions, get_settings, get_translations,
+        get_workout_details, get_workout_list, import_from_connect, import_from_device,
+        import_from_files, import_weight_from_connect, load_report, load_workout_page,
+        notify_frontend_ready, report_ready, save_exercise_notes, save_session_changes,
+        save_workout, send_to_connect, send_to_device,
+        sessions::_import_from_files,
+        set_exercise_progression, set_exercise_progression_parameters, set_exercise_unilateral,
+        set_workout_status, update_settings_value, upload_to_cloud, workout_print_ready,
     },
     mtp::MtpClient,
     udev::UdevManager,
@@ -126,7 +114,14 @@ fn initialize(app: &AppHandle) -> (DatabasePool, Settings, ConnectClient, MtpCli
             (
                 database,
                 settings,
-                ConnectClient::new(app.clone()),
+                {
+                    let app: AppHandle = app.clone();
+                    ConnectClient::new(move |user| {
+                        // Typed binding: the TypeScript generator reads the payload type from it
+                        let payload: Option<String> = user;
+                        let _ = app.emit("connect_logged", payload);
+                    })
+                },
                 MtpClient {},
             )
         }

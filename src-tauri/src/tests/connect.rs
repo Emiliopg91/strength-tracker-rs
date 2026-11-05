@@ -129,6 +129,36 @@ fn with_exercise_notes(mut step: WorkoutStep, notes: &str) -> WorkoutStep {
 }
 
 #[test]
+fn active_kinds_map_to_their_connect_step_type() {
+    let cases = [
+        (StepType::Exercise, 3, "interval"),
+        (StepType::Warmup, 1, "warmup"),
+        (StepType::Cooldown, 2, "cooldown"),
+        (StepType::Recovery, 4, "recovery"),
+        (StepType::Other, 7, "other"),
+    ];
+    for (kind, id, key) in cases {
+        let mut step = reps(0, 10, Some(60.0));
+        step.kind = kind;
+        let json = steps_json(&[step]);
+
+        assert_eq!(
+            json[0]["stepType"],
+            json!({ "stepTypeId": id, "stepTypeKey": key })
+        );
+    }
+}
+
+#[test]
+fn warmup_without_exercise_omits_exercise_fields() {
+    let json = steps_json(&[step(0, StepType::Warmup)]);
+
+    assert_eq!(json[0]["stepType"]["stepTypeKey"], "warmup");
+    assert!(json[0].get("category").is_none());
+    assert!(json[0].get("exerciseName").is_none());
+}
+
+#[test]
 fn step_without_notes_inherits_exercise_notes() {
     let json = steps_json(&[with_exercise_notes(reps(0, 10, None), "Elbows in")]);
 

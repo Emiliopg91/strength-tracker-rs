@@ -8,8 +8,7 @@ use rusqlite_orm::{
     dao::Repository,
     types::{order_by::OrderBy, value::Value, where_clause::Where},
 };
-use strength_tracker_rs_macros::traced_command;
-use tauri::{AppHandle, Manager, State, WebviewWindow, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager, Runtime, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_log::log::{error, info};
 
 use crate::{
@@ -39,14 +38,12 @@ use crate::{
 };
 
 /// Returns sessions grouped/aggregated by workout name (count, average time, latest date), sorted by name.
-#[traced_command]
-#[tauri::command]
-pub async fn get_workout_list(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
+pub async fn get_workout_list<R: Runtime>(
+    app: &AppHandle<R>,
+    settings: &SettingsLock,
 ) -> Result<Vec<WorkoutListItem>, String> {
     info!("Getting workouts list...");
-    let res = run_blocking(&app, move |database| {
+    let res = run_blocking(app, move |database| {
         database.run_in_connection(|conn| {
             let workouts: Vec<_> = WorkoutRepository::select()
                 .fetch_in(conn)?
@@ -138,15 +135,13 @@ pub async fn get_workout_list(
 }
 
 /// Returns every session for one workout name with per-session volume and session-over-session volume diff.
-#[traced_command]
-#[tauri::command]
-pub async fn get_workout_details(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
+pub async fn get_workout_details<R: Runtime>(
+    app: &AppHandle<R>,
+    settings: &SettingsLock,
     name: &str,
 ) -> Result<WorkoutDetails, String> {
     let name = name.to_string();
-    let res = run_blocking(&app, move |database| {
+    let res = run_blocking(app, move |database| {
         database.run_in_connection(|conn| {
             info!("Getting details for workout {}", name);
 
@@ -276,12 +271,14 @@ pub async fn get_workout_details(
     }
 }
 
-#[traced_command]
-#[tauri::command]
-pub async fn set_workout_status(app: AppHandle, workout: &str, status: bool) -> Result<(), String> {
+pub async fn set_workout_status<R: Runtime>(
+    app: &AppHandle<R>,
+    workout: &str,
+    status: bool,
+) -> Result<(), String> {
     let name = workout;
     let workout = workout.to_string();
-    let res = run_blocking(&app, move |database| {
+    let res = run_blocking(app, move |database| {
         database
             .run_in_transaction(|tx| {
                 let wk_cl = workout.clone();
@@ -313,28 +310,26 @@ pub async fn set_workout_status(app: AppHandle, workout: &str, status: bool) -> 
 
     if res.is_ok() {
         if status {
-            push_pending_to_usb(&app).await;
-            send_enabled_workout_to_connect_devices(&app, name).await;
+            push_pending_to_usb(app).await;
+            send_enabled_workout_to_connect_devices(app, name).await;
         } else {
-            delete_pending_from_connected(&app).await;
+            delete_pending_from_connected(app).await;
         }
     }
 
     res
 }
 
-#[traced_command]
-#[tauri::command]
-pub async fn save_workout(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
-    connect: State<'_, ConnectLock>,
+pub async fn save_workout<R: Runtime>(
+    app: &AppHandle<R>,
+    settings: &SettingsLock,
+    connect: &ConnectLock,
     edit: bool,
     workout: Workout,
 ) -> Result<(), String> {
     let name = workout.name.clone();
     let name_cl = workout.name.clone();
-    let res = run_blocking(&app, move |database| {
+    let res = run_blocking(app, move |database| {
         database.run_in_transaction(|tx| {
             if edit && WorkoutRepository::select_by_id_in(tx, &workout.name)?.is_some() {
                 WorkoutRepository::update()
@@ -402,10 +397,10 @@ pub async fn save_workout(
                 kind: NotificationKind::Temporal,
             });
             if connect.lock().await.logged_user().is_some() {
-                let _ = send_workout_connect(&app, &connect, &settings, &name_cl).await;
+                let _ = send_workout_connect(app, connect, settings, &name_cl).await;
             }
             if edit {
-                push_pending_to_usb(&app).await;
+                push_pending_to_usb(app).await;
             }
             Ok(())
         }
@@ -418,9 +413,10 @@ pub async fn save_workout(
     }
 }
 
-#[traced_command]
-#[tauri::command]
-pub async fn load_workout_page(app: AppHandle, workout: &str) -> Result<(), String> {
+pub async fn load_workout_page<R: Runtime>(
+    app: &AppHandle<R>,
+    workout: &str,
+) -> Result<(), String> {
     let mut config = app
         .config()
         .app
@@ -432,7 +428,7 @@ pub async fn load_workout_page(app: AppHandle, workout: &str) -> Result<(), Stri
 
     config.url = tauri::WebviewUrl::App(format!("{}?workout={workout}", config.url).into());
 
-    WebviewWindowBuilder::from_config(&app, &config)
+    WebviewWindowBuilder::from_config(app, &config)
         .map_err(|e| e.to_string())?
         .build()
         .map_err(|e| e.to_string())?;
@@ -441,8 +437,6 @@ pub async fn load_workout_page(app: AppHandle, workout: &str) -> Result<(), Stri
 }
 
 /// Called by the report window once everything is rendered and painted: prints it to PDF.
-#[traced_command]
-#[tauri::command]
 pub async fn workout_print_ready(window: WebviewWindow, workout: &str) -> Result<(), String> {
     info!("Report ready, printing");
     let res = print_to_pdf(window.clone(), workout).await;

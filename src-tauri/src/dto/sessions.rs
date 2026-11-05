@@ -2,7 +2,10 @@ use std::{collections::HashSet, hash::Hash};
 
 use serde::{Deserialize, Serialize};
 
-use crate::dao::{exercise::Exercise, lap::Lap, session::Session, session_step::SessionStep};
+use crate::dao::{
+    exercise::Exercise, lap::Lap, session::Session, session_step::SessionStep,
+    workout_step::StepType,
+};
 
 #[derive(Serialize, Default)]
 pub struct SessionListItem {
@@ -54,7 +57,7 @@ pub struct SessionStepDto {
     pub weight: f32,
     pub weight_ref: Option<f32>,
     pub pr: bool,
-    pub rest: bool,
+    pub kind: StepType,
     pub duration: u32,
     pub duration_ref: Option<u32>,
 }
@@ -70,7 +73,7 @@ impl From<&SessionStep> for SessionStepDto {
             weight: value.weight,
             weight_ref: value.weight_ref,
             pr: value.pr,
-            rest: value.rest,
+            kind: value.kind.clone(),
             duration: value.duration,
             duration_ref: value.duration_ref,
         }
