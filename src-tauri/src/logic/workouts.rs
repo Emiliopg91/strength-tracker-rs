@@ -32,7 +32,7 @@ use crate::{
             send_enabled_workout_to_connect_devices,
         },
         notifications::show_notification,
-        report_error, row_f64, row_int, row_text, run_blocking,
+        report_error, row_f64_nullable, row_int, row_int_nullable, row_text, run_blocking,
     },
     utils::translations::translate,
 };
@@ -221,9 +221,11 @@ pub async fn get_workout_details<R: Runtime>(
             for serie in &series {
                 *volume_by_session
                     .entry(row_int(serie, session_step::entity::columns::SESSION.as_ref()) as u32)
-                    .or_insert(0.0) += row_int(serie, session_step::entity::columns::REPS.as_ref())
-                    as f32
-                    * row_f64(serie, session_step::entity::columns::WEIGHT.as_ref()) as f32;
+                    .or_insert(0.0) +=
+                    row_int_nullable(serie, session_step::entity::columns::REPS.as_ref())
+                        .unwrap_or_default() as f32
+                        * row_f64_nullable(serie, session_step::entity::columns::WEIGHT.as_ref())
+                            .unwrap_or_default() as f32;
             }
 
             let mut session_list = Vec::new();

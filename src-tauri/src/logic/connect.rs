@@ -98,7 +98,7 @@ pub async fn import_from_connect<R: Runtime>(
         // The mark only follows what Connect has listed, so activities uploaded late are not missed
         let imported_sessions = tokio::task::spawn_blocking(move || {
             let db = app_cpy.state::<DatabasePool>();
-            import_pending_sessions(&db, &dst_dir, &mut device, lang_cl, None)
+            import_pending_sessions(&app_cpy, &db, &dst_dir, &mut device, lang_cl, None)
         })
         .await
         .expect("blocking DB task panicked")

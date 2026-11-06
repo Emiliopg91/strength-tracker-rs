@@ -184,6 +184,22 @@ pub(crate) fn row_f64(row: &Row, column: &str) -> f64 {
     }
 }
 
+/// Reads a nullable integer column from a non-mapped select row.
+pub(crate) fn row_int_nullable(row: &Row, column: &str) -> Option<i64> {
+    match row.get(column) {
+        Some(Value::Null) | None => None,
+        _ => Some(row_int(row, column)),
+    }
+}
+
+/// Reads a nullable real column from a non-mapped select row.
+pub(crate) fn row_f64_nullable(row: &Row, column: &str) -> Option<f64> {
+    match row.get(column) {
+        Some(Value::Null) | None => None,
+        _ => Some(row_f64(row, column)),
+    }
+}
+
 /// Reads a text column from a non-mapped select row.
 pub(crate) fn row_text(row: &Row, column: &str) -> String {
     match row.get(column) {
@@ -335,6 +351,12 @@ pub async fn get_progression_suggestion(
     id: u16,
 ) -> Result<Option<ProgressionSuggestion>, String> {
     exercises::get_progression_suggestion(&app, category, id).await
+}
+
+#[traced_command]
+#[tauri::command]
+pub async fn available_any_progression_suggestions(app: AppHandle) -> Result<bool, String> {
+    Ok(exercises::available_any_progression_suggestions(&app).await)
 }
 
 #[traced_command]

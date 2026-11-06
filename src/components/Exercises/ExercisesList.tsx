@@ -19,7 +19,12 @@ export type ExerciseListEntry = ExerciseListItem & { used: boolean };
 
 export function ExercisesList() {
     const loadingTask = useLoadingTask();
-    const { sessionsVersion, exercisesCatalog } = useContext(AppContext);
+    const {
+        sessionsVersion,
+        exercisesCatalog,
+        setProgressionsAvailable,
+        unsetProgressionsAvailable,
+    } = useContext(AppContext);
     const { translate, formatDate } = useContext(I18nSettingsContext);
     const [exercises, setExercises] = useBackendList<ExerciseListEntry>(
         () =>
@@ -92,13 +97,21 @@ export function ExercisesList() {
         exercise: ExerciseDetails,
         pending: boolean,
     ) => {
-        setExercises((prevs) =>
-            prevs.map((cur) =>
+        setExercises((prevs) => {
+            const newItems = prevs.map((cur) =>
                 cur.category == exercise.category && cur.id == exercise.id
                     ? { ...cur, progression: pending }
                     : cur,
-            ),
-        );
+            );
+
+            if (newItems.find((e) => e.progression)) {
+                setProgressionsAvailable();
+            } else {
+                unsetProgressionsAvailable();
+            }
+
+            return newItems;
+        });
     };
 
     const [filter, filteredExercises] = useFilterList(exercises, (exercise) => {

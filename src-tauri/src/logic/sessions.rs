@@ -24,8 +24,11 @@ use crate::{
     },
     fit::{parser::FitParser, writer::FitWriter},
     logic::{
-        ask_save_path, exercises::update_prs, list_fit_files, notifications::show_notification,
-        report_error, row_int, row_text, run_blocking, settle_pending_files,
+        ask_save_path,
+        exercises::{any_progression_suggestion, fetch_progression_suggestion, update_prs},
+        list_fit_files,
+        notifications::show_notification,
+        report_error, row_int, row_int_nullable, row_text, run_blocking, settle_pending_files,
     },
     utils::{
         constants,
@@ -387,11 +390,33 @@ pub async fn save_session_changes<R: Runtime>(
                 .fetch_in(tx)?
                 .iter()
                 .for_each(|row| {
-                    exercises.insert((
-                        row_int(row, entity::columns::EX_CAT.as_ref()) as u16,
-                        row_int(row, entity::columns::EX_ID.as_ref()) as u16,
-                    ));
+                    // Rest steps have no exercise
+                    if let Some(cat) = row_int_nullable(row, entity::columns::EX_CAT.as_ref())
+                        && let Some(id) = row_int_nullable(row, entity::columns::EX_ID.as_ref())
+                    {
+                        exercises.insert((cat as u16, id as u16));
+                    }
                 });
+            for serie in &details.sets {
+                if let Some(cat) = serie.ex_cat
+                    && let Some(id) = serie.ex_id
+                {
+                    exercises.insert((cat, id));
+                }
+            }
+
+            let has_suggestion = |tx: &rusqlite_orm::rusqlite::Transaction,
+                                  (cat, id): (u16, u16)| {
+                fetch_progression_suggestion(tx, cat, id)
+                    .ok()
+                    .flatten()
+                    .is_some()
+            };
+            let suggested_before: HashSet<(u16, u16)> = exercises
+                .iter()
+                .copied()
+                .filter(|ex| has_suggestion(tx, *ex))
+                .collect();
 
             for serie in &details.sets {
                 SessionStepRepository::update()
@@ -404,21 +429,20 @@ pub async fn save_session_changes<R: Runtime>(
                         Where::Eq(entity::columns::IDX, serie.idx.into()),
                     ]))
                     .execute_in(tx)?;
-                if let Some(cat) = serie.ex_cat
-                    && let Some(id) = serie.ex_id
-                {
-                    exercises.insert((cat, id));
-                }
             }
 
-            update_prs(tx, exercises, &[details.timestamp], Some(lang))?;
-            Ok(())
+            update_prs(tx, &exercises, &[details.timestamp], Some(lang))?;
+
+            let newly_suggested = exercises
+                .iter()
+                .any(|ex| !suggested_before.contains(ex) && has_suggestion(tx, *ex));
+            Ok((newly_suggested, any_progression_suggestion(tx)?))
         })
     })
     .await;
 
     match res {
-        Ok(l) => {
+        Ok((newly_suggested, any_progression)) => {
             info!("Session updated succesfully");
             show_notification(NotificationDefinition {
                 title: translate("ok_update_session", lang),
@@ -426,7 +450,17 @@ pub async fn save_session_changes<R: Runtime>(
                 kind: NotificationKind::Temporal,
             });
 
-            Ok(l)
+            if newly_suggested {
+                show_notification(NotificationDefinition {
+                    title: translate("progression_available", lang),
+                    body: translate("progression_available_msg", lang),
+                    kind: NotificationKind::Temporal,
+                });
+            }
+            let payload: bool = any_progression;
+            let _ = app.emit("progressions_available", payload);
+
+            Ok(())
         }
         Err(e) => Err(report_error(
             e,
@@ -484,11 +518,16 @@ pub fn _import_from_files<R: Runtime>(
     let lang = app.state::<SettingsLock>().read().unwrap().language;
     let database = app.state::<DatabasePool>();
     let res = database
-        .run_in_transaction(|tx| Ok(import_file_list(tx, files, lang)?.sessions))
+        .run_in_transaction(|tx| Ok(import_file_list(tx, files, lang)?))
         .map_err(|e| e.to_string());
 
     match res {
-        Ok(res) => {
+        Ok(imported) => {
+            if let Some(any_progression) = imported.any_progression {
+                let payload: bool = any_progression;
+                let _ = app.emit("progressions_available", payload);
+            }
+            let res = imported.sessions;
             if !res.is_empty() {
                 let app = app.clone();
                 std::thread::spawn(move || {
@@ -510,7 +549,8 @@ pub fn _import_from_files<R: Runtime>(
 /// Imports as sessions of `device` the `.fit` files waiting in `dir`, settling them once the
 /// transaction is over (a rollback fails them all). With `sync_mark`, the
 /// device's last activity sync is moved to it in the same transaction.
-pub fn import_pending_sessions(
+pub fn import_pending_sessions<R: Runtime>(
+    app: &AppHandle<R>,
     db: &DatabasePool,
     dir: &Path,
     device: &mut Device,
@@ -535,7 +575,13 @@ pub fn import_pending_sessions(
     });
 
     match &res {
-        Ok(imported) => settle_pending_files(dir, &imported.done, &imported.failed),
+        Ok(imported) => {
+            if let Some(any_progression) = imported.any_progression {
+                let payload: bool = any_progression;
+                let _ = app.emit("progressions_available", payload);
+            }
+            settle_pending_files(dir, &imported.done, &imported.failed);
+        }
         Err(_) => settle_pending_files(dir, &[], &activities),
     }
 
@@ -552,6 +598,9 @@ pub struct ImportedFiles {
     pub done: Vec<PathBuf>,
     /// Files that could not be parsed.
     pub failed: Vec<PathBuf>,
+    /// Whether any exercise has a progression suggestion pending, checked only when sessions
+    /// were inserted (otherwise it cannot have changed).
+    pub any_progression: Option<bool>,
 }
 
 /// Parses a batch of `.FIT` files in parallel and inserts each new session (plus its exercises/series/heart rate/GPS/speeds) in the given transaction, then refreshes personal records.
@@ -679,19 +728,36 @@ where
         }
     }
 
+    let mut any_progression = None;
     if !success.is_empty() {
         show_notification(NotificationDefinition {
             title: translate("ok_import_sessions", lang),
             body: translate_and_replace("imported_n_sessions", &[&success.len().to_string()], lang),
             kind: NotificationKind::Temporal,
         });
-        update_prs(tx, handled_exercises, &success, Some(lang))?;
+        update_prs(tx, &handled_exercises, &success, Some(lang))?;
+
+        if handled_exercises.iter().any(|(cat, id)| {
+            fetch_progression_suggestion(tx, *cat, *id)
+                .ok()
+                .flatten()
+                .is_some()
+        }) {
+            show_notification(NotificationDefinition {
+                title: translate("progression_available", lang),
+                body: translate("progression_available_msg", lang),
+                kind: NotificationKind::Temporal,
+            });
+        }
+
+        any_progression = Some(any_progression_suggestion(tx)?);
     }
 
     Ok(ImportedFiles {
         sessions: success,
         done,
         failed,
+        any_progression,
     })
 }
 
@@ -1114,7 +1180,7 @@ pub fn merge_sessions(
                 }
             })
             .collect();
-        update_prs(tx, handled_exercises, &[to.date], None)?;
+        update_prs(tx, &handled_exercises, &[to.date], None)?;
 
         Ok(())
     })

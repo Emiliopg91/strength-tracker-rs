@@ -199,11 +199,7 @@ export function SessionSetsTable({
                                                     {serie.pr && (
                                                         <EmojiEventsIcon
                                                             fontSize="small"
-                                                            className="trophy-icon"
-                                                            style={{
-                                                                marginTop:
-                                                                    "15px",
-                                                            }}
+                                                            className="trophy-icon session-list-trophy"
                                                         />
                                                     )}
                                                 </td>
@@ -313,7 +309,7 @@ export function SessionSetsTable({
                                         />
                                         {serie.pr && (
                                             <EmojiEventsIcon
-                                                className="trophy-icon"
+                                                className="trophy-icon session-list-trophy"
                                                 style={{ marginTop: "15px" }}
                                             />
                                         )}

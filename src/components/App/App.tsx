@@ -15,6 +15,7 @@ import { Tabs } from "@/models/tabs";
 import { Loading } from "../Loading/Loading";
 import SettingsIcon from "@mui/icons-material/Settings";
 import { Home } from "../Home/Home";
+import PriorityHighIcon from "@mui/icons-material/PriorityHigh";
 
 // Only Home is bundled eagerly; the rest is fetched in background once Home is shown
 const loadSessionsList = () => import("../Sessions/SessionList");
@@ -40,7 +41,7 @@ const Settings = lazy(() =>
 );
 
 export function App(): JSX.Element {
-    const { appReady } = useContext(AppContext);
+    const { appReady, progressionsAvailable } = useContext(AppContext);
     const { translate } = useContext(I18nSettingsContext);
 
     const [settingsOpened, setSettingsOpened] = useState(false);
@@ -92,7 +93,14 @@ export function App(): JSX.Element {
             selected: tab == Tabs.WORKOUTS,
         },
         {
-            label: <span>{translate("exercises")}</span>,
+            label: (
+                <span>
+                    {progressionsAvailable && (
+                        <PriorityHighIcon className="warn-icon" />
+                    )}
+                    {translate("exercises")}
+                </span>
+            ),
             onSelected: () => {
                 setTab(Tabs.EXERCISES);
             },

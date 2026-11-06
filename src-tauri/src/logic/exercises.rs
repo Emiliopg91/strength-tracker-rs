@@ -25,7 +25,8 @@ use crate::{
     },
     logic::{
         connect::send_workout_connect, devices::push_pending_to_usb,
-        notifications::show_notification, report_error, row_f64, row_int, row_text, run_blocking,
+        notifications::show_notification, report_error, row_f64_nullable, row_int,
+        row_int_nullable, row_text, run_blocking,
     },
     utils::translations::{Languages, translate},
 };
@@ -279,13 +280,13 @@ pub fn update_all_prs(
         .for_each(|e| {
             exercises.insert(e);
         });
-    update_prs(tx, exercises, &[], None)
+    update_prs(tx, &exercises, &[], None)
 }
 
 /// Recomputes the `pr` flag for each affected exercise and notifies if any of the just-imported/edited sessions set a new record.
 pub fn update_prs(
     tx: &rusqlite_orm::rusqlite::Transaction,
-    exercises: HashSet<(u16, u16)>,
+    exercises: &HashSet<(u16, u16)>,
     sessions: &[u32],
     lang: Option<Languages>,
 ) -> rusqlite_orm::errors::Result<()> {
@@ -296,7 +297,7 @@ pub fn update_prs(
     let mut update_false_conditions = vec![];
     let mut update_true_conditions = vec![];
 
-    for exer in &exercises {
+    for exer in exercises {
         update_false_conditions.push(vec![exer.0.into(), exer.1.into()]);
         if let Some(pr) = SessionStepRepository::select()
             .where_(Where::And(vec![
@@ -481,8 +482,10 @@ pub async fn get_progression_status<R: Runtime>(
                 .order_by(OrderBy::Desc(workout_step::entity::columns::REPS))
                 .fetch_one_in(conn)?
                 .map(|r| ProgressionSuggestion {
-                    reps: row_int(&r, workout_step::entity::columns::REPS.as_ref()) as u16,
-                    weight: row_f64(&r, workout_step::entity::columns::WEIGHT.as_ref()) as f32,
+                    reps: row_int_nullable(&r, workout_step::entity::columns::REPS.as_ref())
+                        .unwrap_or_default() as u16,
+                    weight: row_f64_nullable(&r, workout_step::entity::columns::WEIGHT.as_ref())
+                        .unwrap_or_default() as f32,
                 }))
         })
     })
@@ -547,8 +550,10 @@ pub fn fetch_progression_suggestion(
         .iter()
         .map(|r| {
             (
-                row_f64(r, session_step::entity::columns::WEIGHT.as_ref()) as f32,
-                row_int(r, session_step::entity::columns::REPS.as_ref()) as u16,
+                row_f64_nullable(r, session_step::entity::columns::WEIGHT.as_ref())
+                    .unwrap_or_default() as f32,
+                row_int_nullable(r, session_step::entity::columns::REPS.as_ref())
+                    .unwrap_or_default() as u16,
             )
         })
         .collect();
@@ -622,18 +627,32 @@ fn exercise_step() -> Where<WorkoutStep> {
 /// Steps programmed below `suggestion`; steps already at or above it are never lowered.
 fn below_suggestion(suggestion: &ProgressionSuggestion) -> Where<WorkoutStep> {
     Where::Or(vec![
-        Where::Lt(
-            workout_step::entity::columns::WEIGHT,
-            suggestion.weight.into(),
-        ),
+        weight_below(suggestion.weight),
         Where::And(vec![
-            Where::Eq(
-                workout_step::entity::columns::WEIGHT,
-                suggestion.weight.into(),
-            ),
+            weight_equals(suggestion.weight),
             Where::Lt(workout_step::entity::columns::REPS, suggestion.reps.into()),
         ]),
     ])
+}
+
+/// Steps loaded below `weight`, a missing load counting as 0.
+fn weight_below(weight: f32) -> Where<WorkoutStep> {
+    let lt = Where::Lt(workout_step::entity::columns::WEIGHT, weight.into());
+    if weight > 0.0 {
+        Where::Or(vec![Where::Null(workout_step::entity::columns::WEIGHT), lt])
+    } else {
+        lt
+    }
+}
+
+/// Steps loaded with exactly `weight`, a missing load counting as 0.
+fn weight_equals(weight: f32) -> Where<WorkoutStep> {
+    let eq = Where::Eq(workout_step::entity::columns::WEIGHT, weight.into());
+    if weight == 0.0 {
+        Where::Or(vec![Where::Null(workout_step::entity::columns::WEIGHT), eq])
+    } else {
+        eq
+    }
 }
 
 pub async fn apply_progression_suggestion<R: Runtime>(
@@ -667,10 +686,7 @@ pub async fn apply_progression_suggestion<R: Runtime>(
                         Where::Eq(workout_step::entity::columns::EX_CAT, category.into()),
                         Where::Eq(workout_step::entity::columns::EX_ID, id.into()),
                         exercise_step(),
-                        Where::Lt(
-                            workout_step::entity::columns::WEIGHT,
-                            suggestion.weight.into(),
-                        ),
+                        weight_below(suggestion.weight),
                     ]))
                     .execute_in(tx)?;
 
@@ -830,4 +846,44 @@ pub fn update_exercise_notes(
     }
 
     Ok(workouts)
+}
+
+/// Whether any exercise with progression enabled currently has a suggestion pending.
+pub fn any_progression_suggestion(
+    conn: &rusqlite_orm::rusqlite::Connection,
+) -> rusqlite_orm::errors::Result<bool> {
+    let exercises: Vec<(u16, u16)> = ExerciseRepository::select()
+        .columns(&[
+            exercise::entity::columns::CATEGORY,
+            exercise::entity::columns::ID,
+        ])
+        .where_(Where::Eq(
+            exercise::entity::columns::PROGRESSION,
+            true.into(),
+        ))
+        .fetch_in(conn)?
+        .iter()
+        .map(|r| {
+            (
+                row_int(r, exercise::entity::columns::CATEGORY.as_ref()) as u16,
+                row_int(r, exercise::entity::columns::ID.as_ref()) as u16,
+            )
+        })
+        .collect();
+
+    Ok(exercises.into_iter().any(|(cat, id)| {
+        fetch_progression_suggestion(conn, cat, id)
+            .ok()
+            .flatten()
+            .is_some()
+    }))
+}
+
+pub async fn available_any_progression_suggestions(app: &AppHandle) -> bool {
+    run_blocking(app, |database| {
+        database
+            .run_in_connection(|conn| Ok(any_progression_suggestion(conn)?))
+            .unwrap_or(false)
+    })
+    .await
 }

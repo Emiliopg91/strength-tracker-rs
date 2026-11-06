@@ -649,3 +649,9 @@ login:
 logout:
   en: Log out
   es: Cerrar sesión
+progression_available:
+  en: Reached exercise targets
+  es: Alcanzadas metas de ejercicio
+progression_available_msg:
+  en: Adjust your progress and go further
+  es: Ajusta tu progreso y ve más allá

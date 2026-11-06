@@ -891,7 +891,7 @@ pub async fn _import_from_device<R: Runtime>(
         res = tokio::task::spawn_blocking(move || {
             let db = app_cpy.state::<DatabasePool>();
             let now = Local::now().timestamp() as u32;
-            import_pending_sessions(&db, &dst_dir, &mut device, lang, Some(now))
+            import_pending_sessions(&app_cpy, &db, &dst_dir, &mut device, lang, Some(now))
         })
         .await
         .expect("blocking DB task panicked");

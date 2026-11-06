@@ -20,8 +20,18 @@ export function AppProvider({
     const [backendReady, setBackendReady] = useState(false);
     const [backendNotified, setBackendNotified] = useState(false);
     const [sessionsVersion, setSessionsVersion] = useState(0);
+    const [progressionsAvailable, setProgressionsAvailableVal] =
+        useState(false);
     const [rawCatalog, setRawCatalog] = useState<Record<number, number[]>>({});
     const withLoading = useLoadingTask();
+
+    const unsetProgressionsAvailable = () => {
+        setProgressionsAvailableVal(false);
+    };
+
+    const setProgressionsAvailable = () => {
+        setProgressionsAvailableVal(true);
+    };
 
     const loadBackendData = useEffectEvent(() => {
         Promise.allSettled([
@@ -34,7 +44,7 @@ export function AppProvider({
                     });
                 }
             }),
-            // The exercises table is static, so it is fetched once
+
             withLoading(BackendClient.getExercisesCatalog())
                 .then(setRawCatalog)
                 .catch(() => console.warn("Could not load exercises catalog")),
@@ -42,6 +52,12 @@ export function AppProvider({
             withLoading(BackendClient.connectLoggedUser())
                 .then(setConnectUser)
                 .catch(() => console.warn("Could not get Garmin Connect user")),
+
+            withLoading(BackendClient.availableAnyProgressionSuggestions())
+                .then(setProgressionsAvailableVal)
+                .catch(() =>
+                    console.warn("Could not get exercise progressions"),
+                ),
         ]).then(() => {
             setBackendReady(true);
         });
@@ -57,6 +73,10 @@ export function AppProvider({
         const unregisterSessionsAdded = BackendListener.onSessionsAdded(() => {
             setSessionsVersion((previous) => previous + 1);
         });
+        const unregisterProgressionAvailable =
+            BackendListener.onProgressionsAvailable((val) => {
+                setProgressionsAvailableVal(val);
+            });
         const unregisterConnectLogged =
             BackendListener.onConnectLogged(setConnectUser);
 
@@ -65,6 +85,7 @@ export function AppProvider({
         return () => {
             unregisterSessionsAdded();
             unregisterConnectLogged();
+            unregisterProgressionAvailable();
         };
     }, []);
 
@@ -106,6 +127,9 @@ export function AppProvider({
         sessionsVersion,
         exercisesCatalog,
         connectUser,
+        progressionsAvailable,
+        unsetProgressionsAvailable,
+        setProgressionsAvailable,
     };
 
     return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

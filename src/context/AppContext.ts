@@ -14,6 +14,9 @@ interface AppContexType {
     // Empty until loaded, or if loading failed
     exercisesCatalog: ExerciseOption[];
     connectUser: string | null;
+    progressionsAvailable: boolean;
+    setProgressionsAvailable: () => void;
+    unsetProgressionsAvailable: () => void;
 }
 
 const defaultValue: AppContexType = {
@@ -22,6 +25,13 @@ const defaultValue: AppContexType = {
     sessionsVersion: 0,
     exercisesCatalog: [],
     connectUser: null,
+    progressionsAvailable: false,
+    setProgressionsAvailable: () => {
+        /** */
+    },
+    unsetProgressionsAvailable: () => {
+        /** */
+    },
 };
 
 export const AppContext = createContext(defaultValue);

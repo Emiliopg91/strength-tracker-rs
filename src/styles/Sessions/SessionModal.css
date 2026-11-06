@@ -124,8 +124,8 @@
   vertical-align: top;
 }
 
-.trophy-icon {
+.trophy-icon.session-list-trophy {
   position: relative !important;
-  top: -2px !important;
+  top: -3px !important;
   margin-left: 2px;
 }
