@@ -26,12 +26,11 @@ use crate::{
         notifications::{NotificationDefinition, NotificationKind},
     },
     logic::{
-        new_pending_dir,
         notifications::show_notification,
         report_error, row_int, run_blocking,
         sessions::{import_pending_sessions, update_pending_geolocation},
     },
-    utils::{constants, translations::translate},
+    utils::translations::translate,
 };
 
 pub async fn import_from_connect<R: Runtime>(
@@ -85,20 +84,15 @@ pub async fn import_from_connect<R: Runtime>(
             })
             .collect();
 
-        let dst_dir = new_pending_dir(&constants::PENDING_DOWNLOAD_SESSIONS_FOLDER, &device.serial);
-        tokio::fs::create_dir_all(&dst_dir)
-            .await
-            .map_err(|e| e.to_string())?;
-
-        connect
-            .download_activities(&pending, &dst_dir)
+        let files = connect
+            .download_activities(&pending)
             .await
             .map_err(|e| e.to_string())?;
 
         // The mark only follows what Connect has listed, so activities uploaded late are not missed
         let imported_sessions = tokio::task::spawn_blocking(move || {
             let db = app_cpy.state::<DatabasePool>();
-            import_pending_sessions(&app_cpy, &db, &dst_dir, &mut device, lang_cl, None)
+            import_pending_sessions(&app_cpy, &db, &files, &mut device, lang_cl, None)
         })
         .await
         .expect("blocking DB task panicked")

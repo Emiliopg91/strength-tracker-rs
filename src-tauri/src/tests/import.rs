@@ -5,7 +5,7 @@ use crate::{
         device::{Device, DeviceRepository},
         session::{Session, SessionRepository},
     },
-    fit::parser::FitParser,
+    fit::{FitFile, parser::FitParser},
     logic::sessions::import_file_list,
     tests::common,
     utils::translations::Languages,
@@ -47,7 +47,7 @@ fn register_device(db: &DatabasePool, serial: &str) {
 
 /// Imports the fixture and returns the device stored in its session.
 fn import(db: &DatabasePool, fixture: &str) -> Option<String> {
-    let files = [fixture_path(fixture)];
+    let files = [FitFile::read(fixture_path(fixture)).unwrap()];
     let imported = db
         .run_in_transaction(|tx| Ok(import_file_list(tx, &files, Languages::English)?))
         .unwrap();

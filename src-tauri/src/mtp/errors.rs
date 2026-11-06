@@ -10,14 +10,10 @@ pub enum MtpError {
     Storage(#[source] mtp_rs::Error),
     #[error("Cannot list files: {0}")]
     ListFiles(#[source] mtp_rs::Error),
-    #[error("Cannot write data to {0}: {1}")]
-    WriteData(String, #[source] std::io::Error),
     #[error("Cannot find device with serial number {0}")]
     MissingDevice(String),
     #[error("No storage for device with serial number {0}")]
     NoStorageDevice(String),
-    #[error("Error creating download folder {0}: {1}")]
-    ErrorCreatingDownloadFolder(String, #[source] std::io::Error),
     #[error("Invalid file name for upload: {0}")]
     InvalidFileName(String),
     #[error("Cannot read data from {0}: {1}")]

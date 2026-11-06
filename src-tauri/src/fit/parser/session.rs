@@ -35,7 +35,7 @@ impl TryFrom<FitParser> for Session {
         let mut max_heart_rate = None;
         let mut device = None;
 
-        let path_string = value.borrow_path().display().to_string();
+        let path_string = value.borrow_name().clone();
 
         value.with_stream_mut(|stream| -> errors::Result<()> {
             while let Some(event) = stream.next() {

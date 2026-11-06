@@ -11,15 +11,15 @@ use crate::{
         errors::{ConnectError, Result},
     },
     dao::body_metric::BodyMetric,
+    fit::FitFile,
     utils::constants,
 };
 use bytes::Bytes;
 use chrono::{Datelike, Local, NaiveDate};
-use futures_util::stream::{self, TryStreamExt};
+use futures_util::stream::{self, StreamExt, TryStreamExt};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::{
     io::{Cursor, Read},
-    path::Path,
     time::Duration,
 };
 
@@ -237,14 +237,11 @@ impl ConnectClient {
         }
     }
 
-    /// Downloads the activities with the given ids into `dst_path`.
-    pub async fn download_activities<P>(&mut self, ids: &[u64], dst_path: P) -> Result<()>
-    where
-        P: AsRef<Path>,
-    {
+    /// Downloads into memory the `.fit` files of the activities with the given ids.
+    pub async fn download_activities(&mut self, ids: &[u64]) -> Result<Vec<FitFile>> {
         if ids.is_empty() {
             info!("Activities up to date");
-            return Ok(());
+            return Ok(Vec::new());
         }
 
         self.refresh_token().await?;
@@ -261,15 +258,14 @@ impl ConnectClient {
         })?;
 
         info!("Downloading {} activities...", ids.len());
-        let dst_path = dst_path.as_ref();
-        stream::iter(ids.iter().map(Ok))
-            .try_for_each_concurrent(DOWNLOAD_CONCURRENCY, |&id| {
-                Self::download_activity(&client, oauth2, id, dst_path)
-            })
+        let files: Vec<Vec<FitFile>> = stream::iter(ids.iter().copied())
+            .map(|id| Self::download_activity(&client, oauth2, id))
+            .buffer_unordered(DOWNLOAD_CONCURRENCY)
+            .try_collect()
             .await?;
         info!("Downloaded {} activities.", ids.len());
 
-        Ok(())
+        Ok(files.into_iter().flatten().collect())
     }
 
     /// Lists every device registered to the Connect account.
@@ -556,8 +552,7 @@ impl ConnectClient {
         client: &GarminClient,
         oauth2: &OAuth2Token,
         id: u64,
-        dst_path: &Path,
-    ) -> Result<()> {
+    ) -> Result<Vec<FitFile>> {
         info!("Downloading activity {}...", id);
         let path = format!("/download-service/files/activity/{}", id);
         let zipped = with_retry(|| client.download(oauth2, &path))
@@ -569,8 +564,7 @@ impl ConnectClient {
                 )
             })?;
 
-        let dst_path = dst_path.to_path_buf();
-        tokio::task::spawn_blocking(move || Self::extract_activity(id, zipped, &dst_path))
+        tokio::task::spawn_blocking(move || Self::extract_activity(id, zipped))
             .await
             .map_err(|e| {
                 log_error(
@@ -610,13 +604,15 @@ impl ConnectClient {
         Ok(workouts)
     }
 
-    fn extract_activity(id: u64, zipped: Bytes, dst_path: &Path) -> Result<()> {
+    /// Extracts into memory the `.fit` files of the archive Connect serves an activity as.
+    fn extract_activity(id: u64, zipped: Bytes) -> Result<Vec<FitFile>> {
         let mut archive = zip::ZipArchive::new(Cursor::new(zipped)).map_err(|e| {
             log_error(
                 "Error opening activity archive",
                 ConnectError::UnzipActivity(id, e),
             )
         })?;
+        let mut files = Vec::new();
         for i in 0..archive.len() {
             let mut entry = archive.by_index(i).map_err(|e| {
                 log_error(
@@ -646,12 +642,10 @@ impl ConnectClient {
                     ConnectError::ExtractActivity(id, e),
                 )
             })?;
-            std::fs::write(dst_path.join(file_name), fit).map_err(|e| {
-                log_error("Error writing activity", ConnectError::WriteActivity(id, e))
-            })?;
+            files.push(FitFile::new(file_name.to_string_lossy(), fit));
         }
 
-        Ok(())
+        Ok(files)
     }
 
     fn read_keyring<T: DeserializeOwned>(key: &str) -> Result<Option<T>> {

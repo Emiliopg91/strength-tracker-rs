@@ -16,7 +16,7 @@ use rustyfit::{
 impl TryFrom<FitParser> for Workout {
     type Error = errors::ParseFitFileError;
     fn try_from(mut value: FitParser) -> Result<Self, Self::Error> {
-        let path_string = value.borrow_path().display().to_string();
+        let path_string = value.borrow_name().clone();
         let mut workout = WorkoutAccumulator::default();
 
         value.with_stream_mut(|stream| -> errors::Result<()> {

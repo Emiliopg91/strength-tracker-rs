@@ -22,13 +22,12 @@ use crate::{
         notifications::{NotificationDefinition, NotificationKind},
         sessions::{SessionDetails, SessionListItem, SessionLocation, SessionStepsUpdate},
     },
-    fit::{parser::FitParser, writer::FitWriter},
+    fit::{FitFile, parser::FitParser, writer::FitWriter},
     logic::{
         ask_save_path,
         exercises::{any_progression_suggestion, fetch_progression_suggestion, update_prs},
-        list_fit_files,
         notifications::show_notification,
-        report_error, row_int, row_int_nullable, row_text, run_blocking, settle_pending_files,
+        report_error, row_int, row_int_nullable, row_text, run_blocking, store_pending_files,
     },
     utils::{
         constants,
@@ -516,18 +515,31 @@ pub fn _import_from_files<R: Runtime>(
     files: &[PathBuf],
 ) -> Result<usize, String> {
     let lang = app.state::<SettingsLock>().read().unwrap().language;
+    let files: Vec<FitFile> = files
+        .iter()
+        .filter_map(|path| match FitFile::read(path) {
+            Ok(file) => Some(file),
+            Err(e) => {
+                error!("Error reading session file {}: {}", path.display(), e);
+                notify_parse_error(&path.display().to_string(), &e.to_string(), lang);
+                None
+            }
+        })
+        .collect();
     let database = app.state::<DatabasePool>();
     let res = database
-        .run_in_transaction(|tx| Ok(import_file_list(tx, files, lang)?))
+        .run_in_transaction(|tx| {
+            let imported = import_file_list(tx, &files, lang)?;
+            Ok((imported.sessions, imported.any_progression))
+        })
         .map_err(|e| e.to_string());
 
     match res {
-        Ok(imported) => {
-            if let Some(any_progression) = imported.any_progression {
+        Ok((res, any_progression)) => {
+            if let Some(any_progression) = any_progression {
                 let payload: bool = any_progression;
                 let _ = app.emit("progressions_available", payload);
             }
-            let res = imported.sessions;
             if !res.is_empty() {
                 let app = app.clone();
                 std::thread::spawn(move || {
@@ -546,22 +558,21 @@ pub fn _import_from_files<R: Runtime>(
     }
 }
 
-/// Imports as sessions of `device` the `.fit` files waiting in `dir`, settling them once the
-/// transaction is over (a rollback fails them all). With `sync_mark`, the
+/// Imports as sessions of `device` the `.fit` files fetched from it. Those that fail to parse, or
+/// all of them if the transaction is rolled back, are stored as pending. With `sync_mark`, the
 /// device's last activity sync is moved to it in the same transaction.
 pub fn import_pending_sessions<R: Runtime>(
     app: &AppHandle<R>,
     db: &DatabasePool,
-    dir: &Path,
+    files: &[FitFile],
     device: &mut Device,
     lang: Languages,
     sync_mark: Option<u32>,
 ) -> Result<Vec<u32>, DatabaseError> {
-    let activities = list_fit_files(dir);
     let res = db.run_in_transaction(|tx| {
-        let res = if !activities.is_empty() {
-            info!("Fetched {} activity files", activities.len());
-            import_file_list(tx, &activities, lang)?
+        let res = if !files.is_empty() {
+            info!("Fetched {} activity files", files.len());
+            import_file_list(tx, files, lang)?
         } else {
             ImportedFiles::default()
         };
@@ -574,78 +585,68 @@ pub fn import_pending_sessions<R: Runtime>(
         Ok(res)
     });
 
+    let pending_dir = &constants::PENDING_DOWNLOAD_SESSIONS_FOLDER;
     match &res {
         Ok(imported) => {
             if let Some(any_progression) = imported.any_progression {
                 let payload: bool = any_progression;
                 let _ = app.emit("progressions_available", payload);
             }
-            settle_pending_files(dir, &imported.done, &imported.failed);
+            store_pending_files(pending_dir, &device.serial, imported.failed.iter().copied());
         }
-        Err(_) => settle_pending_files(dir, &[], &activities),
+        Err(_) => store_pending_files(pending_dir, &device.serial, files),
     }
 
     res.map(|imported| imported.sessions)
 }
 
-/// Outcome of `import_file_list`. Files are left untouched, so the caller decides what to do with
-/// them once the transaction is settled.
+/// Outcome of `import_file_list`.
 #[derive(Default)]
-pub struct ImportedFiles {
+pub struct ImportedFiles<'a> {
     /// Dates of the sessions inserted.
     pub sessions: Vec<u32>,
-    /// Files whose session was inserted or was already stored.
-    pub done: Vec<PathBuf>,
     /// Files that could not be parsed.
-    pub failed: Vec<PathBuf>,
+    pub failed: Vec<&'a FitFile>,
     /// Whether any exercise has a progression suggestion pending, checked only when sessions
     /// were inserted (otherwise it cannot have changed).
     pub any_progression: Option<bool>,
 }
 
+/// Shows the notification of a session file that could not be read or parsed.
+fn notify_parse_error(name: &str, error: &str, lang: Languages) {
+    let title = Path::new(name)
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| name.to_string());
+    show_notification(NotificationDefinition {
+        title,
+        body: translate_and_replace("error_parsing_session", &[error], lang),
+        kind: NotificationKind::Persistant,
+    });
+}
+
 /// Parses a batch of `.FIT` files in parallel and inserts each new session (plus its exercises/series/heart rate/GPS/speeds) in the given transaction, then refreshes personal records.
-pub fn import_file_list<F>(
+pub fn import_file_list<'a>(
     tx: &mut rusqlite_orm::rusqlite::Transaction,
-    files: &[F],
+    files: &'a [FitFile],
     lang: Languages,
-) -> Result<ImportedFiles, DatabaseError>
-where
-    F: AsRef<Path> + Sync,
-{
+) -> Result<ImportedFiles<'a>, DatabaseError> {
     let mut success = Vec::new();
-    let mut done = Vec::new();
     let mut handled_exercises: HashSet<(u16, u16)> = HashSet::new();
 
     let (mut sessions, failed): (Vec<_>, Vec<_>) = files.par_iter().partition_map(|file| {
-        info!("Parsing session file {}", file.as_ref().display());
-        let res = match FitParser::from_file(file) {
-            Ok(parser) => match Session::try_from(parser) {
-                Ok(session) => Ok((session, file)),
-                Err(e) => Err(e),
-            },
-            Err(e) => Err(e),
-        };
-        match res {
-            Ok(result) => Either::Left(result),
+        info!("Parsing session file {}", file.name);
+        match Session::try_from(FitParser::from_fit_file(file.clone())) {
+            Ok(session) => Either::Left(session),
             Err(e) => {
-                error!(
-                    "Error parsing session file {}: {}",
-                    file.as_ref().display(),
-                    e
-                );
-
-                show_notification(NotificationDefinition {
-                    title: format!("{}", file.as_ref().file_name().unwrap().display()),
-                    body: translate_and_replace("error_parsing_session", &[&e.to_string()], lang),
-                    kind: NotificationKind::Persistant,
-                });
-
-                Either::Right(file.as_ref().to_path_buf())
+                error!("Error parsing session file {}: {}", file.name, e);
+                notify_parse_error(&file.name, &e.to_string(), lang);
+                Either::Right(file)
             }
         }
     });
 
-    sessions.sort_by_key(|s| s.0.date);
+    sessions.sort_by_key(|s| s.date);
 
     let mut existing_sessions = if sessions.is_empty() {
         HashSet::new()
@@ -654,7 +655,7 @@ where
             .columns(&[session::entity::columns::DATE])
             .where_(Where::In(
                 session::entity::columns::DATE,
-                sessions.iter().map(|(s, _)| s.date.into()).collect(),
+                sessions.iter().map(|s| s.date.into()).collect(),
             ))
             .fetch_in(tx)?
             .iter()
@@ -673,7 +674,7 @@ where
     };
     let mut handled_workouts = HashSet::new();
 
-    for (session, file) in &mut sessions {
+    for session in &mut sessions {
         let formatted_time = match Local.timestamp_opt(session.date as i64, 0) {
             LocalResult::Single(fecha) => fecha.format("%H:%M:%S %d/%m/%Y").to_string(),
             _ => "".to_string(),
@@ -684,7 +685,6 @@ where
             let added = if existing_sessions.contains(&session.date) {
                 let msg = format!("Session with date {} already exists", session.date);
                 warn!("{}", msg);
-                done.push(file.as_ref().to_path_buf());
                 false
             } else {
                 // The serial recorded in the file may belong to a device that isn't registered
@@ -702,14 +702,6 @@ where
                 let date = session.date;
                 existing_sessions.insert(date);
                 success.push(date);
-                done.push(file.as_ref().to_path_buf());
-                #[cfg(debug_assertions)]
-                {
-                    use std::path::PathBuf;
-
-                    let file = PathBuf::from(format!("{}.txt", file.as_ref().display()));
-                    let _ = std::fs::remove_file(file);
-                }
 
                 true
             };
@@ -755,7 +747,6 @@ where
 
     Ok(ImportedFiles {
         sessions: success,
-        done,
         failed,
         any_progression,
     })

@@ -1,7 +1,4 @@
-use std::{
-    path::{Path, PathBuf},
-    time::Instant,
-};
+use std::{path::Path, time::Instant};
 
 use bytes::Bytes;
 use mtp_rs::{MtpDevice, NewObjectInfo, ObjectHandle, ObjectInfo, Storage};
@@ -10,6 +7,7 @@ use tokio::fs;
 
 use crate::{
     dao::device::Device,
+    fit::FitFile,
     mtp::errors::{MtpError, Result},
     utils::constants,
 };
@@ -95,30 +93,17 @@ async fn find_child(
         .ok_or_else(|| MtpError::NoStorageDevice(serial.to_string()))
 }
 
-/// Downloads `objs` into `dst_dir` (created if missing) and returns the local paths of those that
-/// succeeded. A file that fails to download is logged and skipped; a failed write is an error.
-async fn download_files(
-    storage: &Storage,
-    objs: Vec<ObjectInfo>,
-    dst_dir: &Path,
-) -> Result<Vec<PathBuf>> {
-    fs::create_dir_all(dst_dir)
-        .await
-        .map_err(|e| MtpError::ErrorCreatingDownloadFolder(dst_dir.display().to_string(), e))?;
-
+/// Downloads `objs` into memory. A file that fails to download is logged and skipped.
+async fn download_files(storage: &Storage, objs: Vec<ObjectInfo>) -> Vec<FitFile> {
     info!("Downloading files...");
     let t0 = Instant::now();
     let mut size = 0_f64;
-    let mut paths = Vec::new();
+    let mut files = Vec::new();
     for obj in objs {
         match storage.download_to_vec(obj.handle).await {
             Ok(bytes) => {
-                let path = dst_dir.join(&obj.filename);
-                fs::write(&path, &bytes)
-                    .await
-                    .map_err(|e| MtpError::WriteData(path.display().to_string(), e))?;
                 size += bytes.len() as f64;
-                paths.push(path);
+                files.push(FitFile::new(obj.filename, bytes));
             }
             Err(e) => {
                 error!("Error downloading file {}: {}", obj.filename, e)
@@ -129,12 +114,12 @@ async fn download_files(
     let elapsed_secs = t0.elapsed().as_secs_f64();
     info!(
         "{} files downloaded in {:.3}s ({:.2} MB/s)",
-        paths.len(),
+        files.len(),
         elapsed_secs,
         (size / (1024 * 1024) as f64) / elapsed_secs
     );
 
-    Ok(paths)
+    files
 }
 
 /// Deletes a file from MTP storage.
@@ -250,18 +235,18 @@ impl MtpClient {
             .any(|d| d.serial_number.as_deref() == Some(serial)))
     }
 
-    /// Downloads `.FIT` activity files newer than `date` from the device's `GARMIN/Activity` folder into `dst_dir`.
+    /// Downloads into memory the `.FIT` activity files newer than `date` from the device's
+    /// `GARMIN/Activity` folder.
     pub async fn download_activities_since(
         &self,
         serial: &str,
         date: String,
-        dst_dir: PathBuf,
-    ) -> Result<()> {
+    ) -> Result<Vec<FitFile>> {
         let device = open_device(serial).await?;
 
         // Every fallible step below runs inside this block so that, regardless of how it
         // exits, `device.close()` below always runs exactly once.
-        let result: Result<()> = async {
+        let result: Result<Vec<FitFile>> = async {
             let storages = device.storages().await.map_err(MtpError::Storage)?;
             let storage = storages
                 .first()
@@ -277,13 +262,12 @@ impl MtpClient {
 
             if objs.is_empty() {
                 info!("No pending files to import");
-                return Ok(());
+                return Ok(Vec::new());
             }
 
             info!("Pending {} files", objs.len());
 
-            download_files(storage, objs, &dst_dir).await?;
-            Ok(())
+            Ok(download_files(storage, objs).await)
         }
         .await;
 
@@ -291,13 +275,13 @@ impl MtpClient {
         result
     }
 
-    /// Downloads `.FIT` workout files.
-    pub async fn download_workouts(&self, serial: &str, dst_dir: PathBuf) -> Result<()> {
+    /// Downloads into memory the `.FIT` workout files.
+    pub async fn download_workouts(&self, serial: &str) -> Result<Vec<FitFile>> {
         let device = open_device(serial).await?;
 
         // Every fallible step below runs inside this block so that, regardless of how it
         // exits, `device.close()` below always runs exactly once.
-        let result: Result<()> = async {
+        let result: Result<Vec<FitFile>> = async {
             let storages = device.storages().await.map_err(MtpError::Storage)?;
             let storage = storages
                 .first()
@@ -310,8 +294,7 @@ impl MtpClient {
             objs.retain(is_fit_file);
             info!("Found {} files", objs.len());
 
-            download_files(storage, objs, &dst_dir).await?;
-            Ok(())
+            Ok(download_files(storage, objs).await)
         }
         .await;
 

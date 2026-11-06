@@ -1,7 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-    path::Path,
-};
+use std::collections::{HashMap, HashSet};
 
 use chrono::{Datelike, Local, TimeZone, Timelike};
 use futures_util::StreamExt;
@@ -31,14 +28,14 @@ use crate::{
         devices::DeviceListItem,
         notifications::{NotificationDefinition, NotificationKind},
     },
-    fit::{parser::FitParser, writer::FitWriter},
+    fit::{FitFile, parser::FitParser, writer::FitWriter},
     logic::{
         connect::_send_to_connect,
-        list_fit_files, new_pending_dir,
+        new_pending_dir,
         notifications::show_notification,
         report_error, run_blocking,
         sessions::{import_pending_sessions, update_pending_geolocation},
-        settle_pending_files,
+        store_pending_files,
     },
     utils::{
         constants,
@@ -530,29 +527,28 @@ async fn list_pending_workouts<R: Runtime>(
         .collect())
 }
 
-/// Stores the steps of the `pending_workouts` found among the `.fit` files waiting in `dir`,
-/// settling them afterwards.
+/// Stores the steps of the `pending_workouts` found among the `.fit` files fetched from the
+/// device. Those that fail to parse or to be stored are kept as pending files.
 fn store_pending_workouts<R: Runtime>(
     app: &AppHandle<R>,
     db: &DatabasePool,
-    dir: &Path,
+    files: &[FitFile],
     serial: &str,
     pending_workouts: &[String],
 ) {
     // Every workout on the device gets downloaded; those not pending are just discarded
-    let mut done = Vec::new();
     let mut failed = Vec::new();
     let mut workouts_to_insert = Vec::new();
-    for file in list_fit_files(dir) {
-        match FitParser::from_file(&file).and_then(Workout::try_from) {
+    for file in files {
+        match Workout::try_from(FitParser::from_fit_file(file.clone())) {
             Ok(workout)
                 if !workout.steps.is_empty() && pending_workouts.contains(&workout.name) =>
             {
                 workouts_to_insert.push((workout, file))
             }
-            Ok(_) => done.push(file),
+            Ok(_) => {}
             Err(e) => {
-                error!("Error parsing workout file {}: {e}", file.display());
+                error!("Error parsing workout file {}: {e}", file.name);
                 failed.push(file);
             }
         }
@@ -590,11 +586,10 @@ fn store_pending_workouts<R: Runtime>(
             failed.push(file);
         } else {
             workout_names.push(workout.name.clone());
-            done.push(file);
         }
     }
 
-    settle_pending_files(dir, &done, &failed);
+    store_pending_files(&constants::PENDING_DOWNLOAD_WORKOUTS_FOLDER, serial, failed);
 
     if !workout_names.is_empty() {
         let _ = app.emit("added_workout_steps", workout_names);
@@ -615,23 +610,17 @@ async fn download_pending_workouts<R: Runtime>(app: &AppHandle<R>, serial: &str)
         return;
     }
 
-    let dst_dir = new_pending_dir(&constants::PENDING_DOWNLOAD_WORKOUTS_FOLDER, serial);
-
     let mtp_client = app.state::<MtpLock>();
 
     // Locked only for the download, so a concurrent sync is not held back by DB work.
-    let downloaded = mtp_client
-        .lock()
-        .await
-        .download_workouts(serial, dst_dir.clone())
-        .await;
+    let downloaded = mtp_client.lock().await.download_workouts(serial).await;
 
     match downloaded {
-        Ok(()) => {
+        Ok(files) => {
             let app_cl = app.clone();
             let serial = serial.to_string();
             run_blocking(app, move |db| {
-                store_pending_workouts(&app_cl, db, &dst_dir, &serial, &pending_workouts)
+                store_pending_workouts(&app_cl, db, &files, &serial, &pending_workouts)
             })
             .await;
         }
@@ -877,21 +866,19 @@ pub async fn _import_from_device<R: Runtime>(
         latest_date
     );
     let mut res: Result<Vec<u32>, DatabaseError> = Ok(Vec::new());
-    let dst_dir = new_pending_dir(&constants::PENDING_DOWNLOAD_SESSIONS_FOLDER, serial);
     let mtp_client = app.state::<MtpLock>();
     let mtp_client = mtp_client.lock().await;
 
-    if mtp_client
-        .download_activities_since(serial, latest_date, dst_dir.clone())
+    if let Ok(files) = mtp_client
+        .download_activities_since(serial, latest_date)
         .await
-        .is_ok()
     {
         drop(mtp_client);
         let app_cpy = app.clone();
         res = tokio::task::spawn_blocking(move || {
             let db = app_cpy.state::<DatabasePool>();
             let now = Local::now().timestamp() as u32;
-            import_pending_sessions(&app_cpy, &db, &dst_dir, &mut device, lang, Some(now))
+            import_pending_sessions(&app_cpy, &db, &files, &mut device, lang, Some(now))
         })
         .await
         .expect("blocking DB task panicked");

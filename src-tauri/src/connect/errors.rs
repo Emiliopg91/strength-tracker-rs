@@ -30,8 +30,6 @@ pub enum ConnectError {
     ExtractActivity(u64, #[source] std::io::Error),
     #[error("Error joining extraction task for activity '{0}': {1}")]
     ExtractTask(u64, #[source] tokio::task::JoinError),
-    #[error("Error writing activity '{0}': {1}")]
-    WriteActivity(u64, #[source] std::io::Error),
     #[error("Error fetching devices: {0}")]
     FetchDevices(#[source] crate::connect::client::GarminError),
     #[error("Error fetching calendar: {0}")]

@@ -1,53 +1,61 @@
 pub mod session;
 
-use std::{
-    fs::File,
-    io::BufReader,
-    path::{Path, PathBuf},
-};
+use std::io::Cursor;
+#[cfg(any(test, debug_assertions))]
+use std::path::Path;
 
 use embedded_io_adapters::std::FromStd;
 use ouroboros::self_referencing;
 use rustyfit::{Decoder, StreamDecoder};
 
+#[cfg(any(test, debug_assertions))]
 use self::errors::ParseFitFileError;
+use crate::fit::FitFile;
 
 pub mod errors;
 pub mod workout;
 
 #[self_referencing]
 pub struct FitParser {
-    path: PathBuf,
+    name: String,
     decoder: Decoder,
 
     #[borrows(mut decoder)]
     #[not_covariant]
-    stream: StreamDecoder<'this, FromStd<BufReader<File>>>,
+    stream: StreamDecoder<'this, FromStd<Cursor<Vec<u8>>>>,
 }
 
 impl FitParser {
+    /// Reads and parses the file at `path`. Only debug tooling and tests read from disk; synced
+    /// files are parsed from memory with [`FitParser::from_fit_file`].
+    #[cfg(any(test, debug_assertions))]
     pub fn from_file<P>(path: P) -> errors::Result<Self>
     where
         P: AsRef<Path>,
     {
         let path_ref = path.as_ref();
-        let file = File::open(path_ref)
+        let file = FitFile::read(path_ref)
             .map_err(|e| ParseFitFileError::FileOpening(path_ref.display().to_string(), e))?;
-        let reader = FromStd::new(BufReader::new(file));
+        Ok(Self::from_fit_file(file))
+    }
 
-        Ok(FitParserBuilder {
-            path: path_ref.to_path_buf(),
+    /// Parses a file already held in memory.
+    pub fn from_fit_file(file: FitFile) -> Self {
+        let reader = FromStd::new(Cursor::new(file.data));
+
+        FitParserBuilder {
+            name: file.name,
             decoder: Decoder::new(),
             stream_builder: |decoder| decoder.stream(reader),
         }
-        .build())
+        .build()
     }
 
     #[cfg(debug_assertions)]
     pub fn debug_dump(mut self) -> Result<(), Box<dyn std::error::Error>> {
         use rustyfit::{DecoderEvent, StreamingIterator};
 
-        let path_string = self.borrow_path().display().to_string();
+        let path_string = self.borrow_name().clone();
         let dump_path = format!("{path_string}.json");
 
         let entries = self.with_stream_mut(|stream| -> errors::Result<_> {
@@ -73,10 +81,12 @@ impl FitParser {
 /// Inverse of [`FitParser::debug_dump`]: encodes a JSON dump back into a FIT file, written next to it
 /// without the `.json` extension (or with `.fit` appended). Never overwrites an existing file.
 #[cfg(debug_assertions)]
-pub fn debug_encode<P>(path: P) -> Result<PathBuf, Box<dyn std::error::Error>>
+pub fn debug_encode<P>(path: P) -> Result<std::path::PathBuf, Box<dyn std::error::Error>>
 where
     P: AsRef<Path>,
 {
+    use std::{fs::File, path::PathBuf};
+
     use rustyfit::{
         Encoder,
         proto::{FIT, Message, Value},
