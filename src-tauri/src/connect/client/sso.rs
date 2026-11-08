@@ -182,13 +182,20 @@ impl SsoClient {
             .map_err(|e| GarminError::config(format!("Failed to serialize request body: {}", e)))
     }
 
-    /// Perform full login flow using mobile JSON API
-    pub async fn login(
+    /// Perform full login flow using mobile JSON API.
+    ///
+    /// When Garmin asks for MFA, `mfa_callback` is called with the MFA method (e.g. `email`)
+    /// and must resolve to the verification code, or `None` if the user cancelled.
+    pub async fn login<F, Fut>(
         &mut self,
         email: &str,
         password: &str,
-        mfa_callback: Option<impl FnOnce() -> String>,
-    ) -> Result<(OAuth1Token, OAuth2Token)> {
+        mfa_callback: Option<F>,
+    ) -> Result<(OAuth1Token, OAuth2Token)>
+    where
+        F: FnOnce(String) -> Fut,
+        Fut: Future<Output = Option<String>>,
+    {
         let service_url = format!("https://mobile.integration.{}/gcm/android", self.domain);
         let login_params = [
             ("clientId", CLIENT_ID),
@@ -263,7 +270,10 @@ impl SsoClient {
                     .and_then(|info| info.mfa_last_method_used)
                     .unwrap_or_else(|| "email".to_string());
 
-                let mfa_code = mfa_callback.ok_or_else(|| GarminError::MfaRequired)?();
+                let mfa_callback = mfa_callback.ok_or(GarminError::MfaRequired)?;
+                let mfa_code = mfa_callback(mfa_method.clone())
+                    .await
+                    .ok_or(GarminError::MfaCancelled)?;
 
                 self.submit_mfa(&mfa_code, &mfa_method, &login_params)
                     .await?

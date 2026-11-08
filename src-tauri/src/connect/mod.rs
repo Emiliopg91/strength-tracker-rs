@@ -134,9 +134,15 @@ impl ConnectClient {
             .map_err(|e| log_error("Error creating SSO client", ConnectError::Login(e)))?;
 
         let (oauth1, oauth2) = sso
-            .login(email, password, None::<fn() -> String>)
+            .login(email, password, Some(Self::prompt_mfa_code))
             .await
-            .map_err(|e| log_error("Error logging in", ConnectError::Login(e)))?;
+            .map_err(|e| match e {
+                GarminError::MfaCancelled => {
+                    warn!("Garmin Connect MFA cancelled by the user");
+                    ConnectError::LoginCancelledByUser()
+                }
+                e => log_error("Error logging in", ConnectError::Login(e)),
+            })?;
 
         Self::write_keyring(KEYRING_EMAIL, &email.to_string())?;
         Self::write_keyring(KEYRING_OAUTH1, &oauth1)?;
@@ -149,6 +155,35 @@ impl ConnectClient {
         (self.on_user_change)(Some(email.to_string()));
 
         Ok(())
+    }
+
+    /// Asks the user for the MFA verification code through zenity. `None` if cancelled or the
+    /// dialog could not be shown.
+    async fn prompt_mfa_code(method: String) -> Option<String> {
+        info!("Garmin Connect requested MFA via {}", method);
+        let output = tokio::process::Command::new("zenity")
+            .args([
+                "--entry",
+                "--title=Garmin Connect",
+                &format!(
+                    "--text=Enter the verification code sent via {}",
+                    method
+                        .replace('&', "&amp;")
+                        .replace('<', "&lt;")
+                        .replace('>', "&gt;")
+                ),
+            ])
+            .output()
+            .await
+            .inspect_err(|e| error!("Error launching zenity: {}", e))
+            .ok()?;
+
+        if !output.status.success() {
+            return None;
+        }
+
+        let code = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        (!code.is_empty()).then_some(code)
     }
 
     pub async fn prompt_login(&mut self) -> Result<()> {
@@ -181,6 +216,7 @@ impl ConnectClient {
 
             match self.login(email, password).await {
                 Ok(()) => return Ok(()),
+                Err(e @ ConnectError::LoginCancelledByUser()) => return Err(e),
                 // Shown on the next prompt, escaped as zenity parses the text as Pango markup
                 Err(e) => {
                     text = format!(
@@ -203,8 +239,13 @@ impl ConnectClient {
             return Ok(());
         }
 
+        // Never logged in: the login is only started on demand from the settings
+        let Some(oauth1) = &self.oauth1 else {
+            return Err(ConnectError::LoginRequired());
+        };
+
         info!("Refreshing OAuth2 token...");
-        if let Some(oauth1) = &self.oauth1 {
+        {
             let sso = SsoClient::with_domain(oauth1.domain.clone()).map_err(|e| {
                 log_error("Error creating SSO client", ConnectError::OAuthRefresh(e))
             })?;

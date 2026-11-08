@@ -11,6 +11,9 @@ pub enum GarminError {
     #[error("MFA required")]
     MfaRequired,
 
+    #[error("MFA cancelled by the user")]
+    MfaCancelled,
+
     #[error("Rate limited. Please wait before retrying.")]
     RateLimited,
 

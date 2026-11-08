@@ -323,14 +323,19 @@ async fn upload_workout_connect<R: Runtime>(
 /// Does nothing if the device list cannot be fetched.
 pub async fn get_devices_from_connect<R: Runtime>(app_orig: &AppHandle<R>) {
     let connect = app_orig.state::<ConnectLock>();
+    let mut client = connect.lock().await;
+    if client.logged_user().is_none() {
+        return;
+    }
 
-    let devices = match connect.lock().await.list_devices().await {
+    let devices = match client.list_devices().await {
         Ok(devices) => devices,
         Err(e) => {
             error!("Error listing Connect devices: {e}");
             return;
         }
     };
+    drop(client);
 
     let listed: Vec<Device> = devices
         .iter()
