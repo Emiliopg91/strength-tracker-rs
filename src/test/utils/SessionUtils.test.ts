@@ -36,7 +36,6 @@ const makeDetails = (
     training_load: 0,
     primary_muscles: [],
     secondary_muscles: [],
-    show_exercises_chart: true,
     ...overrides,
 });
 
@@ -556,18 +555,16 @@ describe("SessionUtils.exerciseChartData", () => {
         },
     };
 
-    it("keeps only chart sessions, sorted by date", () => {
-        const points = SessionUtils.exerciseChartData(
-            sessions,
-            [2000, 1000],
-            false,
-        );
+    it("keeps every session with sets, sorted by date", () => {
+        const points = SessionUtils.exerciseChartData(sessions, false);
 
-        expect(points.map((p) => p.date)).toEqual([1000, 2000]);
+        expect(points.map((p) => p.date)).toEqual([1000, 2000, 3000]);
     });
 
     it("takes the heaviest weight, average reps and e1RM relative to bodyweight", () => {
-        const [point] = SessionUtils.exerciseChartData(sessions, [2000], false);
+        const point = SessionUtils.exerciseChartData(sessions, false).find(
+            (p) => p.date === 2000,
+        );
 
         expect(point).toEqual({
             date: 2000,
@@ -580,8 +577,9 @@ describe("SessionUtils.exerciseChartData", () => {
     });
 
     it("uses null as relative weight when the bodyweight is unknown", () => {
-        const [point] = SessionUtils.exerciseChartData(sessions, [1000], false);
+        const [point] = SessionUtils.exerciseChartData(sessions, false);
 
+        expect(point.date).toBe(1000);
         expect(point.relativeWeight).toBeNull();
     });
 
@@ -589,7 +587,6 @@ describe("SessionUtils.exerciseChartData", () => {
         expect(
             SessionUtils.exerciseChartData(
                 { "Torso\n1000": { series: [], weight: 80 } },
-                [1000],
                 false,
             ),
         ).toEqual([]);

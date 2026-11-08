@@ -192,7 +192,6 @@ impl TryFrom<FitParser> for Session {
             device,
             device_obj: None,
             additional_data,
-            show_exercises_chart: true,
         })
     }
 }

@@ -26,7 +26,6 @@ pub struct Session {
     pub workout: Option<String>,
     pub sport: u8,
     pub sub_sport: u8,
-    pub show_exercises_chart: bool,
 
     #[relationship((date, session_step::entity::columns::SESSION))]
     pub steps: Vec<SessionStep>,

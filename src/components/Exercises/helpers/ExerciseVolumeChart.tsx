@@ -62,7 +62,6 @@ export function ExerciseVolumeChart({ series, exercise }: Props) {
 
     const chartData = SessionUtils.exerciseChartData(
         series,
-        exercise.chart_session,
         exercise.unilateral,
     );
     const anyRelative =

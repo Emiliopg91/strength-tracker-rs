@@ -3,7 +3,8 @@ use rusqlite_orm::{dao::Repository, database::builder::DatabaseConnectionBuilder
 use crate::{
     dao::{
         additional_data::AdditionalDataRepository, lap::LapRepository, session::SessionRepository,
-        session_step::SessionStepRepository, workout::WorkoutRepository, workout_step::StepType,
+        session_step::SessionStepRepository, workout::WorkoutRepository,
+        workout_device::WorkoutDeviceRepository, workout_step::StepType,
     },
     schema_ddls,
     tests::common,
@@ -346,4 +347,64 @@ fn migration_27_turns_workout_step_time_into_seconds() {
         .unwrap();
     assert_eq!(steps.remove(0), Some(90));
     assert_eq!(steps.remove(0), None);
+}
+
+#[test]
+fn migration_28_drops_chart_flag_and_cascades_workout_device() {
+    let db = DatabaseConnectionBuilder::default()
+        .enable_foreign_keys()
+        .build("test")
+        .unwrap();
+    let before: Vec<_> = schema_ddls()
+        .into_iter()
+        .filter(|d| d.version < 28)
+        .collect();
+    db.create_schema(&before).unwrap();
+
+    db.run_in_transaction(|tx| {
+        tx.execute_batch(
+            "INSERT INTO WORKOUT (name, enabled) VALUES ('a', 1), ('b', 1);
+             INSERT INTO WORKOUT_DEVICE (workout, device, pending)
+             VALUES ('a', 'connect', 1), ('b', 'connect', 0);",
+        )?;
+        Ok(())
+    })
+    .unwrap();
+
+    db.create_schema(&schema_ddls()).unwrap();
+
+    let entries = |db: &rusqlite_orm::database::DatabasePool| {
+        let mut entries: Vec<_> = WorkoutDeviceRepository::select()
+            .fetch(db)
+            .unwrap()
+            .into_iter()
+            .map(|e| (e.workout, e.pending))
+            .collect();
+        entries.sort();
+        entries
+    };
+    assert_eq!(
+        entries(&db),
+        [("a".to_string(), true), ("b".to_string(), false)]
+    );
+
+    let has_chart_flag: bool = db
+        .run_in_connection(|conn| {
+            Ok(conn.query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('SESSION') WHERE name = 'show_exercises_chart'",
+                [],
+                |r| r.get(0),
+            )?)
+        })
+        .unwrap();
+    assert!(!has_chart_flag);
+
+    WorkoutRepository::delete()
+        .where_(rusqlite_orm::types::where_clause::Where::Eq(
+            crate::dao::workout::entity::columns::NAME,
+            "a".into(),
+        ))
+        .execute(&db)
+        .unwrap();
+    assert_eq!(entries(&db), [("b".to_string(), false)]);
 }

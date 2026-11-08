@@ -124,8 +124,6 @@ pub struct SessionDetails {
     pub primary_muscles: Vec<String>,
     pub secondary_muscles: Vec<String>,
 
-    pub show_exercises_chart: bool,
-
     pub device: Option<String>,
 }
 
@@ -192,8 +190,6 @@ impl From<(&Session, &[Exercise], &[SessionStep], &[Lap])> for SessionDetails {
         let sets = value.2.iter().map(SessionStepDto::from).collect();
         let laps = value.3.iter().map(SessionLap::from).collect();
 
-        let show_exercises_chart = value.0.show_exercises_chart;
-
         Self {
             name: value.0.name.clone(),
             timestamp: value.0.date,
@@ -214,7 +210,6 @@ impl From<(&Session, &[Exercise], &[SessionStep], &[Lap])> for SessionDetails {
             notes,
             primary_muscles,
             secondary_muscles,
-            show_exercises_chart,
         }
     }
 }

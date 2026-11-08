@@ -58,7 +58,6 @@ export interface ExerciseCategory {
 // From src-tauri/src/dto/exercises.rs:41
 export interface ExerciseDetails {
   category: number;
-  chart_session: number[];
   id: number;
   notes: string | null;
   pr_date: number;
@@ -154,7 +153,6 @@ export interface SessionDetails {
   notes: string;
   primary_muscles: string[];
   secondary_muscles: string[];
-  show_exercises_chart: boolean;
   speeds: (number | null)[];
   sport: number;
   steps: SessionStepDto[];

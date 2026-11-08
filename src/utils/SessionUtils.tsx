@@ -498,19 +498,18 @@ export class SessionUtils {
     /**
      * One point per session for the exercise chart: heaviest weight, average reps and estimated
      * 1RM relative to bodyweight (null when unknown). `sessions` is keyed by
-     * `"<workout>\n<session date>"`; only the sessions in `chartSessions` are kept. Points are
-     * sorted by date.
+     * `"<workout>\n<session date>"`; sessions without sets are skipped. Points are sorted by
+     * date.
      */
     public static exerciseChartData(
         sessions: Record<string, ExerciseSession>,
-        chartSessions: number[],
         unilateral: boolean,
     ): ExerciseChartPoint[] {
         const points: ExerciseChartPoint[] = [];
 
         Object.entries(sessions).forEach(([key, session]) => {
             const date = parseInt(key.split("\n")[1]);
-            if (!chartSessions.includes(date) || session.series.length === 0) {
+            if (session.series.length === 0) {
                 return;
             }
 

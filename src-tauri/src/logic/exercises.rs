@@ -156,24 +156,6 @@ pub fn fetch_exercise_details(
     )?;
 
     if !series.is_empty() {
-        let mut session_dates = HashSet::new();
-        for serie in &series {
-            session_dates.insert(serie.session);
-        }
-
-        let chart_session = SessionRepository::select()
-            .where_(Where::And(vec![
-                Where::In(
-                    session::entity::columns::DATE,
-                    session_dates.into_iter().map(|d| d.into()).collect(),
-                ),
-                Where::Eq(session::entity::columns::SHOW_EXERCISES_CHART, true.into()),
-            ]))
-            .fetch_in(conn)?
-            .iter()
-            .map(|s| s.date)
-            .collect();
-
         let pr = series.iter().find(|s| s.pr).unwrap();
         res.reps = pr.reps.unwrap_or_default();
         res.weight = pr.weight.unwrap_or_default();
@@ -239,8 +221,6 @@ pub fn fetch_exercise_details(
             });
             entry.series.push(SessionStepDto::from(&serie));
         }
-
-        res.chart_session = chart_session;
     }
 
     Ok(res)
