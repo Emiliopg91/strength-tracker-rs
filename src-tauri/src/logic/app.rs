@@ -18,8 +18,11 @@ use crate::{
         prompts::PromptKind,
     },
     logic::{
-        connect::get_devices_from_connect, devices::start_device_watcher,
-        notifications::show_notification, prompts::request_prompt, report_error,
+        connect::{get_devices_from_connect, upload_pending_connect},
+        devices::start_device_watcher,
+        notifications::show_notification,
+        prompts::request_prompt,
+        report_error,
         sessions::update_pending_geolocation,
     },
     udev::{UdevManager, errors::UdevError},
@@ -50,6 +53,7 @@ pub async fn notify_frontend_ready<R: Runtime>(app: &AppHandle<R>) {
 
         get_devices_from_connect(&app_cl).await;
         start_device_watcher(&app_cl);
+        upload_pending_connect(&app_cl).await;
     });
 
     if !app.state::<SettingsLock>().read().unwrap().start_into_tray {

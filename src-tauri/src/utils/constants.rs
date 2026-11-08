@@ -25,6 +25,10 @@ pub static RULE_FILE: &str = "/etc/udev/rules.d/99-strength-tracker-rs.rules";
 /// Rules file written by releases prior to the rename, removed when the new one is written.
 pub static LEGACY_RULE_FILE: &str = "/etc/udev/rules.d/99-garmin-tracker-rs.rules";
 
+/// Serial of the pseudo-device standing for the Garmin Connect account, seeded by the schema.
+/// Its `workout_device` rows track whether each workout still has to be uploaded to Connect.
+pub static CONNECT_DEVICE_SERIAL: &str = "connect";
+
 // MTP block
 pub static MTP_GARMIN_MANUFACTURER: &str = "GARMIN";
 pub const MTP_GARMIN_VENDOR_ID: u16 = 0x091e;

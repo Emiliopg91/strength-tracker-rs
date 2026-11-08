@@ -19,10 +19,7 @@ use std::{
 
 use chrono::Local;
 
-use rusqlite_orm::{
-    database::DatabasePool,
-    types::{row::Row, value::Value},
-};
+use rusqlite_orm::database::DatabasePool;
 use strength_tracker_rs_macros::traced_command;
 use tauri::{AppHandle, Manager, Runtime, State, WebviewWindow};
 use tauri_plugin_dialog::DialogExt;
@@ -182,47 +179,6 @@ where
             Ok(()) => warn!("Stored pending file {}", dst.display()),
             Err(e) => error!("Error storing pending file {}: {e}", dst.display()),
         }
-    }
-}
-
-/// Reads an integer column from a non-mapped select row.
-pub(crate) fn row_int(row: &Row, column: &str) -> i64 {
-    match row.get(column) {
-        Some(Value::Int64(v)) => *v,
-        _ => unreachable!(),
-    }
-}
-
-/// Reads a real column from a non-mapped select row.
-pub(crate) fn row_f64(row: &Row, column: &str) -> f64 {
-    match row.get(column) {
-        Some(Value::Float64(v)) => *v,
-        Some(Value::Int64(v)) => *v as f64,
-        _ => unreachable!(),
-    }
-}
-
-/// Reads a nullable integer column from a non-mapped select row.
-pub(crate) fn row_int_nullable(row: &Row, column: &str) -> Option<i64> {
-    match row.get(column) {
-        Some(Value::Null) | None => None,
-        _ => Some(row_int(row, column)),
-    }
-}
-
-/// Reads a nullable real column from a non-mapped select row.
-pub(crate) fn row_f64_nullable(row: &Row, column: &str) -> Option<f64> {
-    match row.get(column) {
-        Some(Value::Null) | None => None,
-        _ => Some(row_f64(row, column)),
-    }
-}
-
-/// Reads a text column from a non-mapped select row.
-pub(crate) fn row_text(row: &Row, column: &str) -> String {
-    match row.get(column) {
-        Some(Value::Text(v)) => v.clone(),
-        _ => unreachable!(),
     }
 }
 

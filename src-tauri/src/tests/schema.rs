@@ -64,9 +64,7 @@ fn migration_26_turns_rest_flag_into_kind() {
 
     db.create_schema(&schema_ddls()).unwrap();
 
-    let mut steps = db
-        .run_in_connection(|conn| Ok(SessionStepRepository::select().fetch_in(conn)?))
-        .unwrap();
+    let mut steps = SessionStepRepository::select().fetch(&db).unwrap();
     steps.sort_by_key(|s| s.idx);
     let kinds: Vec<_> = steps.into_iter().map(|s| s.kind).collect();
     assert_eq!(kinds, [StepType::Exercise, StepType::Rest]);
@@ -213,9 +211,7 @@ fn migration_27_nulls_reps_and_weight_only_on_rest_steps() {
 
     db.create_schema(&schema_ddls()).unwrap();
 
-    let mut steps = db
-        .run_in_connection(|conn| Ok(SessionStepRepository::select().fetch_in(conn)?))
-        .unwrap();
+    let mut steps = SessionStepRepository::select().fetch(&db).unwrap();
     steps.sort_by_key(|s| s.idx);
 
     let values: Vec<_> = steps

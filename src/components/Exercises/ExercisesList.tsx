@@ -69,7 +69,8 @@ export function ExercisesList() {
                     }),
                 ];
             }),
-        [sessionsVersion],
+        // The catalog loads in the background; refetch once it arrives to list unused exercises
+        [sessionsVersion, exercisesCatalog.length],
     );
     const [exerciseDetails, setExerciseDetails] = useState<
         ExerciseDetails | undefined

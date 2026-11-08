@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use rusqlite_orm::{
     dao::Repository,
     errors::DatabaseError,
-    types::{order_by::OrderBy, value::Value, where_clause::Where},
+    types::{order_by::OrderBy, where_clause::Where},
 };
 use tauri::{AppHandle, Runtime};
 use tauri_plugin_log::log::info;
@@ -25,9 +25,8 @@ use crate::{
         sessions::SessionStepDto,
     },
     logic::{
-        connect::send_workout_connect, devices::push_pending_to_usb,
-        notifications::show_notification, report_error, row_f64_nullable, row_int,
-        row_int_nullable, row_text, run_blocking,
+        connect::sync_workouts_connect, devices::push_pending_to_usb,
+        notifications::show_notification, report_error, run_blocking,
     },
     utils::translations::{Languages, translate},
 };
@@ -207,8 +206,8 @@ pub fn fetch_exercise_details(
             .iter()
             .map(|s| {
                 (
-                    row_int(s, session::entity::columns::DATE.as_ref()) as u32,
-                    row_text(s, session::entity::columns::NAME.as_ref()),
+                    s.get_u32(session::entity::columns::DATE.as_ref()),
+                    s.get_text(session::entity::columns::NAME.as_ref()),
                 )
             })
             .collect();
@@ -253,7 +252,8 @@ pub async fn get_exercises_catalog<R: Runtime>(
     run_blocking(app, |db| {
         let mut catalog: HashMap<u16, Vec<u16>> = HashMap::new();
 
-        db.run_in_connection(|conn| Ok(ExerciseRepository::select().fetch_in(conn)?))?
+        ExerciseRepository::select()
+            .fetch(db)?
             .iter()
             .for_each(|e| {
                 catalog.entry(e.category).or_default().push(e.id);
@@ -278,16 +278,8 @@ pub fn update_all_prs(
         .fetch_in(tx)?
         .iter()
         .filter_map(|r| {
-            Some((
-                match r.get(session_step::entity::columns::EX_CAT.as_ref()) {
-                    Some(Value::Int64(val)) => *val as u16,
-                    _ => return None,
-                },
-                match r.get(session_step::entity::columns::EX_ID.as_ref()) {
-                    Some(Value::Int64(val)) => *val as u16,
-                    _ => return None,
-                },
-            ))
+            r.get_u16_nullable(session_step::entity::columns::EX_CAT.as_ref())
+                .zip(r.get_u16_nullable(session_step::entity::columns::EX_ID.as_ref()))
         })
         .for_each(|e| {
             exercises.insert(e);
@@ -479,27 +471,27 @@ pub async fn get_progression_status<R: Runtime>(
     id: u16,
 ) -> Result<Option<ProgressionSuggestion>, String> {
     run_blocking(app, move |database| {
-        database.run_in_connection(|conn| {
-            Ok(WorkoutStepRepository::select()
-                .columns(&[
-                    workout_step::entity::columns::REPS,
-                    workout_step::entity::columns::WEIGHT,
-                ])
-                .where_(Where::And(vec![
-                    Where::Eq(workout_step::entity::columns::EX_CAT, category.into()),
-                    Where::Eq(workout_step::entity::columns::EX_ID, id.into()),
-                    exercise_step(),
-                ]))
-                .order_by(OrderBy::Desc(workout_step::entity::columns::WEIGHT))
-                .order_by(OrderBy::Desc(workout_step::entity::columns::REPS))
-                .fetch_one_in(conn)?
-                .map(|r| ProgressionSuggestion {
-                    reps: row_int_nullable(&r, workout_step::entity::columns::REPS.as_ref())
-                        .unwrap_or_default() as u16,
-                    weight: row_f64_nullable(&r, workout_step::entity::columns::WEIGHT.as_ref())
-                        .unwrap_or_default() as f32,
-                }))
-        })
+        Ok(WorkoutStepRepository::select()
+            .columns(&[
+                workout_step::entity::columns::REPS,
+                workout_step::entity::columns::WEIGHT,
+            ])
+            .where_(Where::And(vec![
+                Where::Eq(workout_step::entity::columns::EX_CAT, category.into()),
+                Where::Eq(workout_step::entity::columns::EX_ID, id.into()),
+                exercise_step(),
+            ]))
+            .order_by(OrderBy::Desc(workout_step::entity::columns::WEIGHT))
+            .order_by(OrderBy::Desc(workout_step::entity::columns::REPS))
+            .fetch_one(database)?
+            .map(|r| ProgressionSuggestion {
+                reps: r
+                    .get_u16_nullable(workout_step::entity::columns::REPS.as_ref())
+                    .unwrap_or_default(),
+                weight: r
+                    .get_f32_nullable(workout_step::entity::columns::WEIGHT.as_ref())
+                    .unwrap_or_default(),
+            }))
     })
     .await
     .map_err(|e: DatabaseError| e.to_string())
@@ -562,10 +554,10 @@ pub fn fetch_progression_suggestion(
         .iter()
         .map(|r| {
             (
-                row_f64_nullable(r, session_step::entity::columns::WEIGHT.as_ref())
-                    .unwrap_or_default() as f32,
-                row_int_nullable(r, session_step::entity::columns::REPS.as_ref())
-                    .unwrap_or_default() as u16,
+                r.get_f32_nullable(session_step::entity::columns::WEIGHT.as_ref())
+                    .unwrap_or_default(),
+                r.get_u16_nullable(session_step::entity::columns::REPS.as_ref())
+                    .unwrap_or_default(),
             )
         })
         .collect();
@@ -713,12 +705,7 @@ pub async fn apply_progression_suggestion<R: Runtime>(
                         ]))
                         .fetch_in(tx)?
                         .iter()
-                        .filter_map(|r| {
-                            match r.get(workout_step::entity::columns::WORKOUT.as_ref()) {
-                                Some(Value::Text(name)) => Some(name.clone()),
-                                _ => None,
-                            }
-                        })
+                        .map(|r| r.get_text(workout_step::entity::columns::WORKOUT.as_ref()))
                         .collect();
                     WorkoutDeviceRepository::update()
                         .set(workout_device::entity::columns::PENDING, true.into())
@@ -749,11 +736,7 @@ pub async fn apply_progression_suggestion<R: Runtime>(
     match res {
         Ok((modified, workouts)) => {
             info!("Applied suggested progression");
-            if connect.lock().await.logged_user().is_some() {
-                for wkt in &workouts {
-                    let _ = send_workout_connect(app, connect, settings, wkt).await;
-                }
-            }
+            sync_workouts_connect(app, connect, settings, &workouts).await;
             if modified {
                 push_pending_to_usb(app).await;
             }
@@ -790,11 +773,7 @@ pub async fn save_exercise_notes<R: Runtime>(
     .await?;
 
     if !workouts.is_empty() {
-        if connect.lock().await.logged_user().is_some() {
-            for wkt in &workouts {
-                let _ = send_workout_connect(app, connect, settings, wkt).await;
-            }
-        }
+        sync_workouts_connect(app, connect, settings, &workouts).await;
         push_pending_to_usb(app).await;
     }
 
@@ -829,12 +808,7 @@ pub fn update_exercise_notes(
         ]))
         .fetch_in(tx)?
         .iter()
-        .filter_map(
-            |r| match r.get(workout_step::entity::columns::WORKOUT.as_ref()) {
-                Some(Value::Text(name)) => Some(name.clone()),
-                _ => None,
-            },
-        )
+        .map(|r| r.get_text(workout_step::entity::columns::WORKOUT.as_ref()))
         .collect();
 
     if !workouts.is_empty() {
@@ -877,8 +851,8 @@ pub fn any_progression_suggestion(
         .iter()
         .map(|r| {
             (
-                row_int(r, exercise::entity::columns::CATEGORY.as_ref()) as u16,
-                row_int(r, exercise::entity::columns::ID.as_ref()) as u16,
+                r.get_u16(exercise::entity::columns::CATEGORY.as_ref()),
+                r.get_u16(exercise::entity::columns::ID.as_ref()),
             )
         })
         .collect();

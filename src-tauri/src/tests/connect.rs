@@ -560,3 +560,35 @@ fn calendar_page_keeps_only_its_month_inside_the_window() {
     assert_eq!(kept(2026, 10), [3]);
     assert_eq!(kept(2026, 11), [4]);
 }
+
+#[test]
+fn step_exercises_are_filled_with_their_category() {
+    let db = crate::tests::common::test_db();
+    let mut steps = vec![
+        WorkoutStep {
+            ex_cat: Some(0),
+            ex_id: Some(1),
+            ..step(0, StepType::Exercise)
+        },
+        step(1, StepType::Rest),
+        WorkoutStep {
+            ex_cat: Some(0),
+            ex_id: Some(1),
+            ..step(2, StepType::Exercise)
+        },
+    ];
+
+    db.run_in_connection(|conn| {
+        Ok(crate::logic::connect::fetch_step_exercises(
+            conn, &mut steps,
+        )?)
+    })
+    .unwrap();
+
+    for idx in [0, 2] {
+        let exercise = steps[idx].exercise.as_ref().expect("exercise filled");
+        assert_eq!((exercise.category, exercise.id), (0, 1));
+        assert_eq!(exercise.exercise_category.as_ref().map(|c| c.id), Some(0));
+    }
+    assert!(steps[1].exercise.is_none());
+}

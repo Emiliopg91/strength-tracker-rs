@@ -4,7 +4,6 @@ import { DeviceListItem } from "@/utils/backend/models";
 import { useContext, useEffect, useEffectEvent, useState } from "react";
 import { JSX } from "react/jsx-runtime";
 import { AvailableDevice, DeviceContext } from "./DeviceContext";
-import { useLoadingTask } from "@/hooks/useLoadingTask";
 import { AppContext } from "./AppContext";
 
 /// Updates `device` in `prev` with `patch`, adding it with `defaults` + `patch` if missing
@@ -37,11 +36,10 @@ export function DeviceProvider({
     children: JSX.Element;
 }): JSX.Element {
     const [devices, setDevices] = useState<AvailableDevice[]>([]);
-    const withLoading = useLoadingTask();
     const { connectUser } = useContext(AppContext);
 
     const loadRegisteredDevices = useEffectEvent(() => {
-        withLoading(BackendClient.getRegisteredDevices()).then((registered) => {
+        BackendClient.getRegisteredDevices().then((registered) => {
             // Entries already set by events are fresher than the database
             setDevices((prev) =>
                 registered.reduce(

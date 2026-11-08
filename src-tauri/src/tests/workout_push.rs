@@ -6,8 +6,12 @@ use crate::{
         workout::{Workout, WorkoutRepository},
         workout_device::{WorkoutDevice, WorkoutDeviceRepository},
     },
-    logic::devices::pending_connect_devices,
+    logic::{
+        connect::{pending_connect_workouts, set_connect_pending},
+        devices::pending_connect_devices,
+    },
     tests::common,
+    utils::constants,
 };
 
 const LINKED: &str = "linked";
@@ -83,4 +87,57 @@ fn workout_without_entries_has_no_devices() {
         .unwrap();
 
     assert!(serials.is_empty());
+}
+
+fn connect_entry(db: &DatabasePool, workout: &str) -> Option<bool> {
+    WorkoutDeviceRepository::select_by_id(db, workout, constants::CONNECT_DEVICE_SERIAL)
+        .unwrap()
+        .map(|e| e.pending)
+}
+
+#[test]
+fn connect_pending_is_created_and_cleared() {
+    let db = setup();
+    let workouts = ["a".to_string(), "b".to_string()];
+
+    db.run_in_transaction(|tx| Ok(set_connect_pending(tx, &workouts, true)?))
+        .unwrap();
+    assert_eq!(connect_entry(&db, "a"), Some(true));
+    assert_eq!(connect_entry(&db, "b"), Some(true));
+
+    db.run_in_transaction(|tx| Ok(set_connect_pending(tx, &workouts[..1], false)?))
+        .unwrap();
+    assert_eq!(connect_entry(&db, "a"), Some(false));
+    assert_eq!(connect_entry(&db, "b"), Some(true));
+}
+
+#[test]
+fn connect_pending_is_not_a_linked_device() {
+    let db = setup();
+
+    db.run_in_transaction(|tx| Ok(set_connect_pending(tx, &["b".to_string()], true)?))
+        .unwrap();
+    let serials = db
+        .run_in_connection(|conn| Ok(pending_connect_devices(conn, "b")?))
+        .unwrap();
+
+    assert_eq!(serials, [LINKED]);
+}
+
+#[test]
+fn only_workouts_pending_for_connect_are_listed() {
+    let db = setup();
+
+    db.run_in_transaction(|tx| {
+        set_connect_pending(tx, &["a".to_string()], false)?;
+        set_connect_pending(tx, &["b".to_string()], true)?;
+        Ok(())
+    })
+    .unwrap();
+    let pending = db
+        .run_in_connection(|conn| Ok(pending_connect_workouts(conn)?))
+        .unwrap();
+
+    // Workouts pending only for real devices are not listed
+    assert_eq!(pending, ["b"]);
 }

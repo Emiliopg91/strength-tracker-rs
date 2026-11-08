@@ -17,7 +17,6 @@ export function AppProvider({
     const { i18nReady, translate } = useContext(I18nSettingsContext);
     const [connectUser, setConnectUser] = useState<string | null>(null);
     const [environment, setEnvironment] = useState(AppEnvironment.Release);
-    const [backendReady, setBackendReady] = useState(false);
     const [backendNotified, setBackendNotified] = useState(false);
     const [sessionsVersion, setSessionsVersion] = useState(0);
     const [progressionsAvailable, setProgressionsAvailableVal] =
@@ -51,44 +50,38 @@ export function AppProvider({
     };
 
     const loadBackendData = useEffectEvent(() => {
-        Promise.allSettled([
-            withLoading(BackendClient.getEnvironment()).then((env) => {
-                setEnvironment(env);
+        // Nothing here is needed to use the app; it fills in without the overlay
+        BackendClient.getExercisesCatalog()
+            .then(setRawCatalog)
+            .catch(() => console.warn("Could not load exercises catalog"));
 
-                if (env == AppEnvironment.Release) {
-                    document.addEventListener("contextmenu", (e) => {
-                        e.preventDefault();
-                    });
-                }
-            }),
+        BackendClient.getEnvironment().then((env) => {
+            setEnvironment(env);
 
-            withLoading(BackendClient.getExercisesCatalog())
-                .then(setRawCatalog)
-                .catch(() => console.warn("Could not load exercises catalog")),
-
-            withLoading(BackendClient.getExercises())
-                .then((data) => {
-                    const notes = new Map<string, string>();
-                    for (const e of data) {
-                        if (e.notes)
-                            notes.set(`${e.category}-${e.id}`, e.notes);
-                    }
-                    setExerciseNotes(notes);
-                })
-                .catch(() => console.warn("Could not load exercises notes")),
-
-            withLoading(BackendClient.connectLoggedUser())
-                .then(setConnectUser)
-                .catch(() => console.warn("Could not get Garmin Connect user")),
-
-            withLoading(BackendClient.availableAnyProgressionSuggestions())
-                .then(setProgressionsAvailableVal)
-                .catch(() =>
-                    console.warn("Could not get exercise progressions"),
-                ),
-        ]).then(() => {
-            setBackendReady(true);
+            if (env == AppEnvironment.Release) {
+                document.addEventListener("contextmenu", (e) => {
+                    e.preventDefault();
+                });
+            }
         });
+
+        BackendClient.getExercises()
+            .then((data) => {
+                const notes = new Map<string, string>();
+                for (const e of data) {
+                    if (e.notes) notes.set(`${e.category}-${e.id}`, e.notes);
+                }
+                setExerciseNotes(notes);
+            })
+            .catch(() => console.warn("Could not load exercises notes"));
+
+        BackendClient.connectLoggedUser()
+            .then(setConnectUser)
+            .catch(() => console.warn("Could not get Garmin Connect user"));
+
+        BackendClient.availableAnyProgressionSuggestions()
+            .then(setProgressionsAvailableVal)
+            .catch(() => console.warn("Could not get exercise progressions"));
     });
 
     const notifyFrontendReady = useEffectEvent(() => {
@@ -117,15 +110,14 @@ export function AppProvider({
         };
     }, []);
 
-    // The backend is notified once both this provider and the i18n one have loaded
+    // The backend is notified once the i18n provider has loaded
     useEffect(() => {
-        if (notifyBackend && backendReady && i18nReady) {
+        if (notifyBackend && i18nReady) {
             notifyFrontendReady();
         }
-    }, [notifyBackend, backendReady, i18nReady]);
+    }, [notifyBackend, i18nReady]);
 
-    const appReady =
-        backendReady && i18nReady && (!notifyBackend || backendNotified);
+    const appReady = i18nReady && (!notifyBackend || backendNotified);
 
     const exercisesCatalog: ExerciseOption[] = [];
     const categoryLabels = new Map<number, string>();

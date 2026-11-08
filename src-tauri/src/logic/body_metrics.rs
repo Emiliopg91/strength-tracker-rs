@@ -74,13 +74,11 @@ pub async fn add_body_measures<R: Runtime>(
     info!("Adding body measures list...");
 
     let res = run_blocking(app, move |database| {
-        database.run_in_transaction(|tx| {
-            BodyMetricRepository::insert()
-                .item(&mut BodyMetric::try_from(&measures).map_err(DatabaseError::Transaction)?)
-                .execute_in(tx)?;
-
-            Ok(())
-        })
+        let mut item = BodyMetric::try_from(&measures).map_err(DatabaseError::Transaction)?;
+        BodyMetricRepository::insert()
+            .item(&mut item)
+            .execute(database)
+            .map(|_| ())
     })
     .await;
 
@@ -105,13 +103,10 @@ pub async fn delete_body_metric<R: Runtime>(
     date: u32,
 ) -> Result<(), String> {
     let res = run_blocking(app, move |database| {
-        database.run_in_transaction(|tx| {
-            BodyMetricRepository::delete()
-                .where_(Where::Eq(body_metric::entity::columns::DATE, date.into()))
-                .execute_in(tx)?;
-
-            Ok(())
-        })
+        BodyMetricRepository::delete()
+            .where_(Where::Eq(body_metric::entity::columns::DATE, date.into()))
+            .execute(database)
+            .map(|_| ())
     })
     .await;
 

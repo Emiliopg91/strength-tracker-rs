@@ -5,7 +5,7 @@ use std::{
 
 use rusqlite_orm::{
     dao::Repository,
-    types::{order_by::OrderBy, value::Value, where_clause::Where},
+    types::{order_by::OrderBy, where_clause::Where},
 };
 use tauri::{AppHandle, Manager, Runtime, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_log::log::{error, info};
@@ -26,15 +26,15 @@ use crate::{
     },
     logic::{
         ask_save_path,
-        connect::send_workout_connect,
+        connect::sync_workouts_connect,
         devices::{
             delete_pending_from_connected, push_pending_to_usb,
             send_enabled_workout_to_connect_devices,
         },
         notifications::show_notification,
-        report_error, row_f64_nullable, row_int, row_int_nullable, row_text, run_blocking,
+        report_error, run_blocking,
     },
-    utils::translations::translate,
+    utils::{constants, translations::translate},
 };
 
 /// Returns sessions grouped/aggregated by workout name (count, average time, latest date), sorted by name.
@@ -79,26 +79,21 @@ pub async fn get_workout_list<R: Runtime>(
 
             sessions.iter().for_each(|s| {
                 let entry = workout_stats
-                    .entry(row_text(s, entity::columns::NAME.as_ref()))
+                    .entry(s.get_text(entity::columns::NAME.as_ref()))
                     .or_insert((0_u32, 0_u32, None, 0_u32));
                 entry.0 += 1_u32;
-                entry.1 += row_int(s, entity::columns::TOTAL_ELAPSED_TIME.as_ref()) as u32;
+                entry.1 += s.get_u32(entity::columns::TOTAL_ELAPSED_TIME.as_ref());
                 if entry.2.is_none() {
-                    entry.2 = Some(row_int(s, entity::columns::DATE.as_ref()) as u32);
+                    entry.2 = Some(s.get_u32(entity::columns::DATE.as_ref()));
                 }
-                entry.3 += row_int(s, entity::columns::TRAINING_LOAD.as_ref()) as u32
+                entry.3 += s.get_u32(entity::columns::TRAINING_LOAD.as_ref())
             });
 
             let with_steps: HashSet<_> = WorkoutStepRepository::select()
                 .distinct(&[workout_step::entity::columns::WORKOUT])
                 .fetch_in(conn)?
                 .iter()
-                .filter_map(
-                    |r| match r.get(workout_step::entity::columns::WORKOUT.as_ref()) {
-                        Some(Value::Text(name)) => Some(name.clone()),
-                        _ => unreachable!(),
-                    },
-                )
+                .map(|r| r.get_text(workout_step::entity::columns::WORKOUT.as_ref()))
                 .collect();
 
             let mut res: Vec<_> = workout_stats
@@ -220,12 +215,13 @@ pub async fn get_workout_details<R: Runtime>(
             let mut volume_by_session = HashMap::new();
             for serie in &series {
                 *volume_by_session
-                    .entry(row_int(serie, session_step::entity::columns::SESSION.as_ref()) as u32)
-                    .or_insert(0.0) +=
-                    row_int_nullable(serie, session_step::entity::columns::REPS.as_ref())
-                        .unwrap_or_default() as f32
-                        * row_f64_nullable(serie, session_step::entity::columns::WEIGHT.as_ref())
-                            .unwrap_or_default() as f32;
+                    .entry(serie.get_u32(session_step::entity::columns::SESSION.as_ref()))
+                    .or_insert(0.0) += serie
+                    .get_u16_nullable(session_step::entity::columns::REPS.as_ref())
+                    .unwrap_or_default() as f32
+                    * serie
+                        .get_f32_nullable(session_step::entity::columns::WEIGHT.as_ref())
+                        .unwrap_or_default();
             }
 
             let mut session_list = Vec::new();
@@ -299,12 +295,16 @@ pub async fn set_workout_status<R: Runtime>(
                     .map(|_| ());
 
                 if res.is_ok() {
+                    // The enabled flag only exists on devices, so Connect is left as it was
                     let _ = WorkoutDeviceRepository::update()
                         .set(workout_device::entity::columns::PENDING, true.into())
-                        .where_(Where::Eq(
-                            workout_device::entity::columns::WORKOUT,
-                            wk_cl.into(),
-                        ))
+                        .where_(Where::And(vec![
+                            Where::Eq(workout_device::entity::columns::WORKOUT, wk_cl.into()),
+                            Where::NotEq(
+                                workout_device::entity::columns::DEVICE,
+                                constants::CONNECT_DEVICE_SERIAL.into(),
+                            ),
+                        ]))
                         .execute_in(tx);
                 }
 
@@ -402,9 +402,7 @@ pub async fn save_workout<R: Runtime>(
                 body: translate("ok_workout_save", lang),
                 kind: NotificationKind::Temporal,
             });
-            if connect.lock().await.logged_user().is_some() {
-                let _ = send_workout_connect(app, connect, settings, &name_cl).await;
-            }
+            sync_workouts_connect(app, connect, settings, &[name_cl]).await;
             if edit {
                 push_pending_to_usb(app).await;
             }

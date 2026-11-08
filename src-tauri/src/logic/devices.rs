@@ -7,7 +7,7 @@ use rusqlite_orm::{
     dao::Repository,
     database::DatabasePool,
     errors::DatabaseError,
-    types::{order_by::OrderBy, value::Value, where_clause::Where},
+    types::{order_by::OrderBy, where_clause::Where},
 };
 
 use tauri::{AppHandle, Emitter, Manager, Runtime};
@@ -227,12 +227,7 @@ pub fn pending_connect_devices(
         ]))
         .fetch_in(conn)?
         .iter()
-        .filter_map(
-            |r| match r.get(workout_device::entity::columns::DEVICE.as_ref()) {
-                Some(Value::Text(serial)) => Some(serial.clone()),
-                _ => None,
-            },
-        )
+        .map(|r| r.get_text(workout_device::entity::columns::DEVICE.as_ref()))
         .collect())
 }
 
@@ -302,34 +297,29 @@ async fn push_pending_workouts<R: Runtime>(app: &AppHandle<R>, serial: &str) {
     let serial = serial.to_string();
     let serial_q = serial.clone();
     let pending = match run_blocking(app, move |db| {
-        db.run_in_connection(|conn| {
-            Ok(WorkoutDeviceRepository::select()
-                .columns(&[workout_device::entity::columns::WORKOUT])
-                .where_(Where::And(vec![
-                    Where::InSub(
-                        workout_device::entity::columns::WORKOUT,
-                        WorkoutRepository::select()
-                            .distinct(&[workout::entity::columns::NAME])
-                            .where_(Where::Eq(workout::entity::columns::ENABLED, true.into()))
-                            .to_subquery(),
-                    ),
-                    Where::Eq(
-                        workout_device::entity::columns::DEVICE,
-                        serial_q.clone().into(),
-                    ),
-                    Where::Eq(workout_device::entity::columns::PENDING, true.into()),
-                ]))
-                .order_by(OrderBy::Asc(workout_device::entity::columns::WORKOUT))
-                .fetch_in(conn)?
-                .iter()
-                .filter_map(
-                    |r| match r.get(workout_device::entity::columns::WORKOUT.as_ref()) {
-                        Some(Value::Text(name)) => Some(name.clone()),
-                        _ => unreachable!(),
-                    },
-                )
-                .collect::<Vec<_>>())
-        })
+        WorkoutDeviceRepository::select()
+            .columns(&[workout_device::entity::columns::WORKOUT])
+            .where_(Where::And(vec![
+                Where::InSub(
+                    workout_device::entity::columns::WORKOUT,
+                    WorkoutRepository::select()
+                        .distinct(&[workout::entity::columns::NAME])
+                        .where_(Where::Eq(workout::entity::columns::ENABLED, true.into()))
+                        .to_subquery(),
+                ),
+                Where::Eq(
+                    workout_device::entity::columns::DEVICE,
+                    serial_q.clone().into(),
+                ),
+                Where::Eq(workout_device::entity::columns::PENDING, true.into()),
+            ]))
+            .order_by(OrderBy::Asc(workout_device::entity::columns::WORKOUT))
+            .fetch(db)
+            .map(|rows| {
+                rows.iter()
+                    .map(|r| r.get_text(workout_device::entity::columns::WORKOUT.as_ref()))
+                    .collect::<Vec<_>>()
+            })
     })
     .await
     {
@@ -362,18 +352,16 @@ async fn finish_push<R: Runtime>(app: &AppHandle<R>, workout: &str, serial: &str
     let device = serial.to_string();
     let wkt = workout.to_string();
     if let Err(e) = run_blocking(app, move |db| {
-        db.run_in_transaction(|tx| {
-            Ok(WorkoutDeviceRepository::update()
-                .set(workout_device::entity::columns::PENDING, false.into())
-                .where_(Where::And(vec![
-                    Where::Eq(workout_device::entity::columns::WORKOUT, wkt.clone().into()),
-                    Where::Eq(
-                        workout_device::entity::columns::DEVICE,
-                        device.clone().into(),
-                    ),
-                ]))
-                .execute_in(tx)?)
-        })
+        WorkoutDeviceRepository::update()
+            .set(workout_device::entity::columns::PENDING, false.into())
+            .where_(Where::And(vec![
+                Where::Eq(workout_device::entity::columns::WORKOUT, wkt.clone().into()),
+                Where::Eq(
+                    workout_device::entity::columns::DEVICE,
+                    device.clone().into(),
+                ),
+            ]))
+            .execute(db)
     })
     .await
     {
@@ -395,34 +383,29 @@ async fn delete_pending_workouts<R: Runtime>(app: &AppHandle<R>, serial: &str) {
     let serial = serial.to_string();
     let serial_q = serial.clone();
     let pending = match run_blocking(app, move |db| {
-        db.run_in_connection(|conn| {
-            Ok(WorkoutDeviceRepository::select()
-                .columns(&[workout_device::entity::columns::WORKOUT])
-                .where_(Where::And(vec![
-                    Where::InSub(
-                        workout_device::entity::columns::WORKOUT,
-                        WorkoutRepository::select()
-                            .distinct(&[workout::entity::columns::NAME])
-                            .where_(Where::Eq(workout::entity::columns::ENABLED, false.into()))
-                            .to_subquery(),
-                    ),
-                    Where::Eq(
-                        workout_device::entity::columns::DEVICE,
-                        serial_q.clone().into(),
-                    ),
-                    Where::Eq(workout_device::entity::columns::PENDING, true.into()),
-                ]))
-                .order_by(OrderBy::Asc(workout_device::entity::columns::WORKOUT))
-                .fetch_in(conn)?
-                .iter()
-                .filter_map(
-                    |r| match r.get(workout_device::entity::columns::WORKOUT.as_ref()) {
-                        Some(Value::Text(name)) => Some(name.clone()),
-                        _ => unreachable!(),
-                    },
-                )
-                .collect::<Vec<_>>())
-        })
+        WorkoutDeviceRepository::select()
+            .columns(&[workout_device::entity::columns::WORKOUT])
+            .where_(Where::And(vec![
+                Where::InSub(
+                    workout_device::entity::columns::WORKOUT,
+                    WorkoutRepository::select()
+                        .distinct(&[workout::entity::columns::NAME])
+                        .where_(Where::Eq(workout::entity::columns::ENABLED, false.into()))
+                        .to_subquery(),
+                ),
+                Where::Eq(
+                    workout_device::entity::columns::DEVICE,
+                    serial_q.clone().into(),
+                ),
+                Where::Eq(workout_device::entity::columns::PENDING, true.into()),
+            ]))
+            .order_by(OrderBy::Asc(workout_device::entity::columns::WORKOUT))
+            .fetch(db)
+            .map(|rows| {
+                rows.iter()
+                    .map(|r| r.get_text(workout_device::entity::columns::WORKOUT.as_ref()))
+                    .collect::<Vec<_>>()
+            })
     })
     .await
     {
@@ -447,21 +430,16 @@ async fn delete_pending_workouts<R: Runtime>(app: &AppHandle<R>, serial: &str) {
                 let device = serial.clone();
                 let wkt = workout.clone();
                 if let Err(e) = run_blocking(app, move |db| {
-                    db.run_in_transaction(|tx| {
-                        Ok(WorkoutDeviceRepository::update()
-                            .set(workout_device::entity::columns::PENDING, false.into())
-                            .where_(Where::And(vec![
-                                Where::Eq(
-                                    workout_device::entity::columns::WORKOUT,
-                                    wkt.clone().into(),
-                                ),
-                                Where::Eq(
-                                    workout_device::entity::columns::DEVICE,
-                                    device.clone().into(),
-                                ),
-                            ]))
-                            .execute_in(tx)?)
-                    })
+                    WorkoutDeviceRepository::update()
+                        .set(workout_device::entity::columns::PENDING, false.into())
+                        .where_(Where::And(vec![
+                            Where::Eq(workout_device::entity::columns::WORKOUT, wkt.clone().into()),
+                            Where::Eq(
+                                workout_device::entity::columns::DEVICE,
+                                device.clone().into(),
+                            ),
+                        ]))
+                        .execute(db)
                 })
                 .await
                 {
@@ -491,39 +469,33 @@ async fn list_pending_workouts<R: Runtime>(
 ) -> Result<Vec<String>, DatabaseError> {
     let serial_q = serial.to_string();
     let rows = run_blocking(app, move |db| {
-        db.run_in_connection(|conn| {
-            let rows = WorkoutRepository::select()
-                .columns(&[workout::entity::columns::NAME])
-                .where_(Where::And(vec![
-                    Where::NotInSub(
-                        workout::entity::columns::NAME,
-                        WorkoutStepRepository::select()
-                            .distinct(&[workout_step::entity::columns::WORKOUT])
-                            .to_subquery(),
-                    ),
-                    Where::InSub(
-                        workout::entity::columns::NAME,
-                        SessionRepository::select()
-                            .distinct(&[session::entity::columns::WORKOUT])
-                            .where_(Where::Eq(
-                                session::entity::columns::DEVICE,
-                                serial_q.clone().into(),
-                            ))
-                            .to_subquery(),
-                    ),
-                ]))
-                .fetch_in(conn)?;
-            Ok(rows)
-        })
+        WorkoutRepository::select()
+            .columns(&[workout::entity::columns::NAME])
+            .where_(Where::And(vec![
+                Where::NotInSub(
+                    workout::entity::columns::NAME,
+                    WorkoutStepRepository::select()
+                        .distinct(&[workout_step::entity::columns::WORKOUT])
+                        .to_subquery(),
+                ),
+                Where::InSub(
+                    workout::entity::columns::NAME,
+                    SessionRepository::select()
+                        .distinct(&[session::entity::columns::WORKOUT])
+                        .where_(Where::Eq(
+                            session::entity::columns::DEVICE,
+                            serial_q.clone().into(),
+                        ))
+                        .to_subquery(),
+                ),
+            ]))
+            .fetch(db)
     })
     .await?;
 
     Ok(rows
         .iter()
-        .filter_map(|r| match r.get(workout::entity::columns::NAME.as_ref()) {
-            Some(Value::Text(name)) => Some(name.clone()),
-            _ => unreachable!(),
-        })
+        .map(|r| r.get_text(workout::entity::columns::NAME.as_ref()))
         .collect())
 }
 
@@ -658,12 +630,10 @@ pub async fn send_to_device<R: Runtime>(
                 };
 
                 if let Err(e) = run_blocking(app, move |database| {
-                    database.run_in_transaction(|tx| {
-                        Ok(WorkoutDeviceRepository::insert()
-                            .or_ignore()
-                            .item(&mut entry)
-                            .execute_in(tx)?)
-                    })
+                    WorkoutDeviceRepository::insert()
+                        .or_ignore()
+                        .item(&mut entry)
+                        .execute(database)
                 })
                 .await
                 {
@@ -682,12 +652,10 @@ pub async fn send_to_device<R: Runtime>(
         };
 
         run_blocking(app, move |database| {
-            database.run_in_transaction(|tx| {
-                Ok(WorkoutDeviceRepository::insert()
-                    .or_replace()
-                    .item(&mut entry)
-                    .execute_in(tx)?)
-            })
+            WorkoutDeviceRepository::insert()
+                .or_replace()
+                .item(&mut entry)
+                .execute(database)
         })
         .await
         .map_err(|e| e.to_string())?;
@@ -837,11 +805,7 @@ pub async fn _import_from_device<R: Runtime>(
         let serial = serial.to_string();
         tokio::task::spawn_blocking(move || {
             let db = app.state::<DatabasePool>();
-            db.run_in_connection(|conn| {
-                let device = DeviceRepository::select_by_id_in(conn, &serial)?;
-
-                Ok(device.unwrap())
-            })
+            DeviceRepository::select_by_id(&db, &serial).map(Option::unwrap)
         })
         .await
         .map_err(|e| e.to_string())?
@@ -907,18 +871,18 @@ pub async fn _import_from_device<R: Runtime>(
 pub async fn get_registered_devices<R: Runtime>(
     app: &AppHandle<R>,
 ) -> Result<Vec<DeviceListItem>, String> {
-    Ok(run_blocking(app, |database| {
-        database.run_in_connection(|conn| Ok(DeviceRepository::select().fetch_in(conn)?))
-    })
-    .await
-    .map_err(|e| e.to_string())?
-    .iter()
-    .filter_map(|d| {
-        if d.serial != "connect" {
-            Some(DeviceListItem::from(d))
-        } else {
-            None
-        }
-    })
-    .collect())
+    Ok(
+        run_blocking(app, |database| DeviceRepository::select().fetch(database))
+            .await
+            .map_err(|e| e.to_string())?
+            .iter()
+            .filter_map(|d| {
+                if d.serial != constants::CONNECT_DEVICE_SERIAL {
+                    Some(DeviceListItem::from(d))
+                } else {
+                    None
+                }
+            })
+            .collect(),
+    )
 }

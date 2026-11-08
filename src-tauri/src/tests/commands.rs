@@ -33,7 +33,7 @@ use crate::{
     },
     mtp::MtpClient,
     tests::common,
-    utils::translations::Languages,
+    utils::{constants, translations::Languages},
 };
 
 const BENCH: (u16, u16) = (0, 1);
@@ -214,12 +214,18 @@ fn workout_for_an_unplugged_device_is_left_pending() {
     ))
     .unwrap();
 
-    let entries = app
-        .state::<DatabasePool>()
-        .run_in_connection(|conn| Ok(WorkoutDeviceRepository::select().fetch_in(conn)?))
+    let entries = WorkoutDeviceRepository::select()
+        .fetch(&app.state::<DatabasePool>())
         .unwrap();
-    assert_eq!(entries.len(), 1);
-    assert!(entries[0].pending);
+    assert_eq!(entries.len(), 2);
+    assert!(entries.iter().all(|e| e.pending));
+    // Saved while logged out, so it is also left pending of upload to Connect
+    assert!(entries.iter().any(|e| e.device == "watch"));
+    assert!(
+        entries
+            .iter()
+            .any(|e| e.device == constants::CONNECT_DEVICE_SERIAL)
+    );
 
     let registered = block_on(devices::get_registered_devices(app.handle())).unwrap();
     assert_eq!(registered.len(), 1);

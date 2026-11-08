@@ -27,7 +27,7 @@ use crate::{
         ask_open_paths, ask_save_path,
         exercises::{any_progression_suggestion, fetch_progression_suggestion, update_prs},
         notifications::show_notification,
-        report_error, row_int, row_int_nullable, row_text, run_blocking, store_pending_files,
+        report_error, run_blocking, store_pending_files,
     },
     utils::{
         constants,
@@ -155,8 +155,8 @@ pub fn session_set_flags(
 
     let mut flags: HashMap<u32, bool> = HashMap::new();
     for row in select_builder.fetch_in(conn)? {
-        let session = row_int(&row, session_step::entity::columns::SESSION.as_ref()) as u32;
-        let pr = row_int(&row, session_step::entity::columns::PR.as_ref()) != 0;
+        let session = row.get_u32(session_step::entity::columns::SESSION.as_ref());
+        let pr = row.get_bool(session_step::entity::columns::PR.as_ref());
         *flags.entry(session).or_default() |= pr;
     }
     Ok(flags)
@@ -390,10 +390,10 @@ pub async fn save_session_changes<R: Runtime>(
                 .iter()
                 .for_each(|row| {
                     // Rest steps have no exercise
-                    if let Some(cat) = row_int_nullable(row, entity::columns::EX_CAT.as_ref())
-                        && let Some(id) = row_int_nullable(row, entity::columns::EX_ID.as_ref())
+                    if let Some(cat) = row.get_u16_nullable(entity::columns::EX_CAT.as_ref())
+                        && let Some(id) = row.get_u16_nullable(entity::columns::EX_ID.as_ref())
                     {
-                        exercises.insert((cat as u16, id as u16));
+                        exercises.insert((cat, id));
                     }
                 });
             for serie in &details.sets {
@@ -639,7 +639,7 @@ pub fn import_file_list<'a>(
             ))
             .fetch_in(tx)?
             .iter()
-            .map(|row| row_int(row, session::entity::columns::DATE.as_ref()) as u32)
+            .map(|row| row.get_u32(session::entity::columns::DATE.as_ref()))
             .collect()
     };
     let known_devices: HashSet<_> = if sessions.is_empty() {
@@ -649,7 +649,7 @@ pub fn import_file_list<'a>(
             .columns(&[device::entity::columns::SERIAL])
             .fetch_in(tx)?
             .iter()
-            .map(|row| row_text(row, device::entity::columns::SERIAL.as_ref()))
+            .map(|row| row.get_text(device::entity::columns::SERIAL.as_ref()))
             .collect()
     };
     let mut handled_workouts = HashSet::new();
@@ -848,13 +848,13 @@ static GELOCATION_MUTEX: Mutex<bool> = Mutex::new(false);
 pub fn update_pending_geolocation<R: Runtime>(app: &AppHandle<R>, db: &DatabasePool) {
     let _lock = GELOCATION_MUTEX.lock().unwrap();
     info!("Looking for pending geocode workouts...");
-    match db.run_in_connection(|conn| {
+    let pending = {
         let unnamed_sessions = SessionRepository::select()
             .columns(&[session::entity::columns::DATE])
             .where_(Where::Eq(session::entity::columns::NAME, "".into()))
             .to_subquery();
 
-        let pending: Vec<_> = AdditionalDataRepository::select()
+        AdditionalDataRepository::select()
             .columns(&[
                 additional_data::entity::columns::SESSION,
                 additional_data::entity::columns::COORDINATES,
@@ -864,24 +864,22 @@ pub fn update_pending_geolocation<R: Runtime>(app: &AppHandle<R>, db: &DatabaseP
                 Where::NotNull(additional_data::entity::columns::COORDINATES),
             ]))
             .order_by(OrderBy::Desc(additional_data::entity::columns::SESSION))
-            .fetch_in(conn)?
-            .into_iter()
-            .map(|row| {
-                let mut add_data = AdditionalData::new(row_int(
-                    &row,
-                    additional_data::entity::columns::SESSION.as_ref(),
-                ) as u32);
-                if let Some(Value::Blob(coordinates)) =
-                    row.get(additional_data::entity::columns::COORDINATES.as_ref())
-                {
-                    add_data.coordinates = Some(coordinates.clone());
-                }
-                add_data
+            .fetch(db)
+            .map(|rows| {
+                rows.into_iter()
+                    .map(|row| {
+                        let mut add_data = AdditionalData::new(
+                            row.get_u32(additional_data::entity::columns::SESSION.as_ref()),
+                        );
+                        add_data.coordinates = row.get_blob_nullable(
+                            additional_data::entity::columns::COORDINATES.as_ref(),
+                        );
+                        add_data
+                    })
+                    .collect::<Vec<_>>()
             })
-            .collect();
-
-        Ok(pending)
-    }) {
+    };
+    match pending {
         Ok(pendings) => {
             info!("Found {} pending sessions", pendings.len());
             for pending in pendings {
@@ -1020,15 +1018,15 @@ pub fn heatmap_data(database: &DatabasePool) -> Result<Vec<Vec<(u32, u16)>>, Str
             let mut pr_counts: HashMap<u32, u16> = HashMap::new();
             for pr in &prs {
                 *pr_counts
-                    .entry(row_int(pr, session_step::entity::columns::SESSION.as_ref()) as u32)
+                    .entry(pr.get_u32(session_step::entity::columns::SESSION.as_ref()))
                     .or_default() += 1;
             }
 
             let mut res = vec![vec![(0_u32, 0_u16); 31]; 12];
             sessions.iter().for_each(|session| {
-                let date = row_int(session, session::entity::columns::DATE.as_ref()) as u32;
+                let date = session.get_u32(session::entity::columns::DATE.as_ref());
                 let training_load =
-                    row_int(session, session::entity::columns::TRAINING_LOAD.as_ref()) as u32;
+                    session.get_u32(session::entity::columns::TRAINING_LOAD.as_ref());
                 let dt = Local.timestamp_opt(date as i64, 0).single().unwrap();
                 let cell = &mut res[dt.month0() as usize][dt.day0() as usize];
                 cell.0 += training_load;
