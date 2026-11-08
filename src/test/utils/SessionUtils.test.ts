@@ -536,3 +536,62 @@ describe("SessionUtils.groupByExercises", () => {
         expect(exercises).toEqual(["1-2", "3-4"]);
     });
 });
+
+describe("SessionUtils.exerciseChartData", () => {
+    const sessions = {
+        "Torso\n2000": {
+            series: [
+                makeSet({ weight: 60, reps: 8 }),
+                makeSet({ weight: 50, reps: 12 }),
+            ],
+            weight: 80,
+        },
+        "Torso\n1000": {
+            series: [makeSet({ weight: 55, reps: 10 })],
+            weight: null,
+        },
+        "Torso\n3000": {
+            series: [makeSet({ weight: 70, reps: 6 })],
+            weight: 75,
+        },
+    };
+
+    it("keeps only chart sessions, sorted by date", () => {
+        const points = SessionUtils.exerciseChartData(
+            sessions,
+            [2000, 1000],
+            false,
+        );
+
+        expect(points.map((p) => p.date)).toEqual([1000, 2000]);
+    });
+
+    it("takes the heaviest weight, average reps and e1RM relative to bodyweight", () => {
+        const [point] = SessionUtils.exerciseChartData(sessions, [2000], false);
+
+        expect(point).toEqual({
+            date: 2000,
+            weight: 60,
+            reps: 10,
+            relativeWeight:
+                SessionUtils.maxE1rm(sessions["Torso\n2000"].series, false) /
+                80,
+        });
+    });
+
+    it("uses null as relative weight when the bodyweight is unknown", () => {
+        const [point] = SessionUtils.exerciseChartData(sessions, [1000], false);
+
+        expect(point.relativeWeight).toBeNull();
+    });
+
+    it("skips sessions without sets", () => {
+        expect(
+            SessionUtils.exerciseChartData(
+                { "Torso\n1000": { series: [], weight: 80 } },
+                [1000],
+                false,
+            ),
+        ).toEqual([]);
+    });
+});

@@ -59,51 +59,57 @@ export default function ExercisesSection({ exercises }: Props): JSX.Element {
                                             <tbody>
                                                 {exercise.workouts.map(
                                                     (workout) => {
-                                                        return exercise.series[
+                                                        return exercise.sessions[
                                                             workout
-                                                        ].map((serie, idx) => (
-                                                            <tr
-                                                                key={`${exercise.category}-${exercise.id}-${serie}-${idx}`}
-                                                            >
-                                                                {idx === 0 && (
-                                                                    <td
-                                                                        rowSpan={
-                                                                            exercise
-                                                                                .series[
-                                                                                workout
-                                                                            ]
-                                                                                .length
+                                                        ].series.map(
+                                                            (serie, idx) => (
+                                                                <tr
+                                                                    key={`${exercise.category}-${exercise.id}-${serie}-${idx}`}
+                                                                >
+                                                                    {idx ===
+                                                                        0 && (
+                                                                        <td
+                                                                            rowSpan={
+                                                                                exercise
+                                                                                    .sessions[
+                                                                                    workout
+                                                                                ]
+                                                                                    .series
+                                                                                    .length
+                                                                            }
+                                                                        >
+                                                                            {workout.split(
+                                                                                "\n",
+                                                                            )[0] +
+                                                                                " @ " +
+                                                                                formatTimeDate(
+                                                                                    parseInt(
+                                                                                        workout.split(
+                                                                                            "\n",
+                                                                                        )[1],
+                                                                                    ),
+                                                                                )}
+                                                                        </td>
+                                                                    )}
+                                                                    <td>
+                                                                        {
+                                                                            serie.reps
                                                                         }
-                                                                    >
-                                                                        {workout.split(
-                                                                            "\n",
-                                                                        )[0] +
-                                                                            " @ " +
-                                                                            formatTimeDate(
-                                                                                parseInt(
-                                                                                    workout.split(
-                                                                                        "\n",
-                                                                                    )[1],
-                                                                                ),
-                                                                            )}
                                                                     </td>
-                                                                )}
-                                                                <td>
-                                                                    {serie.reps}
-                                                                </td>
-                                                                <td>
-                                                                    {formatNumber(
-                                                                        fromKg(
-                                                                            serie.weight ??
-                                                                                0,
-                                                                        ),
-                                                                        1,
-                                                                    ) +
-                                                                        " " +
-                                                                        getWeightUnit()}
-                                                                </td>
-                                                            </tr>
-                                                        ));
+                                                                    <td>
+                                                                        {formatNumber(
+                                                                            fromKg(
+                                                                                serie.weight ??
+                                                                                    0,
+                                                                            ),
+                                                                            1,
+                                                                        ) +
+                                                                            " " +
+                                                                            getWeightUnit()}
+                                                                    </td>
+                                                                </tr>
+                                                            ),
+                                                        );
                                                     },
                                                 )}
                                             </tbody>

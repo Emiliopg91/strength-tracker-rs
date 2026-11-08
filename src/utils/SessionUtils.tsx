@@ -1,5 +1,6 @@
 import { Marker } from "react-leaflet";
 import {
+    ExerciseSession,
     SessionDetails,
     SessionListItem,
     SessionStepDto,
@@ -10,6 +11,16 @@ const SEMICIRCLE_TO_DEGREES = 180.0 / 2 ** 31;
 
 const startOfDay = (d: Date) =>
     new Date(d.getFullYear(), d.getMonth(), d.getDate());
+
+export interface ExerciseChartPoint {
+    date: number;
+    /** Heaviest weight of the session, in kg. */
+    weight: number;
+    /** Average reps per set. */
+    reps: number;
+    /** Estimated 1RM divided by bodyweight; null when the bodyweight is unknown. */
+    relativeWeight: number | null;
+}
 
 export interface WorkoutLoad {
     date: number;
@@ -482,6 +493,46 @@ export class SessionUtils {
                 ),
             0,
         );
+    }
+
+    /**
+     * One point per session for the exercise chart: heaviest weight, average reps and estimated
+     * 1RM relative to bodyweight (null when unknown). `sessions` is keyed by
+     * `"<workout>\n<session date>"`; only the sessions in `chartSessions` are kept. Points are
+     * sorted by date.
+     */
+    public static exerciseChartData(
+        sessions: Record<string, ExerciseSession>,
+        chartSessions: number[],
+        unilateral: boolean,
+    ): ExerciseChartPoint[] {
+        const points: ExerciseChartPoint[] = [];
+
+        Object.entries(sessions).forEach(([key, session]) => {
+            const date = parseInt(key.split("\n")[1]);
+            if (!chartSessions.includes(date) || session.series.length === 0) {
+                return;
+            }
+
+            let reps = 0;
+            let weight = 0;
+            session.series.forEach((s) => {
+                reps += s.reps ?? 0;
+                weight = Math.max(weight, s.weight ?? 0);
+            });
+            points.push({
+                date,
+                weight,
+                reps: Math.floor(reps / session.series.length),
+                relativeWeight:
+                    session.weight !== null
+                        ? SessionUtils.maxE1rm(session.series, unilateral) /
+                          session.weight
+                        : null,
+            });
+        });
+
+        return points.sort((a, b) => a.date - b.date);
     }
 
     public static groupByExercises(series: SessionStepDto[]): {

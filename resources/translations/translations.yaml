@@ -175,6 +175,9 @@ record_date:
 repetitions:
   en: Repetitions
   es: Repeticiones
+relative_weight:
+  en: × Bodyweight
+  es: × Peso corporal
 fat_ratio:
   en: Fat %
   es: "% grasa"

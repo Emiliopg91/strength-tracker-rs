@@ -55,7 +55,7 @@ export interface ExerciseCategory {
   name: string;
 }
 
-// From src-tauri/src/dto/exercises.rs:35
+// From src-tauri/src/dto/exercises.rs:41
 export interface ExerciseDetails {
   category: number;
   chart_session: number[];
@@ -68,7 +68,7 @@ export interface ExerciseDetails {
   reps: number;
   reps_range: string;
   secondary_muscles: string[];
-  series: Record<string, SessionStepDto[]>;
+  sessions: Record<string, ExerciseSession>;
   unilateral: boolean;
   weight: number;
   workouts: string[];
@@ -84,6 +84,12 @@ export interface ExerciseListItem {
   reps: number;
   unilateral: boolean;
   weight: number;
+}
+
+// From src-tauri/src/dto/exercises.rs:35
+export interface ExerciseSession {
+  series: SessionStepDto[];
+  weight: number | null;
 }
 
 // From src-tauri/src/utils/translations.rs:10
@@ -106,7 +112,7 @@ export interface MuscleExercise {
   muscle_obj: Muscle | null;
 }
 
-// From src-tauri/src/dto/exercises.rs:96
+// From src-tauri/src/dto/exercises.rs:102
 export interface ProgressionSuggestion {
   reps: number;
   weight: number;

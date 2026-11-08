@@ -2,7 +2,7 @@
 
 import { listen } from "@tauri-apps/api/event";
 
-import { DeviceListItem, SessionLocation, boolean } from "./models";
+import { DeviceListItem, SessionLocation } from "./models";
 
 export class BackendListener {
 	public static onAddedWorkoutSteps(callback: (payload: string[]) => void): () => void {

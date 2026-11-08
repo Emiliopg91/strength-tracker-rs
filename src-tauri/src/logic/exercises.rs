@@ -11,6 +11,7 @@ use tauri_plugin_log::log::info;
 use crate::{
     ConnectLock, SettingsLock,
     dao::{
+        body_metric::{self, BodyMetricRepository},
         exercise::{self, ExerciseRepository},
         session::{self, SessionRepository},
         session_step::{self, SessionStepRepository},
@@ -212,6 +213,10 @@ pub fn fetch_exercise_details(
             })
             .collect();
 
+        let body_metrics = BodyMetricRepository::select()
+            .order_by(OrderBy::Desc(body_metric::entity::columns::DATE))
+            .fetch_in(conn)?;
+
         let mut last_session = None;
         let mut ex_str = String::new();
         for serie in series {
@@ -225,8 +230,15 @@ pub fn fetch_exercise_details(
                 last_session = Some(serie.session);
             }
 
-            let entry = res.series.entry(ex_str.clone()).or_default();
-            entry.push(SessionStepDto::from(&serie));
+            let entry = res.sessions.entry(ex_str.clone()).or_default();
+            entry.weight = body_metrics.iter().find_map(|b| {
+                if b.date < serie.session {
+                    Some(b.weight)
+                } else {
+                    None
+                }
+            });
+            entry.series.push(SessionStepDto::from(&serie));
         }
 
         res.chart_session = chart_session;

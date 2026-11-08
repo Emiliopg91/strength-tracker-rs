@@ -233,7 +233,7 @@ export function ExerciseModal({
                                         )}
                                     </td>
                                 </tr>
-                                {Object.keys(exercise.series).length > 0 && (
+                                {Object.keys(exercise.sessions).length > 0 && (
                                     <>
                                         <tr>
                                             <td>{translate("rm")}:</td>
@@ -354,7 +354,7 @@ export function ExerciseModal({
                         )}
                     </div>
                 </div>
-                {Object.keys(exercise.series).length > 0 && (
+                {Object.keys(exercise.sessions).length > 0 && (
                     <table id="workout-details-table">
                         <colgroup>
                             <col className="col-180" />
@@ -470,11 +470,11 @@ export function ExerciseModal({
                         </table>
                     </>
                 )}
-                {Object.keys(exercise.series).length > 0 && (
+                {Object.keys(exercise.sessions).length > 0 && (
                     <>
                         <hr />
                         <ExerciseVolumeChart
-                            series={exercise.series}
+                            series={exercise.sessions}
                             exercise={exercise}
                         />
                         <table className="full-width">
@@ -492,74 +492,70 @@ export function ExerciseModal({
                             </thead>
                             <tbody>
                                 {exercise.workouts.map((workout) => {
-                                    return exercise.series[workout].map(
-                                        (serie, idx) => (
-                                            <tr key={`${workout}-${idx}`}>
-                                                {idx === 0 && (
-                                                    <td
-                                                        className="divider-bottom"
-                                                        rowSpan={
-                                                            exercise.series[
-                                                                workout
-                                                            ].length
-                                                        }
-                                                    >
-                                                        {workout.split(
-                                                            "\n",
-                                                        )[0] +
-                                                            " @ " +
-                                                            formatTimeDate(
-                                                                parseInt(
-                                                                    workout.split(
-                                                                        "\n",
-                                                                    )[1],
-                                                                ),
-                                                            )}
-                                                    </td>
-                                                )}
+                                    return exercise.sessions[
+                                        workout
+                                    ].series.map((session, idx) => (
+                                        <tr key={`${workout}-${idx}`}>
+                                            {idx === 0 && (
                                                 <td
-                                                    className={
-                                                        idx ===
-                                                        exercise.series[workout]
-                                                            .length -
-                                                            1
-                                                            ? "divider-bottom"
-                                                            : ""
+                                                    className="divider-bottom"
+                                                    rowSpan={
+                                                        exercise.sessions[
+                                                            workout
+                                                        ].series.length
                                                     }
-                                                    style={{
-                                                        textAlign: "right",
-                                                    }}
                                                 >
-                                                    {serie.pr && (
-                                                        <EmojiEventsIcon
-                                                            fontSize="small"
-                                                            className="trophy-icon"
-                                                        />
-                                                    )}
+                                                    {workout.split("\n")[0] +
+                                                        " @ " +
+                                                        formatTimeDate(
+                                                            parseInt(
+                                                                workout.split(
+                                                                    "\n",
+                                                                )[1],
+                                                            ),
+                                                        )}
                                                 </td>
-                                                <td
-                                                    className={`text-center${
-                                                        idx ===
-                                                        exercise.series[workout]
-                                                            .length -
-                                                            1
-                                                            ? " divider-bottom"
-                                                            : ""
-                                                    }`}
-                                                >
-                                                    {serie.reps}x
-                                                    {formatNumber(
-                                                        fromKg(
-                                                            serie.weight ?? 0,
-                                                        ),
-                                                        1,
-                                                    ) +
-                                                        " " +
-                                                        getWeightUnit()}
-                                                </td>
-                                            </tr>
-                                        ),
-                                    );
+                                            )}
+                                            <td
+                                                className={
+                                                    idx ===
+                                                    exercise.sessions[workout]
+                                                        .series.length -
+                                                        1
+                                                        ? "divider-bottom"
+                                                        : ""
+                                                }
+                                                style={{
+                                                    textAlign: "right",
+                                                }}
+                                            >
+                                                {session.pr && (
+                                                    <EmojiEventsIcon
+                                                        fontSize="small"
+                                                        className="trophy-icon"
+                                                    />
+                                                )}
+                                            </td>
+                                            <td
+                                                className={`text-center${
+                                                    idx ===
+                                                    exercise.sessions[workout]
+                                                        .series.length -
+                                                        1
+                                                        ? " divider-bottom"
+                                                        : ""
+                                                }`}
+                                            >
+                                                {session.reps}x
+                                                {formatNumber(
+                                                    fromKg(session.weight ?? 0),
+                                                    1,
+                                                ) +
+                                                    " " +
+                                                    getWeightUnit()}
+                                            </td>
+                                        </tr>
+                                    ));
                                 })}
                             </tbody>
                         </table>

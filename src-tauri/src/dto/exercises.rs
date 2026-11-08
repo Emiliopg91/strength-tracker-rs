@@ -31,6 +31,12 @@ impl From<&Exercise> for ExerciseListItem {
     }
 }
 
+#[derive(Serialize, Default)]
+pub struct ExerciseSession {
+    pub weight: Option<f32>,
+    pub series: Vec<SessionStepDto>,
+}
+
 #[derive(Serialize)]
 pub struct ExerciseDetails {
     pub category: u16,
@@ -39,7 +45,7 @@ pub struct ExerciseDetails {
     pub weight: f32,
     pub unilateral: bool,
     pub workouts: Vec<String>,
-    pub series: HashMap<String, Vec<SessionStepDto>>,
+    pub sessions: HashMap<String, ExerciseSession>,
     pub chart_session: Vec<u32>,
     pub pr_date: u32,
     pub progression: bool,
@@ -59,7 +65,7 @@ impl From<&Exercise> for ExerciseDetails {
             weight: 0_f32,
             workouts: Vec::new(),
             chart_session: Vec::new(),
-            series: HashMap::new(),
+            sessions: HashMap::new(),
             pr_date: 0,
             unilateral: value.unilateral,
             progression: value.progression,

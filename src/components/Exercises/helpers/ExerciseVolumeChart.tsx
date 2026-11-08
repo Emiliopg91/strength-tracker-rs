@@ -1,6 +1,7 @@
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
-import { ExerciseDetails, SessionStepDto } from "@/utils/backend/models";
-import { useContext } from "react";
+import { ExerciseDetails, ExerciseSession } from "@/utils/backend/models";
+import { ExerciseChartPoint, SessionUtils } from "@/utils/SessionUtils";
+import { useContext, useState } from "react";
 import {
     CartesianGrid,
     Legend,
@@ -15,8 +16,12 @@ import {
 
 type Props = {
     exercise: ExerciseDetails;
-    series: Record<string, SessionStepDto[]>;
+    series: Record<string, ExerciseSession>;
 };
+
+type LineKey = "weight" | "reps" | "relativeWeight";
+
+const INACTIVE_COLOR = "#808080";
 
 function ExerciseVolumeTooltip({
     active,
@@ -29,11 +34,7 @@ function ExerciseVolumeTooltip({
     if (!active || !payload || payload.length === 0 || label == null) {
         return null;
     }
-    const data = payload[0].payload as {
-        date: number;
-        weight: number;
-        reps: number;
-    };
+    const data = payload[0].payload as ExerciseChartPoint;
     return (
         <div className="chart-tooltip">
             <div>
@@ -45,44 +46,67 @@ function ExerciseVolumeTooltip({
             <div>
                 {translate("repetitions")}: {formatNumber(data.reps, 0)}
             </div>
+            {data.relativeWeight !== null && (
+                <div>
+                    {translate("relative_weight")}:{" "}
+                    {formatNumber(data.relativeWeight, 2)}
+                </div>
+            )}
         </div>
     );
 }
 
 export function ExerciseVolumeChart({ series, exercise }: Props) {
     const { translate } = useContext(I18nSettingsContext);
-    const chartData: {
-        date: number;
-        weight: number;
-        reps: number;
-    }[] = [];
+    const [hidden, setHidden] = useState<Set<LineKey>>(new Set());
 
-    Object.keys(series).forEach((k) => {
-        const dateNumber = parseInt(k.split("\n")[1]);
-        if (exercise.chart_session.includes(dateNumber)) {
-            const date = new Date(dateNumber);
+    const chartData = SessionUtils.exerciseChartData(
+        series,
+        exercise.chart_session,
+        exercise.unilateral,
+    );
+    const anyRelative =
+        chartData.find((e) => e.relativeWeight !== null) !== undefined;
 
-            let count = 0;
-            let weight = 0;
-            series[k].forEach((s) => {
-                count += s.reps ?? 0;
-                weight = Math.max(weight, s.weight ?? 0);
-            });
-            chartData.push({
-                date: date.getTime(),
-                weight,
-                reps: Math.floor(count / series[k].length),
-            });
-        }
-    });
-    chartData.sort((a, b) => a.date - b.date);
-    const dates = chartData.map(({ date }) => date);
-    const minDate = Math.min(...dates);
-    const maxDate = Math.max(...dates);
-    const minWeight = Math.min(...chartData.map(({ weight }) => weight));
-    const maxWeight = Math.max(...chartData.map(({ weight }) => weight));
-    const maxReps = Math.max(...chartData.map(({ reps }) => reps));
-    const minReps = Math.min(...chartData.map(({ reps }) => reps));
+    const domain = (values: number[]) => [
+        Math.min(...values),
+        Math.max(...values),
+    ];
+    const dateDomain = domain(chartData.map(({ date }) => date));
+    const weightDomain = domain(chartData.map(({ weight }) => weight));
+    const repsDomain = domain(chartData.map(({ reps }) => reps));
+    const rmDomain = domain(
+        chartData
+            .map(({ relativeWeight }) => relativeWeight)
+            .filter((v) => v !== null),
+    );
+
+    const toggle = (key: LineKey) =>
+        setHidden((prev) => {
+            const next = new Set(prev);
+            if (!next.delete(key)) {
+                next.add(key);
+            }
+            return next;
+        });
+
+    const lines: {
+        key: LineKey;
+        name: string;
+        color: string;
+        dashed?: boolean;
+    }[] = [
+        { key: "weight", name: translate("weight"), color: "#0f0" },
+        { key: "reps", name: translate("repetitions"), color: "#0ff" },
+    ];
+    if (anyRelative) {
+        lines.push({
+            key: "relativeWeight",
+            name: translate("relative_weight"),
+            color: "#f80",
+            dashed: true,
+        });
+    }
 
     return (
         <>
@@ -106,52 +130,66 @@ export function ExerciseVolumeChart({ series, exercise }: Props) {
                                 <XAxis
                                     dataKey="date"
                                     type="number"
-                                    domain={[minDate, maxDate]}
+                                    domain={dateDomain}
                                     stroke="#fff"
                                     tick={false}
                                     height={0}
                                 />
                                 <YAxis
-                                    yAxisId="left"
+                                    yAxisId="weight"
                                     stroke="#fff"
                                     width={0}
-                                    domain={[minWeight, maxWeight]}
+                                    domain={weightDomain}
                                     tick={false}
-                                />{" "}
+                                />
                                 <YAxis
-                                    yAxisId="right"
+                                    yAxisId="reps"
                                     stroke="#fff"
-                                    domain={[minReps, maxReps]}
                                     width={0}
+                                    domain={repsDomain}
                                     tick={false}
-                                />{" "}
-                                <Line
-                                    yAxisId="left"
-                                    type="monotone"
-                                    name={translate("weight")}
-                                    dataKey="weight"
-                                    stroke="#0f0"
-                                    dot={{ fill: "#0f0" }}
-                                    activeDot={{ stroke: "#f0f0f000" }}
-                                    isAnimationActive={false}
                                 />
-                                <Line
-                                    yAxisId="right"
-                                    type="monotone"
-                                    name={translate("repetitions")}
-                                    dataKey="reps"
-                                    stroke="#0ff"
-                                    dot={{ fill: "#0ff" }}
-                                    activeDot={{ stroke: "#f0f0f000" }}
-                                    isAnimationActive={false}
-                                />
+                                {anyRelative && (
+                                    <YAxis
+                                        yAxisId="relativeWeight"
+                                        stroke="#fff"
+                                        width={0}
+                                        domain={rmDomain}
+                                        tick={false}
+                                    />
+                                )}
+                                {lines.map(({ key, name, color, dashed }) => (
+                                    <Line
+                                        key={key}
+                                        yAxisId={key}
+                                        type="monotone"
+                                        name={name}
+                                        dataKey={key}
+                                        stroke={color}
+                                        strokeDasharray={
+                                            dashed ? "10 10" : undefined
+                                        }
+                                        legendType="plainline"
+                                        connectNulls
+                                        dot={{ fill: color }}
+                                        activeDot={{ stroke: "#f0f0f000" }}
+                                        hide={hidden.has(key)}
+                                        isAnimationActive={false}
+                                    />
+                                ))}
                                 <Tooltip
                                     isAnimationActive={false}
                                     content={(props) => (
                                         <ExerciseVolumeTooltip {...props} />
                                     )}
                                 />
-                                <Legend />
+                                <Legend
+                                    inactiveColor={INACTIVE_COLOR}
+                                    wrapperStyle={{ cursor: "pointer" }}
+                                    onClick={(entry) =>
+                                        toggle(entry.dataKey as LineKey)
+                                    }
+                                />
                             </LineChart>
                         </ResponsiveContainer>
                     </div>
