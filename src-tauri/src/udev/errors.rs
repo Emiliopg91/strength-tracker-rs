@@ -8,6 +8,8 @@ pub enum UdevError {
     Reload(#[source] std::io::Error),
     #[error("Error triggering udev rules: {0}")]
     Trigger(#[source] std::io::Error),
+    #[error("Incorrect password")]
+    WrongPassword,
 }
 
 pub type Result<T> = std::result::Result<T, UdevError>;

@@ -118,6 +118,21 @@ export interface ProgressionSuggestion {
   weight: number;
 }
 
+// From src-tauri/src/dto/prompts.rs:5
+export enum PromptKind {
+	ConnectCredentials = "ConnectCredentials",
+	ConnectMfa = "ConnectMfa",
+	SudoPassword = "SudoPassword",
+}
+
+// From src-tauri/src/dto/prompts.rs:17
+export interface PromptRequest {
+  detail: string | null;
+  id: number;
+  kind: PromptKind;
+  prefill: string | null;
+}
+
 // From src-tauri/src/dto/report.rs:8
 export interface ReportData {
   body_metrics: BodyMetricListItem[];

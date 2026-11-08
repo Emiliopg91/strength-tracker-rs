@@ -72,8 +72,9 @@ pub async fn export_database<R: Runtime>(
     ));
     let dialog_lang = settings.read().unwrap().language;
     let Some(path) = ask_save_path(
+        app,
         &default_file,
-        "JSON (*.json) | *.json",
+        "JSON",
         "json",
         &translate("select_file_save_json", dialog_lang),
     )

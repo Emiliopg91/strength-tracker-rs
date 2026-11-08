@@ -2,7 +2,7 @@
 
 import { listen } from "@tauri-apps/api/event";
 
-import { DeviceListItem, SessionLocation } from "./models";
+import { DeviceListItem, PromptRequest, SessionLocation } from "./models";
 
 export class BackendListener {
 	public static onAddedWorkoutSteps(callback: (payload: string[]) => void): () => void {
@@ -31,6 +31,10 @@ export class BackendListener {
 
 	public static onProgressionsAvailable(callback: (payload: boolean) => void): () => void {
 	  return BackendListener.inner_listen<boolean>("progressions_available", callback);
+	}
+
+	public static onPromptRequested(callback: (payload: PromptRequest) => void): () => void {
+	  return BackendListener.inner_listen<PromptRequest>("prompt_requested", callback);
 	}
 
 	public static onSessionLocationUpdate(callback: (payload: SessionLocation) => void): () => void {

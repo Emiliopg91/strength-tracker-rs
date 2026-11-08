@@ -18,6 +18,7 @@ use crate::{
         workout_device::WorkoutDeviceRepository,
         workout_step::{StepType, WorkoutStep},
     },
+    dto::prompts::PromptKind,
     dto::{
         app::Settings,
         body_metrics::BodyMetricListItem,
@@ -25,7 +26,11 @@ use crate::{
         sessions::{SessionStepDto, SessionStepsUpdate},
     },
     fit::parser::FitParser,
-    logic::{app, body_metrics, connect, devices, exercises, report, sessions, workouts},
+    logic::{
+        app, body_metrics, connect, devices, exercises,
+        prompts::{self, AppPrompter, Prompts},
+        report, sessions, workouts,
+    },
     mtp::MtpClient,
     tests::common,
     utils::translations::Languages,
@@ -40,7 +45,9 @@ fn test_app() -> App<MockRuntime> {
     let db = common::test_db();
     app.manage(SettingsLock::new(Settings::from(&db)));
     app.manage(db);
-    app.manage(ConnectLock::new(ConnectClient::new(|_| {})));
+    app.manage(Prompts::default());
+    let prompter = AppPrompter(app.handle().clone());
+    app.manage(ConnectLock::new(ConnectClient::new(|_| {}, prompter)));
     app.manage(MtpLock::new(MtpClient {}));
     app
 }
@@ -482,4 +489,41 @@ fn session_file_name_is_date_then_name() {
         "2026-11-04 Push-Pull.fit"
     );
     assert_eq!(sessions::session_file_name(date, "  "), "2026-11-04.fit");
+}
+
+#[test]
+fn prompt_resolves_with_the_answer() {
+    let app = test_app();
+    let handle = app.handle().clone();
+
+    let pending = tauri::async_runtime::spawn(async move {
+        prompts::request_prompt(&handle, PromptKind::ConnectMfa, None, None).await
+    });
+    // The first prompt gets id 0, answered once the request has registered it
+    while prompts::answer_prompt(&app.state::<Prompts>(), 0, Some(vec!["123456".into()])).is_err() {
+        std::thread::yield_now();
+    }
+
+    assert_eq!(block_on(pending).unwrap(), Some(vec!["123456".to_string()]));
+}
+
+#[test]
+fn prompt_resolves_to_none_when_cancelled() {
+    let app = test_app();
+    let handle = app.handle().clone();
+
+    let pending = tauri::async_runtime::spawn(async move {
+        prompts::request_prompt(&handle, PromptKind::SudoPassword, None, None).await
+    });
+    while prompts::answer_prompt(&app.state::<Prompts>(), 0, None).is_err() {
+        std::thread::yield_now();
+    }
+
+    assert_eq!(block_on(pending).unwrap(), None);
+}
+
+#[test]
+fn answering_an_unknown_prompt_fails() {
+    let app = test_app();
+    assert!(prompts::answer_prompt(&app.state::<Prompts>(), 42, None).is_err());
 }

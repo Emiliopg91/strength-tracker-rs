@@ -16,6 +16,7 @@ import { Loading } from "../Loading/Loading";
 import SettingsIcon from "@mui/icons-material/Settings";
 import { Home } from "../Home/Home";
 import PriorityHighIcon from "@mui/icons-material/PriorityHigh";
+import { PromptDialog } from "../Prompt/PromptDialog";
 
 // Only Home is bundled eagerly; the rest is fetched in background once Home is shown
 const loadSessionsList = () => import("../Sessions/SessionList");
@@ -133,6 +134,7 @@ export function App(): JSX.Element {
         <>
             <div id="viewport">
                 <Loading />
+                <PromptDialog />
 
                 {appReady && (
                     <>

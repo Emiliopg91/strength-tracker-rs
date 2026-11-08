@@ -53,7 +53,7 @@ No account required, no cloud, no Garmin Express (which doesn't exist on Linux a
 - **Workout import** — Import workout steps back from the device.
 - **Print workouts** — Print a workout or save it as PDF to take to the gym.
 - **Manual `.FIT` import** — Import activity files from disk.
-- **Garmin Connect import** — Optional, on-demand download of the last 7 days' activities not yet imported, and of new weigh-ins (including body composition from smart scales) since the last sync. Sign in once through a `zenity` dialog; the session is kept in the system keyring and refreshed automatically.
+- **Garmin Connect import** — Optional, on-demand download of the last 7 days' activities not yet imported, and of new weigh-ins (including body composition from smart scales) since the last sync. Sign in once from the settings (MFA supported); the session is kept in the system keyring and refreshed automatically.
 - **Garmin Connect workouts** — While signed in, saved workouts and applied progressions are mirrored to your Garmin Connect workout library. Workouts already in Connect are matched by name instead of duplicated.
 - **Wireless send** — Watches linked to your Garmin Connect account show up next to the plugged-in ones; send a workout to one and it lands on the watch on its next sync, no cable needed. Only watches that support strength workouts are listed. Re-enabling a workout sends it the same way to the linked watches still waiting for it.
 

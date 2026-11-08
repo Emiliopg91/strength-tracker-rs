@@ -658,3 +658,36 @@ progression_available:
 progression_available_msg:
   en: Adjust your progress and go further
   es: Ajusta tu progreso y ve más allá
+email:
+  en: Email
+  es: Correo electrónico
+password:
+  en: Password
+  es: Contraseña
+cancel:
+  en: Cancel
+  es: Cancelar
+accept:
+  en: Accept
+  es: Aceptar
+prompt_connect_credentials:
+  en: Sign in to Garmin Connect
+  es: Inicia sesión en Garmin Connect
+prompt_connect_login_failed:
+  en: "Login failed: {}"
+  es: "Error al iniciar sesión: {}"
+prompt_connect_mfa:
+  en: Verification code
+  es: Código de verificación
+prompt_connect_mfa_msg:
+  en: Enter the verification code sent via {}
+  es: Introduce el código de verificación enviado por {}
+prompt_sudo_password:
+  en: Elevated permissions required
+  es: Se requieren permisos de administrador
+prompt_sudo_password_msg:
+  en: Enter your password to install the device rules
+  es: Introduce tu contraseña para instalar las reglas de dispositivos
+prompt_sudo_wrong_password:
+  en: Incorrect password, try again
+  es: Contraseña incorrecta, inténtalo de nuevo

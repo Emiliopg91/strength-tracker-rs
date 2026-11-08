@@ -13,7 +13,7 @@ mod utils;
 #[cfg(test)]
 mod tests;
 
-use std::{fs, process::exit, sync::RwLock, time::Duration};
+use std::{process::exit, sync::RwLock, time::Duration};
 
 use rusqlite_orm::database::{
     DatabasePool, DdlVersion,
@@ -37,7 +37,7 @@ use crate::{
     dao::body_metric::migration_21,
     dto::app::Settings,
     logic::{
-        add_body_measures,
+        add_body_measures, answer_prompt,
         app::{hide_main_window, show_main_window},
         apply_progression_suggestion, available_any_progression_suggestions, connect_logged_user,
         connect_login, connect_logout, delete_body_metric, download_session, export_database,
@@ -46,8 +46,10 @@ use crate::{
         get_progression_suggestion, get_registered_devices, get_report_data, get_session_details,
         get_sessions, get_settings, get_translations, get_workout_details, get_workout_list,
         import_from_connect, import_from_device, import_from_files, import_weight_from_connect,
-        load_report, load_workout_page, notify_frontend_ready, report_ready, save_exercise_notes,
-        save_session_changes, save_workout, send_to_connect, send_to_device,
+        load_report, load_workout_page, notify_frontend_ready,
+        prompts::{AppPrompter, Prompts},
+        report_ready, save_exercise_notes, save_session_changes, save_workout, send_to_connect,
+        send_to_device,
         sessions::_import_from_files,
         set_exercise_progression, set_exercise_progression_parameters, set_exercise_unilateral,
         set_workout_status, update_settings_value, upload_to_cloud, workout_print_ready,
@@ -59,17 +61,6 @@ use crate::{
 
 pub fn check_running() -> bool {
     SingleInstance::is_app_running().0
-}
-
-pub fn write_mtp_rules(auto_run: bool) -> crate::udev::errors::Result<()> {
-    if !fs::exists(constants::RULE_FILE).unwrap() {
-        info!("Installing udev rules...");
-        UdevManager::write_rules_file(auto_run)?;
-
-        Ok(())
-    } else {
-        Ok(())
-    }
 }
 
 pub fn force_write_mtp_rules(auto_run: bool) -> crate::udev::errors::Result<()> {
@@ -116,11 +107,15 @@ fn initialize(app: &AppHandle) -> (DatabasePool, Settings, ConnectClient, MtpCli
                 settings,
                 {
                     let app: AppHandle = app.clone();
-                    ConnectClient::new(move |user| {
-                        // Typed binding: the TypeScript generator reads the payload type from it
-                        let payload: Option<String> = user;
-                        let _ = app.emit("connect_logged", payload);
-                    })
+                    let prompter = AppPrompter(app.clone());
+                    ConnectClient::new(
+                        move |user| {
+                            // Typed binding: the TypeScript generator reads the payload type from it
+                            let payload: Option<String> = user;
+                            let _ = app.emit("connect_logged", payload);
+                        },
+                        prompter,
+                    )
                 },
                 MtpClient {},
             )
@@ -176,6 +171,7 @@ pub fn run(log_level: LevelFilter) {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_autostart::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(
             tauri_plugin_log::Builder::new()
                 .level(LevelFilter::Warn)
@@ -229,11 +225,6 @@ pub fn run(log_level: LevelFilter) {
                 *constants::APP_VERSION,
                 *constants::PID
             );
-
-            if let Err(e) = write_mtp_rules(false) {
-                eprintln!("Error installing udev rules {e}");
-                exit(constants::ExitCodes::UdevError.into())
-            }
 
             let (database, settings, connect, mtp_client) = initialize(app.handle());
 
@@ -312,6 +303,7 @@ pub fn run(log_level: LevelFilter) {
                 })
                 .build(app)?;
 
+            app.manage(Prompts::default());
             app.manage(database);
             app.manage(SettingsLock::new(settings));
             app.manage(ConnectLock::new(connect));
@@ -321,6 +313,8 @@ pub fn run(log_level: LevelFilter) {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            //Prompts
+            answer_prompt,
             //Sessions
             get_sessions,
             get_session_details,

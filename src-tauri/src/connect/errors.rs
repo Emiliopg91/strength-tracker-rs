@@ -4,8 +4,6 @@ use thiserror::Error;
 pub enum ConnectError {
     #[error("Error on OAuth2 login: {0}")]
     Login(#[source] crate::connect::client::GarminError),
-    #[error("Error prompting for credentials: {0}")]
-    CredentialsPrompt(#[source] std::io::Error),
     #[error("Login required")]
     LoginRequired(),
     #[error("Login Cancelled by user")]

@@ -5,6 +5,7 @@ pub mod devices;
 pub mod exercises;
 pub mod export;
 pub mod notifications;
+pub mod prompts;
 pub mod report;
 pub mod sessions;
 pub mod workouts;
@@ -24,7 +25,9 @@ use rusqlite_orm::{
 };
 use strength_tracker_rs_macros::traced_command;
 use tauri::{AppHandle, Manager, Runtime, State, WebviewWindow};
+use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_log::log::{error, warn};
+use tokio::sync::oneshot;
 
 use crate::{
     ConnectLock, SettingsLock,
@@ -88,34 +91,63 @@ pub(crate) fn ensure_extension(mut path: PathBuf, extension: &str) -> PathBuf {
     path
 }
 
-/// Asks where to save a file, starting at `default_file`. Returns `None` if the user cancels.
-pub(crate) async fn ask_save_path(
+/// Asks where to save a file, starting at `default_file` and offering only files with
+/// `extension`, which is appended if missing. Returns `None` if the user cancels.
+pub(crate) async fn ask_save_path<R: Runtime>(
+    app: &AppHandle<R>,
     default_file: &Path,
-    filter: &str,
+    filter_name: &str,
     extension: &str,
     title: &str,
 ) -> Result<Option<PathBuf>, String> {
-    let output = tokio::process::Command::new("zenity")
-        .args([
-            "--file-selection",
-            "--save",
-            &format!("--filename={}", default_file.display()),
-            &format!("--file-filter={filter}"),
-            &format!("--title={title}"),
-        ])
-        .output()
-        .await
-        .map_err(|e| e.to_string())?;
-
-    if !output.status.success() {
-        return Ok(None);
+    let mut dialog = app
+        .dialog()
+        .file()
+        .set_title(title)
+        .add_filter(filter_name, &[extension]);
+    if let Some(dir) = default_file.parent() {
+        dialog = dialog.set_directory(dir);
+    }
+    if let Some(name) = default_file.file_name() {
+        dialog = dialog.set_file_name(name.to_string_lossy());
     }
 
-    let path = String::from_utf8(output.stdout).map_err(|e| e.to_string())?;
-    Ok(Some(ensure_extension(
-        PathBuf::from(path.trim_end_matches('\n')),
-        extension,
-    )))
+    let (tx, rx) = oneshot::channel();
+    dialog.save_file(move |path| {
+        let _ = tx.send(path);
+    });
+
+    match rx.await.map_err(|e| e.to_string())? {
+        Some(path) => Ok(Some(ensure_extension(
+            path.into_path().map_err(|e| e.to_string())?,
+            extension,
+        ))),
+        None => Ok(None),
+    }
+}
+
+/// Asks for one or more existing files with `extension`. Empty if the user cancels.
+pub(crate) async fn ask_open_paths<R: Runtime>(
+    app: &AppHandle<R>,
+    filter_name: &str,
+    extension: &str,
+    title: &str,
+) -> Result<Vec<PathBuf>, String> {
+    let (tx, rx) = oneshot::channel();
+    app.dialog()
+        .file()
+        .set_title(title)
+        .add_filter(filter_name, &[extension])
+        .pick_files(move |paths| {
+            let _ = tx.send(paths);
+        });
+
+    rx.await
+        .map_err(|e| e.to_string())?
+        .unwrap_or_default()
+        .into_iter()
+        .map(|path| path.into_path().map_err(|e| e.to_string()))
+        .collect()
 }
 
 /// Gives every transfer its own dir, so concurrent syncs of the same source don't share files.
@@ -472,6 +504,19 @@ pub async fn get_environment() -> AppEnvironment {
 #[tauri::command]
 pub async fn update_settings_value(app: AppHandle, name: &str, value: &str) -> Result<(), String> {
     app::update_settings_value(&app, name, value).await
+}
+
+// Prompts
+
+/// @dont_log
+#[traced_command(log_payload = false)]
+#[tauri::command]
+pub async fn answer_prompt(
+    prompts: State<'_, prompts::Prompts>,
+    id: u32,
+    values: Option<Vec<String>>,
+) -> Result<(), String> {
+    prompts::answer_prompt(&prompts, id, values)
 }
 
 #[traced_command(log_payload = false)]

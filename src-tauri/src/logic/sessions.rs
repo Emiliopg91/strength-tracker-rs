@@ -24,7 +24,7 @@ use crate::{
     },
     fit::{FitFile, parser::FitParser, writer::FitWriter},
     logic::{
-        ask_save_path,
+        ask_open_paths, ask_save_path,
         exercises::{any_progression_suggestion, fetch_progression_suggestion, update_prs},
         notifications::show_notification,
         report_error, row_int, row_int_nullable, row_text, run_blocking, store_pending_files,
@@ -45,7 +45,6 @@ use rusqlite_orm::{
 };
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tauri_plugin_log::log::{error, info, warn};
-use tokio::process::Command;
 
 /// Returns every recorded session, newest first.
 pub async fn get_sessions<R: Runtime>(
@@ -234,8 +233,9 @@ pub async fn download_session<R: Runtime>(
     .unwrap_or_default();
     let default_file = constants::HOME_DIR.join(session_file_name(timestamp, &name));
     let Some(file) = ask_save_path(
+        app,
         &default_file,
-        "FIT (*.fit) | *.fit",
+        "FIT",
         "fit",
         &translate("select_file_save_fit", lang),
     )
@@ -476,27 +476,7 @@ pub async fn import_from_files<R: Runtime>(
     settings: &SettingsLock,
 ) -> Result<usize, String> {
     let lang = { settings.read().unwrap().language };
-    let output = Command::new("zenity")
-        .args([
-            "--file-selection",
-            "--multiple",
-            "--separator=\n",
-            "--file-filter=FIT (*.fit) | *.fit",
-            &format!("--title={}", translate("select_files_import", lang)),
-        ])
-        .output()
-        .await
-        .map_err(|e| e.to_string())?;
-
-    let files = if output.status.success() {
-        String::from_utf8(output.stdout)
-            .map_err(|e| e.to_string())?
-            .lines()
-            .map(PathBuf::from)
-            .collect()
-    } else {
-        Vec::new()
-    };
+    let files = ask_open_paths(app, "FIT", "fit", &translate("select_files_import", lang)).await?;
 
     if !files.is_empty() {
         let app = app.clone();

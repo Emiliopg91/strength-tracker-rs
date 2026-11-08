@@ -16,10 +16,14 @@ use crate::{
 };
 use bytes::Bytes;
 use chrono::{Datelike, Local, NaiveDate};
-use futures_util::stream::{self, StreamExt, TryStreamExt};
+use futures_util::{
+    future::BoxFuture,
+    stream::{self, StreamExt, TryStreamExt},
+};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::{
     io::{Cursor, Read},
+    sync::Arc,
     time::Duration,
 };
 
@@ -93,18 +97,37 @@ struct DeviceMessage<'a> {
     meta_data_id: u64,
 }
 
+/// Asks the user for the inputs a Garmin Connect login needs. Each future resolves to `None` if
+/// the user cancels.
+pub trait ConnectPrompter: Send + Sync {
+    /// Email and password, with the email of the last attempt and the error it failed with.
+    fn credentials(
+        &self,
+        email: Option<String>,
+        error: Option<String>,
+    ) -> BoxFuture<'static, Option<(String, String)>>;
+
+    /// MFA verification code, sent through `method` (e.g. `email`).
+    fn mfa_code(&self, method: String) -> BoxFuture<'static, Option<String>>;
+}
+
 pub struct ConnectClient {
     /// Called with the logged user every time it changes.
     on_user_change: Box<dyn Fn(Option<String>) + Send + Sync>,
+    prompter: Arc<dyn ConnectPrompter>,
     email: Option<String>,
     oauth1: Option<OAuth1Token>,
     oauth2: Option<OAuth2Token>,
 }
 
 impl ConnectClient {
-    pub fn new(on_user_change: impl Fn(Option<String>) + Send + Sync + 'static) -> Self {
+    pub fn new(
+        on_user_change: impl Fn(Option<String>) + Send + Sync + 'static,
+        prompter: impl ConnectPrompter + 'static,
+    ) -> Self {
         Self {
             on_user_change: Box::new(on_user_change),
+            prompter: Arc::new(prompter),
             email: Self::read_keyring(KEYRING_EMAIL).unwrap_or(None),
             oauth1: Self::read_keyring(KEYRING_OAUTH1).unwrap_or(None),
             oauth2: Self::read_keyring(KEYRING_OAUTH2).unwrap_or(None),
@@ -133,8 +156,16 @@ impl ConnectClient {
         let mut sso = SsoClient::new()
             .map_err(|e| log_error("Error creating SSO client", ConnectError::Login(e)))?;
 
+        let prompter = self.prompter.clone();
         let (oauth1, oauth2) = sso
-            .login(email, password, Some(Self::prompt_mfa_code))
+            .login(
+                email,
+                password,
+                Some(move |method: String| {
+                    info!("Garmin Connect requested MFA via {}", method);
+                    prompter.mfa_code(method)
+                }),
+            )
             .await
             .map_err(|e| match e {
                 GarminError::MfaCancelled => {
@@ -157,75 +188,25 @@ impl ConnectClient {
         Ok(())
     }
 
-    /// Asks the user for the MFA verification code through zenity. `None` if cancelled or the
-    /// dialog could not be shown.
-    async fn prompt_mfa_code(method: String) -> Option<String> {
-        info!("Garmin Connect requested MFA via {}", method);
-        let output = tokio::process::Command::new("zenity")
-            .args([
-                "--entry",
-                "--title=Garmin Connect",
-                &format!(
-                    "--text=Enter the verification code sent via {}",
-                    method
-                        .replace('&', "&amp;")
-                        .replace('<', "&lt;")
-                        .replace('>', "&gt;")
-                ),
-            ])
-            .output()
-            .await
-            .inspect_err(|e| error!("Error launching zenity: {}", e))
-            .ok()?;
-
-        if !output.status.success() {
-            return None;
-        }
-
-        let code = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        (!code.is_empty()).then_some(code)
-    }
-
+    /// Asks for the credentials until the login succeeds or the user cancels.
     pub async fn prompt_login(&mut self) -> Result<()> {
-        let mut text = String::from("Sign in to Garmin Connect");
+        let mut email = self.email.clone();
+        let mut error = None;
         loop {
-            let output = tokio::process::Command::new("zenity")
-                .args([
-                    "--forms",
-                    "--title=Garmin Connect",
-                    &format!("--text={}", text),
-                    "--add-entry=Email",
-                    "--add-password=Password",
-                    "--separator=\n",
-                ])
-                .output()
-                .await
-                .map_err(|e| {
-                    log_error("Error launching zenity", ConnectError::CredentialsPrompt(e))
-                })?;
-
-            // Cancelled by the user
-            if !output.status.success() {
+            let Some((entered_email, password)) =
+                self.prompter.credentials(email.take(), error.take()).await
+            else {
                 warn!("Garmin Connect login cancelled by the user");
                 return Err(ConnectError::LoginCancelledByUser());
-            }
+            };
 
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            let stdout = stdout.strip_suffix('\n').unwrap_or(&stdout);
-            let (email, password) = stdout.split_once('\n').unwrap_or((stdout, ""));
-
-            match self.login(email, password).await {
+            match self.login(&entered_email, &password).await {
                 Ok(()) => return Ok(()),
                 Err(e @ ConnectError::LoginCancelledByUser()) => return Err(e),
-                // Shown on the next prompt, escaped as zenity parses the text as Pango markup
+                // Shown on the next prompt, along with the email to retry with
                 Err(e) => {
-                    text = format!(
-                        "Sign in to Garmin Connect\n\nLogin failed: {}",
-                        e.to_string()
-                            .replace('&', "&amp;")
-                            .replace('<', "&lt;")
-                            .replace('>', "&gt;")
-                    )
+                    email = Some(entered_email);
+                    error = Some(e.to_string());
                 }
             }
         }

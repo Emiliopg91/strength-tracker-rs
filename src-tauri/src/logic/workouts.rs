@@ -1,6 +1,5 @@
 use std::{
     collections::{HashMap, HashSet},
-    path::PathBuf,
     process::Command,
 };
 
@@ -26,6 +25,7 @@ use crate::{
         workouts::{WorkoutDetails, WorkoutListItem, WorkoutSession},
     },
     logic::{
+        ask_save_path,
         connect::send_workout_connect,
         devices::{
             delete_pending_from_connected, push_pending_to_usb,
@@ -463,34 +463,19 @@ async fn print_to_pdf(w: WebviewWindow, workout: &str) -> Result<(), String> {
         .map_err(|e| e.to_string())?
         .join(format!("{}.pdf", workout));
 
-    let output = tokio::process::Command::new("zenity")
-        .args([
-            "--file-selection",
-            "--save",
-            &format!("--filename={}", default_file.display()),
-            "--file-filter=PDF (*.pdf) | *.pdf",
-            &format!("--title={}", translate("select_file_save_pdf", lang)),
-        ])
-        .output()
-        .await
-        .map_err(|e| e.to_string())?;
-
-    // Cancelled by the user
-    if !output.status.success() {
+    let Some(file) = ask_save_path(
+        w.app_handle(),
+        &default_file,
+        "PDF",
+        "pdf",
+        &translate("select_file_save_pdf", lang),
+    )
+    .await?
+    else {
+        // Cancelled by the user
         let _ = w.close();
         return Ok(());
-    }
-    let mut file = PathBuf::from(
-        String::from_utf8(output.stdout)
-            .map_err(|e| e.to_string())?
-            .trim_end_matches('\n'),
-    );
-    if file
-        .extension()
-        .is_none_or(|ext| !ext.eq_ignore_ascii_case("pdf"))
-    {
-        file.as_mut_os_string().push(".pdf");
-    }
+    };
 
     let uri = format!("file://{}", file.display());
     w.clone()

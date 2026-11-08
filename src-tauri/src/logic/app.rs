@@ -15,15 +15,17 @@ use crate::{
     dto::{
         app::{AppEnvironment, Settings},
         notifications::{NotificationDefinition, NotificationKind},
+        prompts::PromptKind,
     },
     logic::{
         connect::get_devices_from_connect, devices::start_device_watcher,
-        notifications::show_notification, report_error, sessions::update_pending_geolocation,
+        notifications::show_notification, prompts::request_prompt, report_error,
+        sessions::update_pending_geolocation,
     },
-    udev::UdevManager,
+    udev::{UdevManager, errors::UdevError},
     utils::translations::{Languages, TRANSLATIONS, translate, translate_and_replace},
 };
-use tauri_plugin_log::log::{debug, info};
+use tauri_plugin_log::log::{debug, error, info, warn};
 
 /// Returns the current in-memory app settings.
 pub async fn get_settings(settings: &SettingsLock) -> Result<Settings, String> {
@@ -37,6 +39,15 @@ pub async fn notify_frontend_ready<R: Runtime>(app: &AppHandle<R>) {
 
     let app_cl = app.clone();
     tauri::async_runtime::spawn(async move {
+        // Asked here, as the password dialog needs the frontend
+        if !std::fs::exists(constants::RULE_FILE).unwrap_or(false)
+            && let Err(e) = install_udev_rules(&app_cl, false).await
+        {
+            error!("Error installing udev rules: {e}");
+            app_cl.exit(constants::ExitCodes::UdevError.into());
+            return;
+        }
+
         get_devices_from_connect(&app_cl).await;
         start_device_watcher(&app_cl);
     });
@@ -96,6 +107,49 @@ pub async fn get_environment() -> AppEnvironment {
     }
 }
 
+/// Writes the udev rules, asking for the sudo password through the frontend unless already root.
+/// A rejected password is asked again; fails if the user cancels.
+pub async fn install_udev_rules<R: Runtime>(
+    app: &AppHandle<R>,
+    auto_run: bool,
+) -> Result<(), String> {
+    info!("Installing udev rules...");
+    if UdevManager::is_root() {
+        return tokio::task::spawn_blocking(move || UdevManager::write_rules_file(auto_run))
+            .await
+            .map_err(|e| e.to_string())?
+            .map_err(|e| e.to_string());
+    }
+
+    let mut detail = None;
+    loop {
+        let Some(password) = request_prompt(app, PromptKind::SudoPassword, None, detail.take())
+            .await
+            .and_then(|values| values.into_iter().next())
+        else {
+            return Err("Udev rules installation cancelled by the user".to_string());
+        };
+
+        let res = tokio::task::spawn_blocking(move || {
+            UdevManager::write_rules_file_with_sudo(auto_run, &password)
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+
+        match res {
+            Ok(()) => {
+                info!("Udev rules installed");
+                return Ok(());
+            }
+            Err(e @ UdevError::WrongPassword) => {
+                warn!("Udev rules installation failed: {e}");
+                detail = Some(e.to_string());
+            }
+            Err(e) => return Err(e.to_string()),
+        }
+    }
+}
+
 /// Updates a single named setting: persists it to the DB, applies any side effect (e.g. autostart toggle), and refreshes `SETTINGS_INST`.
 pub async fn update_settings_value<R: Runtime>(
     app: &AppHandle<R>,
@@ -107,6 +161,18 @@ pub async fn update_settings_value<R: Runtime>(
     let app_cl = app.clone();
 
     let lang = app.state::<SettingsLock>().read().unwrap().language;
+
+    // Installed before persisting, so a cancelled password prompt leaves the setting untouched
+    if name == ON_DEVICE_CONNECT
+        && let Err(e) = install_udev_rules(app, value == "true").await
+    {
+        return Err(report_error(
+            e,
+            lang,
+            "error_update_settings",
+            "Error updating settings",
+        ));
+    }
 
     let res = tokio::task::spawn_blocking(move || {
         let app = app_cl;
@@ -157,10 +223,6 @@ pub async fn update_settings_value<R: Runtime>(
             }
             ON_DEVICE_CONNECT => {
                 let value = value == "true";
-
-                info!("Installing udev rules...");
-                UdevManager::write_rules_file(value).map_err(|e| e.to_string())?;
-
                 crate::dao::settings::Settings::set_on_device_connect(&database, value)
                     .map_err(|e| e.to_string())?;
                 settings.write().unwrap().on_device_connect = value;

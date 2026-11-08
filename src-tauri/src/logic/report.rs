@@ -1,4 +1,4 @@
-use std::{collections::BTreeSet, path::PathBuf, process::Command};
+use std::{collections::BTreeSet, process::Command};
 
 use tauri::{AppHandle, Manager, Runtime, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_log::log::{error, info};
@@ -7,6 +7,7 @@ use crate::{
     SettingsLock,
     dto::report::ReportData,
     logic::{
+        ask_save_path,
         body_metrics::fetch_body_measures,
         exercises::fetch_exercise_details,
         report_error, run_blocking,
@@ -61,34 +62,19 @@ async fn print_to_pdf(w: WebviewWindow) -> Result<(), String> {
         .map_err(|e| e.to_string())?
         .join(format!("{}.pdf", translate("progression_report", lang)));
 
-    let output = tokio::process::Command::new("zenity")
-        .args([
-            "--file-selection",
-            "--save",
-            &format!("--filename={}", default_file.display()),
-            "--file-filter=PDF (*.pdf) | *.pdf",
-            &format!("--title={}", translate("select_file_save_pdf", lang)),
-        ])
-        .output()
-        .await
-        .map_err(|e| e.to_string())?;
-
-    // Cancelled by the user
-    if !output.status.success() {
+    let Some(file) = ask_save_path(
+        w.app_handle(),
+        &default_file,
+        "PDF",
+        "pdf",
+        &translate("select_file_save_pdf", lang),
+    )
+    .await?
+    else {
+        // Cancelled by the user
         let _ = w.close();
         return Ok(());
-    }
-    let mut file = PathBuf::from(
-        String::from_utf8(output.stdout)
-            .map_err(|e| e.to_string())?
-            .trim_end_matches('\n'),
-    );
-    if file
-        .extension()
-        .is_none_or(|ext| !ext.eq_ignore_ascii_case("pdf"))
-    {
-        file.as_mut_os_string().push(".pdf");
-    }
+    };
 
     let uri = format!("file://{}", file.display());
     w.clone()
