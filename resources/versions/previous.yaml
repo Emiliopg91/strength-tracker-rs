@@ -45,7 +45,7 @@ rust:
   hmac: 0.13.0
   keyring: 3.6.3
   libc: 0.2.191
-  mtp-rs: 0.37.3
+  mtp-rs: 0.38.0
   noyalib: 0.0.58
   ouroboros: 0.18.5
   percent-encoding: 2.3.2
@@ -65,11 +65,11 @@ rust:
   tauri-plugin-autostart: 2.7.0
   tauri-plugin-log: 2.10.1
   tauri-plugin-opener: 2.7.2
-  tauri-rs-ts-ipc: 0.1.22
+  tauri-rs-ts-ipc: 0.1.23
   tempfile: 3.27.0
   thiserror: 2.0.21
   tokio: 1.54.1
   tray-icon: 0.25.1
   url: 2.5.8
   webkit2gtk: 2.0.2
-  zip: 9.4.0
+  zip: 9.4.2
