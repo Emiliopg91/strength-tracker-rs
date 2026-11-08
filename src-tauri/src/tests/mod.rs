@@ -1,4 +1,5 @@
 mod additional_data;
+mod batch_queries;
 mod commands;
 mod common;
 mod connect;

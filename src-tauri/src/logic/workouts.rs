@@ -31,6 +31,7 @@ use crate::{
             delete_pending_from_connected, push_pending_to_usb,
             send_enabled_workout_to_connect_devices,
         },
+        exercises::fetch_exercises_muscles,
         notifications::show_notification,
         report_error, run_blocking,
     },
@@ -169,10 +170,10 @@ pub async fn get_workout_details<R: Runtime>(
                 ))
                 .fetch_in(conn)?;
 
+            fetch_exercises_muscles(conn, &mut exercises)?;
             let mut primary_set = HashSet::new();
             let mut secondary_set = HashSet::new();
-            for exercise in &mut exercises {
-                exercise.fetch_muscles_relationship_in(conn)?;
+            for exercise in &exercises {
                 for muscle in &exercise.muscles {
                     if muscle.is_primary {
                         primary_set.insert(muscle.muscle.clone());

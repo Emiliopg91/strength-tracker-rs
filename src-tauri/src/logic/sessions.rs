@@ -10,8 +10,8 @@ use crate::{
     dao::{
         additional_data::{self, AdditionalData, AdditionalDataRepository},
         device::{self, Device, DeviceRepository},
-        exercise::{self, ExerciseRepository},
-        lap::LapRepository,
+        exercise::{self, Exercise, ExerciseRepository},
+        lap::{self, LapRepository},
         session::{self, Session, SessionRepository},
         session_step::{self, SessionStepRepository, entity},
         settings::WeightUnit,
@@ -25,7 +25,10 @@ use crate::{
     fit::{FitFile, parser::FitParser, writer::FitWriter},
     logic::{
         ask_open_paths, ask_save_path,
-        exercises::{any_progression_suggestion, fetch_progression_suggestion, update_prs},
+        exercises::{
+            fetch_exercises_muscles, fetch_progression_suggestion, progression_suggestions,
+            update_prs,
+        },
         notifications::show_notification,
         report_error, run_blocking, store_pending_files,
     },
@@ -302,58 +305,142 @@ pub fn fetch_session_details(
     with_add_data: bool,
     with_laps: bool,
 ) -> rusqlite_orm::errors::Result<SessionDetails> {
-    let mut session = SessionRepository::select_by_id_in(conn, timestamp)?.unwrap();
+    Ok(
+        fetch_sessions_details(conn, &[timestamp], with_add_data, with_laps)?
+            .pop()
+            .unwrap(),
+    )
+}
 
-    session.fetch_steps_relationship_in(conn)?;
+/// Details of every session in `timestamps`, in that order, with a fixed number of queries
+/// whatever the number of sessions: each related table is read once for all of them.
+///
+/// # Panics
+/// If any of the sessions doesn't exist.
+pub fn fetch_sessions_details(
+    conn: &rusqlite_orm::rusqlite::Connection,
+    timestamps: &[u32],
+    with_add_data: bool,
+    with_laps: bool,
+) -> rusqlite_orm::errors::Result<Vec<SessionDetails>> {
+    if timestamps.is_empty() {
+        return Ok(Vec::new());
+    }
+    let dates: Vec<Value> = timestamps.iter().map(|ts| (*ts).into()).collect();
 
-    if session.device.is_some() {
-        session.fetch_device_obj_relationship_in(conn)?;
+    let mut sessions: HashMap<u32, Session> = SessionRepository::select()
+        .where_(Where::In(session::entity::columns::DATE, dates.clone()))
+        .fetch_in(conn)?
+        .into_iter()
+        .map(|s| (s.date, s))
+        .collect();
+
+    for step in SessionStepRepository::select()
+        .where_(Where::In(entity::columns::SESSION, dates.clone()))
+        .fetch_in(conn)?
+    {
+        if let Some(session) = sessions.get_mut(&step.session) {
+            session.steps.push(step);
+        }
+    }
+
+    let serials: HashSet<String> = sessions.values().filter_map(|s| s.device.clone()).collect();
+    if !serials.is_empty() {
+        let devices: HashMap<String, Device> = DeviceRepository::select()
+            .where_(Where::In(
+                device::entity::columns::SERIAL,
+                serials.into_iter().map(|s| s.into()).collect(),
+            ))
+            .fetch_in(conn)?
+            .into_iter()
+            .map(|d| (d.serial.clone(), d))
+            .collect();
+        for session in sessions.values_mut() {
+            session.device_obj = session
+                .device
+                .as_ref()
+                .and_then(|serial| devices.get(serial).cloned());
+        }
     }
 
     if with_add_data {
-        session.fetch_additional_data_relationship_in(conn)?;
+        for add_data in AdditionalDataRepository::select()
+            .where_(Where::In(
+                additional_data::entity::columns::SESSION,
+                dates.clone(),
+            ))
+            .fetch_in(conn)?
+        {
+            if let Some(session) = sessions.get_mut(&add_data.session) {
+                session.additional_data = Some(add_data);
+            }
+        }
     }
 
     if with_laps {
-        session.fetch_laps_relationship_in(conn)?;
+        for lap in LapRepository::select()
+            .where_(Where::In(lap::entity::columns::SESSION, dates))
+            .fetch_in(conn)?
+        {
+            if let Some(session) = sessions.get_mut(&lap.session) {
+                session.laps.push(lap);
+            }
+        }
     }
 
-    let condition_set: HashSet<(_, _)> =
-        session.steps.iter().map(|r| (r.ex_cat, r.ex_id)).collect();
-
-    let in_conditions: Vec<Vec<Value>> = condition_set
-        .into_iter()
-        .map(|(cat, id)| vec![cat.into(), id.into()])
+    let keys: HashSet<(u16, u16)> = sessions
+        .values()
+        .flat_map(|s| &s.steps)
+        .filter_map(|step| step.ex_cat.zip(step.ex_id))
         .collect();
-
-    let exercises = if in_conditions.is_empty() {
+    let mut exercises = if keys.is_empty() {
         Vec::new()
     } else {
-        let mut exercises = ExerciseRepository::select()
+        ExerciseRepository::select()
             .where_(Where::InMultiple(
                 vec![
                     exercise::entity::columns::CATEGORY,
                     exercise::entity::columns::ID,
                 ],
-                in_conditions,
+                keys.iter()
+                    .map(|(cat, id)| vec![(*cat).into(), (*id).into()])
+                    .collect(),
             ))
-            .fetch_in(conn)?;
-
-        for exercise in &mut exercises {
-            exercise.fetch_muscles_relationship_in(conn)?;
-        }
-
-        exercises
+            .fetch_in(conn)?
     };
-    session.steps.sort_by_key(|s| s.idx);
-    session.laps.sort_by_key(|l| l.idx);
+    fetch_exercises_muscles(conn, &mut exercises)?;
+    let exercises: HashMap<(u16, u16), Exercise> = exercises
+        .into_iter()
+        .map(|e| ((e.category, e.id), e))
+        .collect();
 
-    Ok(SessionDetails::from((
-        &session,
-        exercises.as_slice(),
-        session.steps.as_slice(),
-        session.laps.as_slice(),
-    )))
+    for session in sessions.values_mut() {
+        session.steps.sort_by_key(|s| s.idx);
+        session.laps.sort_by_key(|l| l.idx);
+    }
+
+    Ok(timestamps
+        .iter()
+        .map(|ts| {
+            let session = &sessions[ts];
+            // Only this session's exercises: its muscles are computed over them
+            let own_keys: HashSet<(u16, u16)> = session
+                .steps
+                .iter()
+                .filter_map(|step| step.ex_cat.zip(step.ex_id))
+                .collect();
+            let own: Vec<Exercise> = own_keys
+                .iter()
+                .filter_map(|key| exercises.get(key).cloned())
+                .collect();
+            SessionDetails::from((
+                session,
+                own.as_slice(),
+                session.steps.as_slice(),
+                session.laps.as_slice(),
+            ))
+        })
+        .collect())
 }
 
 /// Applies user edits (session notes and reps/weight/exercise of its series) and recomputes personal records.
@@ -432,10 +519,12 @@ pub async fn save_session_changes<R: Runtime>(
 
             update_prs(tx, &exercises, &[details.timestamp], Some(lang))?;
 
+            // Evaluated once: tells both which exercises now progress and whether any does
+            let suggested_after = progression_suggestions(tx)?;
             let newly_suggested = exercises
                 .iter()
-                .any(|ex| !suggested_before.contains(ex) && has_suggestion(tx, *ex));
-            Ok((newly_suggested, any_progression_suggestion(tx)?))
+                .any(|ex| !suggested_before.contains(ex) && suggested_after.contains(ex));
+            Ok((newly_suggested, !suggested_after.is_empty()))
         })
     })
     .await;
@@ -709,12 +798,9 @@ pub fn import_file_list<'a>(
         });
         update_prs(tx, &handled_exercises, &success, Some(lang))?;
 
-        if handled_exercises.iter().any(|(cat, id)| {
-            fetch_progression_suggestion(tx, *cat, *id)
-                .ok()
-                .flatten()
-                .is_some()
-        }) {
+        // Evaluated once: tells both whether the imported exercises progress and whether any does
+        let suggested = progression_suggestions(tx)?;
+        if handled_exercises.iter().any(|e| suggested.contains(e)) {
             show_notification(NotificationDefinition {
                 title: translate("progression_available", lang),
                 body: translate("progression_available_msg", lang),
@@ -722,7 +808,7 @@ pub fn import_file_list<'a>(
             });
         }
 
-        any_progression = Some(any_progression_suggestion(tx)?);
+        any_progression = Some(!suggested.is_empty());
     }
 
     Ok(ImportedFiles {

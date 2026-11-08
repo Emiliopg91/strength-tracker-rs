@@ -13,6 +13,7 @@ use crate::{
         session_step::{SessionStep, SessionStepRepository},
         settings::{Settings, SettingsRepository},
         workout::{Workout, WorkoutRepository},
+        workout_step::{WorkoutStep, WorkoutStepRepository},
     },
     dto::sessions::SessionStepDto,
     utils::translations::{Languages, translate},
@@ -35,8 +36,12 @@ impl Export {
         db.run_in_connection(|conn| {
             let body_metrics = BodyMetricRepository::select().fetch_in(conn)?;
             let mut workouts = WorkoutRepository::select().fetch_in(conn)?;
+            let mut steps: HashMap<String, Vec<WorkoutStep>> = HashMap::new();
+            for step in WorkoutStepRepository::select().fetch_in(conn)? {
+                steps.entry(step.workout.clone()).or_default().push(step);
+            }
             for workout in &mut workouts {
-                workout.fetch_steps_relationship_in(conn)?;
+                workout.steps = steps.remove(&workout.name).unwrap_or_default();
             }
             let devices = DeviceRepository::select().fetch_in(conn)?;
             let settings = SettingsRepository::select().fetch_in(conn)?;

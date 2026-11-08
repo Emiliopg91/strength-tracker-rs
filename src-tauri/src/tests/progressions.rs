@@ -9,7 +9,7 @@ use crate::{
         workout_step::{StepType, WorkoutStep, WorkoutStepRepository},
     },
     dto::exercises::ProgressionSuggestion,
-    logic::exercises::fetch_progression_suggestion,
+    logic::exercises::{fetch_progression_suggestion, progression_suggestions},
     tests::common,
 };
 
@@ -399,4 +399,22 @@ fn programmed_warmup_alone_does_not_trigger_the_suggestion() {
     .unwrap();
 
     assert_eq!(suggestion(&db, BENCH), None);
+}
+
+#[test]
+fn progression_suggestions_lists_only_exercises_with_a_suggestion() {
+    let db = common::test_db();
+    configure(&db, BENCH, false, "8-10-12");
+    log_session(&db, 1, BENCH, &[(12, 100.0), (12, 100.0), (12, 100.0)]);
+    program(&db, BENCH, 100.0, 12);
+    // Logged but never programmed: nothing to raise
+    configure(&db, CABLE_ROW, false, "8-10-12");
+    log_session(&db, 2, CABLE_ROW, &[(12, 50.0), (12, 50.0)]);
+
+    let suggested = db
+        .run_in_connection(|conn| Ok(progression_suggestions(conn)?))
+        .unwrap();
+
+    assert_eq!(suggested, std::collections::HashSet::from([BENCH]));
+    assert!(suggestion(&db, CABLE_ROW).is_none());
 }

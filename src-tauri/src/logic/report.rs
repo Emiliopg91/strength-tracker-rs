@@ -1,17 +1,19 @@
 use std::{collections::BTreeSet, process::Command};
 
+use rusqlite_orm::{
+    dao::Repository,
+    types::{order_by::OrderBy, where_clause::Where},
+};
 use tauri::{AppHandle, Manager, Runtime, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_log::log::{error, info};
 
 use crate::{
     SettingsLock,
+    dao::session::{self, SessionRepository},
     dto::report::ReportData,
     logic::{
-        ask_save_path,
-        body_metrics::fetch_body_measures,
-        exercises::fetch_exercise_details,
-        report_error, run_blocking,
-        sessions::{fetch_session_details, fetch_sessions},
+        ask_save_path, body_metrics::fetch_body_measures, exercises::exercise_details,
+        report_error, run_blocking, sessions::fetch_sessions_details,
     },
     utils::translations::translate,
 };
@@ -121,21 +123,23 @@ pub async fn get_report_data<R: Runtime>(
 
     let res = run_blocking(app, move |database| {
         database.run_in_connection(|conn| {
-            let mut sessions: Vec<_> = fetch_sessions(
-                conn,
-                Some(from as i32),
-                Some(to as i32),
-                Some(STRENGTH_SPORT),
-                Some(STRENGTH_SUB_SPORT),
-            )?
-            .into_iter()
-            .collect();
-            sessions.reverse();
-
-            let session_details = sessions
+            let timestamps: Vec<u32> = SessionRepository::select()
+                .columns(&[session::entity::columns::DATE])
+                .where_(Where::And(vec![
+                    Where::Gte(session::entity::columns::DATE, from.into()),
+                    Where::Lte(session::entity::columns::DATE, to.into()),
+                    Where::Eq(session::entity::columns::SPORT, STRENGTH_SPORT.into()),
+                    Where::Eq(
+                        session::entity::columns::SUB_SPORT,
+                        STRENGTH_SUB_SPORT.into(),
+                    ),
+                ]))
+                .order_by(OrderBy::Asc(session::entity::columns::DATE))
+                .fetch_in(conn)?
                 .iter()
-                .map(|s| fetch_session_details(conn, s.timestamp, false, false))
-                .collect::<Result<Vec<_>, _>>()?;
+                .map(|row| row.get_u32(session::entity::columns::DATE.as_ref()))
+                .collect();
+            let session_details = fetch_sessions_details(conn, &timestamps, false, false)?;
 
             // Sorted and deduplicated; sets without exercise are skipped
             let trained: BTreeSet<(u16, u16)> = session_details
@@ -144,12 +148,18 @@ pub async fn get_report_data<R: Runtime>(
                 .filter_map(|set| Some((set.ex_cat?, set.ex_id?)))
                 .collect();
 
+            // Loaded once, by the first exercise needing them, and shared by the rest
+            let mut all_body_metrics = None;
             let mut exercises: Vec<_> = trained
                 .into_iter()
                 .filter_map(|(category, id)| {
-                    if let Ok(mut details) =
-                        fetch_exercise_details(conn, category, id, Some((from, to)))
-                    {
+                    if let Ok(mut details) = exercise_details(
+                        conn,
+                        category,
+                        id,
+                        Some((from, to)),
+                        &mut all_body_metrics,
+                    ) {
                         details.workouts.reverse();
                         Some(details)
                     } else {

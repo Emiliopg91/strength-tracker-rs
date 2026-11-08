@@ -11,8 +11,9 @@ use tauri_plugin_log::log::info;
 use crate::{
     ConnectLock, SettingsLock,
     dao::{
-        body_metric::{self, BodyMetricRepository},
-        exercise::{self, ExerciseRepository},
+        body_metric::{self, BodyMetric, BodyMetricRepository},
+        exercise::{self, Exercise, ExerciseRepository},
+        muscle_exercise::{self, MuscleExercise, MuscleExerciseRepository},
         session::{self, SessionRepository},
         session_step::{self, SessionStepRepository},
         workout::{self, WorkoutRepository},
@@ -58,7 +59,7 @@ pub async fn get_exercises<R: Runtime>(
                 .fetch_in(conn)?;
             let mut suggested_progressions = Vec::new();
             for exercise in &exercises {
-                if fetch_progression_suggestion(conn, exercise.category, exercise.id)?.is_some() {
+                if progression_suggestion_for(conn, exercise)?.is_some() {
                     suggested_progressions.push((exercise.category, exercise.id));
                 }
             }
@@ -141,6 +142,18 @@ pub fn fetch_exercise_details(
     id: u16,
     from_to: Option<(u32, u32)>,
 ) -> rusqlite_orm::errors::Result<ExerciseDetails> {
+    exercise_details(conn, category, id, from_to, &mut None)
+}
+
+/// Same as [`fetch_exercise_details`], taking the body metrics (newest first) from `body_metrics`,
+/// which is loaded on first need so several calls share a single query.
+pub fn exercise_details(
+    conn: &rusqlite_orm::rusqlite::Connection,
+    category: u16,
+    id: u16,
+    from_to: Option<(u32, u32)>,
+    body_metrics: &mut Option<Vec<BodyMetric>>,
+) -> rusqlite_orm::errors::Result<ExerciseDetails> {
     let mut exercise = ExerciseRepository::select_by_id_in(conn, category, id)?.unwrap();
     exercise.fetch_muscles_relationship_in(conn)?;
     let mut res = ExerciseDetails::from(&exercise);
@@ -161,17 +174,12 @@ pub fn fetch_exercise_details(
         res.weight = pr.weight.unwrap_or_default();
         res.pr_date = pr.session;
 
-        let mut conditions = Vec::new();
-        conditions.push(Where::InSub(
+        // The sessions with this exercise are exactly those of its sets
+        let session_dates: HashSet<u32> = series.iter().map(|s| s.session).collect();
+        let mut conditions = vec![Where::In(
             session::entity::columns::DATE,
-            SessionStepRepository::select()
-                .distinct(&[session_step::entity::columns::SESSION])
-                .where_(Where::And(vec![
-                    Where::Eq(session_step::entity::columns::EX_CAT, category.into()),
-                    Where::Eq(session_step::entity::columns::EX_ID, id.into()),
-                ]))
-                .to_subquery(),
-        ));
+            session_dates.into_iter().map(|d| d.into()).collect(),
+        )];
 
         if let Some((from, to)) = from_to {
             conditions.push(Where::Gte(session::entity::columns::DATE, from.into()));
@@ -194,9 +202,14 @@ pub fn fetch_exercise_details(
             })
             .collect();
 
-        let body_metrics = BodyMetricRepository::select()
-            .order_by(OrderBy::Desc(body_metric::entity::columns::DATE))
-            .fetch_in(conn)?;
+        let body_metrics = match body_metrics {
+            Some(loaded) => loaded,
+            None => body_metrics.insert(
+                BodyMetricRepository::select()
+                    .order_by(OrderBy::Desc(body_metric::entity::columns::DATE))
+                    .fetch_in(conn)?,
+            ),
+        };
 
         let mut last_session = None;
         let mut ex_str = String::new();
@@ -224,6 +237,44 @@ pub fn fetch_exercise_details(
     }
 
     Ok(res)
+}
+
+/// Fills the muscles of every exercise in a single query, instead of one per exercise as the
+/// relationship fetcher would.
+pub fn fetch_exercises_muscles(
+    conn: &rusqlite_orm::rusqlite::Connection,
+    exercises: &mut [Exercise],
+) -> rusqlite_orm::errors::Result<()> {
+    if exercises.is_empty() {
+        return Ok(());
+    }
+
+    let mut by_exercise: HashMap<(u16, u16), Vec<MuscleExercise>> = HashMap::new();
+    for muscle in MuscleExerciseRepository::select()
+        .where_(Where::InMultiple(
+            vec![
+                muscle_exercise::entity::columns::EX_CAT,
+                muscle_exercise::entity::columns::EX_ID,
+            ],
+            exercises
+                .iter()
+                .map(|e| vec![e.category.into(), e.id.into()])
+                .collect(),
+        ))
+        .fetch_in(conn)?
+    {
+        by_exercise
+            .entry((muscle.ex_cat, muscle.ex_id))
+            .or_default()
+            .push(muscle);
+    }
+
+    for exercise in exercises {
+        exercise.muscles = by_exercise
+            .remove(&(exercise.category, exercise.id))
+            .unwrap_or_default();
+    }
+    Ok(())
 }
 
 pub async fn get_exercises_catalog<R: Runtime>(
@@ -494,13 +545,40 @@ pub fn fetch_progression_suggestion(
     category: u16,
     id: u16,
 ) -> rusqlite_orm::errors::Result<Option<ProgressionSuggestion>> {
-    let Some(exercise) = ExerciseRepository::select_by_id_in(conn, category, id)? else {
-        return Ok(None);
-    };
+    match ExerciseRepository::select_by_id_in(conn, category, id)? {
+        Some(exercise) => progression_suggestion_for(conn, &exercise),
+        None => Ok(None),
+    }
+}
 
+/// Exercises with progression enabled that currently have a suggestion.
+pub fn progression_suggestions(
+    conn: &rusqlite_orm::rusqlite::Connection,
+) -> rusqlite_orm::errors::Result<HashSet<(u16, u16)>> {
+    let mut suggested = HashSet::new();
+    for exercise in ExerciseRepository::select()
+        .where_(Where::Eq(
+            exercise::entity::columns::PROGRESSION,
+            true.into(),
+        ))
+        .fetch_in(conn)?
+    {
+        if progression_suggestion_for(conn, &exercise)?.is_some() {
+            suggested.insert((exercise.category, exercise.id));
+        }
+    }
+    Ok(suggested)
+}
+
+/// Suggestion for an already loaded `exercise`, `None` if it has progression disabled.
+pub fn progression_suggestion_for(
+    conn: &rusqlite_orm::rusqlite::Connection,
+    exercise: &Exercise,
+) -> rusqlite_orm::errors::Result<Option<ProgressionSuggestion>> {
     if !exercise.progression {
         return Ok(None);
     }
+    let (category, id) = (exercise.category, exercise.id);
 
     let latest_subquery = SessionStepRepository::select()
         .columns(&[session_step::entity::columns::SESSION])
@@ -818,31 +896,20 @@ pub fn update_exercise_notes(
 pub fn any_progression_suggestion(
     conn: &rusqlite_orm::rusqlite::Connection,
 ) -> rusqlite_orm::errors::Result<bool> {
-    let exercises: Vec<(u16, u16)> = ExerciseRepository::select()
-        .columns(&[
-            exercise::entity::columns::CATEGORY,
-            exercise::entity::columns::ID,
-        ])
+    // Stops at the first suggestion; an exercise failing to evaluate counts as none
+    Ok(ExerciseRepository::select()
         .where_(Where::Eq(
             exercise::entity::columns::PROGRESSION,
             true.into(),
         ))
         .fetch_in(conn)?
         .iter()
-        .map(|r| {
-            (
-                r.get_u16(exercise::entity::columns::CATEGORY.as_ref()),
-                r.get_u16(exercise::entity::columns::ID.as_ref()),
-            )
-        })
-        .collect();
-
-    Ok(exercises.into_iter().any(|(cat, id)| {
-        fetch_progression_suggestion(conn, cat, id)
-            .ok()
-            .flatten()
-            .is_some()
-    }))
+        .any(|exercise| {
+            progression_suggestion_for(conn, exercise)
+                .ok()
+                .flatten()
+                .is_some()
+        }))
 }
 
 pub async fn available_any_progression_suggestions(app: &AppHandle) -> bool {

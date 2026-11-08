@@ -111,7 +111,7 @@ export interface MuscleExercise {
   muscle_obj: Muscle | null;
 }
 
-// From src-tauri/src/dto/exercises.rs:102
+// From src-tauri/src/dto/exercises.rs:100
 export interface ProgressionSuggestion {
   reps: number;
   weight: number;
@@ -182,7 +182,7 @@ export interface SessionListItem {
   training_load: number;
 }
 
-// From src-tauri/src/dto/sessions.rs:230
+// From src-tauri/src/dto/sessions.rs:225
 export interface SessionLocation {
   location: string;
   session: number;
@@ -203,7 +203,7 @@ export interface SessionStepDto {
   weight_ref: number | null;
 }
 
-// From src-tauri/src/dto/sessions.rs:223
+// From src-tauri/src/dto/sessions.rs:218
 export interface SessionStepsUpdate {
   notes: string | null;
   sets: SessionStepDto[];
