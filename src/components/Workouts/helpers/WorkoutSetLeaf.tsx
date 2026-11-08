@@ -69,6 +69,10 @@ export function WorkoutSetLeaf({
         exercisesCatalog.find(
             (e) => e.ex_cat == leaf.ex_cat && e.ex_id == leaf.ex_id,
         ) ?? undefined;
+    const notesPlaceholder =
+        leaf.kind == StepType.Exercise
+            ? (selected?.notes ?? undefined)
+            : undefined;
 
     const onTypeChange = (e: SelectChangeEvent<string>) => {
         onChange(WorkoutUtils.getDefaultLeaf(e.target.value as StepType));
@@ -248,10 +252,13 @@ export function WorkoutSetLeaf({
                 size="small"
                 sx={{ width: 500 }}
                 value={leaf.notes ?? ""}
+                placeholder={notesPlaceholder}
                 slotProps={{
                     htmlInput: {
                         maxLength: 200,
                     },
+                    // Keep the label shrunk so the exercise notes placeholder is visible
+                    inputLabel: notesPlaceholder ? { shrink: true } : undefined,
                 }}
                 onChange={(e) => onChange({ ...leaf, notes: e.target.value })}
             />

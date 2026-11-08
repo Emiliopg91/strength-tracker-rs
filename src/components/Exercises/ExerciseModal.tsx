@@ -18,6 +18,7 @@ import { useLoadingTask } from "@/hooks/useLoadingTask";
 import { BackendClient } from "@/utils/backend/client";
 import { WeightField } from "../Fields/WeightField";
 import { MuscleModel } from "./helpers/MuscleModel";
+import { AppContext } from "@/context/AppContext";
 
 type Props = {
     exercise: ExerciseDetails;
@@ -42,6 +43,7 @@ export function ExerciseModal({
         formatTimeDate,
         formatNumber,
     } = useContext(I18nSettingsContext);
+    const { updateExerciseNotes } = useContext(AppContext);
 
     const [unilateral, setUnilateral] = useState(exercise.unilateral);
     const [progression, setProgression] = useState(exercise.progression);
@@ -203,6 +205,7 @@ export function ExerciseModal({
             ),
         ).then(() => {
             setOriginalNotes(notes);
+            updateExerciseNotes(exercise.category, exercise.id, notes ?? "");
         });
     };
 

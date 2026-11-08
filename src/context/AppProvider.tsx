@@ -23,6 +23,10 @@ export function AppProvider({
     const [progressionsAvailable, setProgressionsAvailableVal] =
         useState(false);
     const [rawCatalog, setRawCatalog] = useState<Record<number, number[]>>({});
+    // Keyed by "<ex_cat>-<ex_id>"; only exercises with non-empty notes
+    const [exerciseNotes, setExerciseNotes] = useState<Map<string, string>>(
+        () => new Map(),
+    );
     const withLoading = useLoadingTask();
 
     const unsetProgressionsAvailable = () => {
@@ -31,6 +35,19 @@ export function AppProvider({
 
     const setProgressionsAvailable = () => {
         setProgressionsAvailableVal(true);
+    };
+
+    const updateExerciseNotes = (
+        ex_cat: number,
+        ex_id: number,
+        notes: string,
+    ) => {
+        setExerciseNotes((previous) => {
+            const next = new Map(previous);
+            if (notes) next.set(`${ex_cat}-${ex_id}`, notes);
+            else next.delete(`${ex_cat}-${ex_id}`);
+            return next;
+        });
     };
 
     const loadBackendData = useEffectEvent(() => {
@@ -48,6 +65,17 @@ export function AppProvider({
             withLoading(BackendClient.getExercisesCatalog())
                 .then(setRawCatalog)
                 .catch(() => console.warn("Could not load exercises catalog")),
+
+            withLoading(BackendClient.getExercises())
+                .then((data) => {
+                    const notes = new Map<string, string>();
+                    for (const e of data) {
+                        if (e.notes)
+                            notes.set(`${e.category}-${e.id}`, e.notes);
+                    }
+                    setExerciseNotes(notes);
+                })
+                .catch(() => console.warn("Could not load exercises notes")),
 
             withLoading(BackendClient.connectLoggedUser())
                 .then(setConnectUser)
@@ -109,6 +137,7 @@ export function AppProvider({
                 ex_cat,
                 ex_id,
                 label: translate("exercise_" + ex_cat + "_" + ex_id),
+                notes: exerciseNotes.get(`${ex_cat}-${ex_id}`) ?? null,
             });
         }
     }
@@ -126,6 +155,7 @@ export function AppProvider({
         environment,
         sessionsVersion,
         exercisesCatalog,
+        updateExerciseNotes,
         connectUser,
         progressionsAvailable,
         unsetProgressionsAvailable,

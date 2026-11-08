@@ -5,6 +5,7 @@ export type ExerciseOption = {
     label: string;
     ex_cat: number;
     ex_id: number;
+    notes: string | null;
 };
 
 interface AppContexType {
@@ -13,6 +14,7 @@ interface AppContexType {
     sessionsVersion: number;
     // Empty until loaded, or if loading failed
     exercisesCatalog: ExerciseOption[];
+    updateExerciseNotes: (ex_cat: number, ex_id: number, notes: string) => void;
     connectUser: string | null;
     progressionsAvailable: boolean;
     setProgressionsAvailable: () => void;
@@ -24,6 +26,9 @@ const defaultValue: AppContexType = {
     environment: AppEnvironment.Release,
     sessionsVersion: 0,
     exercisesCatalog: [],
+    updateExerciseNotes: () => {
+        /** */
+    },
     connectUser: null,
     progressionsAvailable: false,
     setProgressionsAvailable: () => {
