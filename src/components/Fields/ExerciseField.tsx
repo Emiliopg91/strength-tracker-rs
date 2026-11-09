@@ -31,7 +31,6 @@ export function ExerciseField({
             // ignores later values when the row gets reused for another step
             value={selected ?? (null as unknown as ExerciseOption)}
             disableClearable={!onClear}
-            groupBy={(opt) => translate("category_" + opt.ex_cat)}
             getOptionKey={(opt) => `${opt.ex_cat}-${opt.ex_id}`}
             isOptionEqualToValue={(a, b) =>
                 a.ex_cat == b.ex_cat && a.ex_id == b.ex_id
