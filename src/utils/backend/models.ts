@@ -143,6 +143,7 @@ export interface ReportData {
 export interface SessionDetails {
   active_calories: number;
   active_time: number;
+  connect_id: string | null;
   coordinates: ([number, number] | null)[];
   device: string | null;
   distance: number | null;
@@ -182,7 +183,7 @@ export interface SessionListItem {
   training_load: number;
 }
 
-// From src-tauri/src/dto/sessions.rs:225
+// From src-tauri/src/dto/sessions.rs:227
 export interface SessionLocation {
   location: string;
   session: number;
@@ -203,7 +204,7 @@ export interface SessionStepDto {
   weight_ref: number | null;
 }
 
-// From src-tauri/src/dto/sessions.rs:218
+// From src-tauri/src/dto/sessions.rs:220
 export interface SessionStepsUpdate {
   notes: string | null;
   sets: SessionStepDto[];

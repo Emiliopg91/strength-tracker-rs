@@ -6,7 +6,10 @@ use serde::{Serialize, de::DeserializeOwned};
 
 use super::error::{GarminError, Result};
 use super::http;
-use super::models::{ActivityDetails, ActivitySummary, CalendarItem, CalendarMonth, DeviceSummary};
+use super::models::{
+    ActivityDescriptionUpdate, ActivityDetails, ActivitySummary, CalendarItem, CalendarMonth,
+    DeviceSummary, ExerciseSets,
+};
 use super::tokens::OAuth2Token;
 
 /// User agent for Connect API requests
@@ -27,6 +30,10 @@ pub fn calendar_month_path(year: u16, month: u8) -> Result<String> {
         year,
         month - 1
     ))
+}
+
+fn exercise_sets_path(id: u64) -> String {
+    format!("/activity-service/activity/{}/exerciseSets", id)
 }
 
 impl GarminClient {
@@ -53,6 +60,36 @@ impl GarminClient {
 
     pub async fn get_activity(&self, token: &OAuth2Token, id: u64) -> Result<ActivityDetails> {
         self.get_json(token, &format!("/activity-service/activity/{}", id))
+            .await
+    }
+
+    /// Replace the description (notes) of activity `id`, leaving the rest of it untouched.
+    pub async fn update_activity_description(
+        &self,
+        token: &OAuth2Token,
+        id: u64,
+        description: &str,
+    ) -> Result<()> {
+        let body = ActivityDescriptionUpdate {
+            activity_id: id,
+            description,
+        };
+        self.put_json(token, &format!("/activity-service/activity/{}", id), &body)
+            .await
+    }
+
+    /// Get the sets of the strength activity `id`.
+    pub async fn get_exercise_sets(&self, token: &OAuth2Token, id: u64) -> Result<ExerciseSets> {
+        self.get_json(token, &exercise_sets_path(id)).await
+    }
+
+    /// Replace every set of the strength activity `sets.activity_id` with `sets`.
+    pub async fn update_exercise_sets(
+        &self,
+        token: &OAuth2Token,
+        sets: &ExerciseSets,
+    ) -> Result<()> {
+        self.put_json(token, &exercise_sets_path(sets.activity_id), sets)
             .await
     }
 

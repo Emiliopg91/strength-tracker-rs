@@ -110,6 +110,67 @@ pub struct ActivityDetails {
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
+/// Body of an activity update, which only changes the fields it carries
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActivityDescriptionUpdate<'a> {
+    pub activity_id: u64,
+    pub description: &'a str,
+}
+
+/// Sets of a strength activity, as both read from and written back to the exercise sets endpoint
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ExerciseSets {
+    pub activity_id: u64,
+    pub exercise_sets: Vec<ExerciseSet>,
+    /// Catch-all for unknown fields, sent back untouched on update
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+/// Kind of an exercise set. The set types are an open list, so unknown ones are kept as they came.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ExerciseSetType {
+    Active,
+    Rest,
+    #[serde(untagged)]
+    Other(String),
+}
+
+/// Set of a strength activity. The update replaces every set, so the fields not modelled here
+/// (velocity, power and range of motion metrics) are kept in `extra` to be sent back as they came.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ExerciseSet {
+    /// Exercise candidates, with the probability of each. A user pick is a single one at 100.
+    #[serde(default)]
+    pub exercises: Vec<ExerciseCandidate>,
+    /// Seconds
+    pub duration: Option<f64>,
+    pub repetition_count: Option<u16>,
+    /// Grams
+    pub weight: Option<f64>,
+    pub set_type: ExerciseSetType,
+    /// Local time without zone, such as `2026-11-09T09:53:29.0`
+    pub start_time: Option<String>,
+    pub wkt_step_index: Option<u16>,
+    /// Index of the `set` message in the FIT file
+    pub message_index: Option<u16>,
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+/// Exercise a set may be of
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ExerciseCandidate {
+    pub category: String,
+    pub name: Option<String>,
+    pub probability: f64,
+}
+
 /// Weight range response returned from the weight service
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -209,4 +270,26 @@ fn local_timestamp<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<
         .earliest()
         .map(|date| u32::try_from(date.timestamp()).map_err(D::Error::custom))
         .transpose()
+}
+
+/// Workout entry returned from the workout list and create endpoints
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkoutSummary {
+    pub workout_id: u64,
+    pub workout_name: String,
+}
+
+/// Entry of the device message queue, which Connect delivers on the device's next sync
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeviceMessage<'a> {
+    pub device_id: u64,
+    pub message_url: String,
+    pub message_type: &'a str,
+    pub message_name: &'a str,
+    pub group_name: Option<&'a str>,
+    pub priority: u8,
+    pub file_type: &'a str,
+    pub meta_data_id: u64,
 }

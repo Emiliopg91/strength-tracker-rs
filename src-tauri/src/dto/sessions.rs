@@ -47,7 +47,7 @@ impl Hash for SessionListItem {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct SessionStepDto {
     pub ex_cat: Option<u16>,
     pub ex_id: Option<u16>,
@@ -125,6 +125,7 @@ pub struct SessionDetails {
     pub secondary_muscles: Vec<String>,
 
     pub device: Option<String>,
+    pub connect_id: Option<String>,
 }
 
 /// Rounds samples to `1 / scale` precision so their JSON form stays short (e.g. `scale = 1000.0` keeps 3 decimals).
@@ -210,6 +211,7 @@ impl From<(&Session, &[Exercise], &[SessionStep], &[SessionLap])> for SessionDet
             notes,
             primary_muscles,
             secondary_muscles,
+            connect_id: value.0.connect_id.clone(),
         }
     }
 }

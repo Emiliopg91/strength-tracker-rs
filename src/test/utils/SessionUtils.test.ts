@@ -36,6 +36,7 @@ const makeDetails = (
     training_load: 0,
     primary_muscles: [],
     secondary_muscles: [],
+    connect_id: null,
     ...overrides,
 });
 

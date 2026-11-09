@@ -368,3 +368,11 @@ impl WeightUnit {
         }
     }
 }
+
+pub struct ConnectUpdateSets {
+    pub idx: u16,
+    pub reps: Option<u16>,
+    pub weight: Option<f32>,
+    pub exercise_category: String,
+    pub exercise_id: String,
+}

@@ -12,7 +12,7 @@ use tauri_plugin_log::log::{error, info};
 
 use crate::{
     ConnectLock, SettingsLock,
-    connect::client::CalendarItemType,
+    connect::{ConnectClient, client::CalendarItemType},
     dao::{
         body_metric::{self, BodyMetricRepository},
         device::{self, Device, DeviceRepository},
@@ -24,9 +24,10 @@ use crate::{
         workout_step::WorkoutStep,
     },
     dto::{
-        connect::ConnectWorkout,
+        connect::{ConnectUpdateSets, ConnectWorkout},
         devices::DeviceListItem,
         notifications::{NotificationDefinition, NotificationKind},
+        sessions::SessionStepDto,
     },
     logic::{
         notifications::show_notification,
@@ -209,7 +210,7 @@ pub async fn connect_login<R: Runtime>(
     // Released the lock first: the discovery needs it
     if user.is_some() {
         get_devices_from_connect(app).await;
-        upload_pending_connect(app).await;
+        up_to_date_connect(app).await;
     }
 
     Ok(user)
@@ -263,7 +264,7 @@ pub async fn sync_workouts_connect<R: Runtime>(
 
 /// Retries the upload of the workouts left pending for Connect, if a user is logged in.
 /// Failures are only logged, as they stay pending for the next attempt.
-pub async fn upload_pending_connect<R: Runtime>(app: &AppHandle<R>) {
+pub async fn up_to_date_connect<R: Runtime>(app: &AppHandle<R>) {
     let connect = app.state::<ConnectLock>();
     if connect.lock().await.logged_user().is_none() {
         return;
@@ -426,7 +427,22 @@ pub fn fetch_step_exercises(
     if keys.is_empty() {
         return Ok(());
     }
+    let exercises = fetch_exercises_with_category(conn, &keys)?;
 
+    for step in steps {
+        step.exercise = step
+            .ex_cat
+            .zip(step.ex_id)
+            .and_then(|key| exercises.get(&key).cloned());
+    }
+    Ok(())
+}
+
+/// Loads the exercises with the given `(category, id)` keys, with their category filled, in two queries.
+fn fetch_exercises_with_category(
+    conn: &rusqlite_orm::rusqlite::Connection,
+    keys: &BTreeSet<(u16, u16)>,
+) -> rusqlite_orm::errors::Result<HashMap<(u16, u16), Exercise>> {
     let mut exercises: HashMap<(u16, u16), Exercise> = ExerciseRepository::select()
         .where_(Where::InMultiple(
             vec![
@@ -455,14 +471,7 @@ pub fn fetch_step_exercises(
     for exercise in exercises.values_mut() {
         exercise.exercise_category = categories.get(&exercise.category).cloned();
     }
-
-    for step in steps {
-        step.exercise = step
-            .ex_cat
-            .zip(step.ex_id)
-            .and_then(|key| exercises.get(&key).cloned());
-    }
-    Ok(())
+    Ok(exercises)
 }
 
 /// Mirrors the workout-capable devices of the Connect account into the database: enrolls new
@@ -643,4 +652,111 @@ pub async fn send_to_connect<R: Runtime>(
             "Error sending workout to device",
         )),
     }
+}
+
+/// Mirrors the user edits of a session's sets on its Connect activity, if the session is linked to
+/// one and a user is logged in. Runs after the local save, so failures are only logged.
+pub async fn sync_session_sets_connect<R: Runtime>(
+    app: &AppHandle<R>,
+    timestamp: u32,
+    sets: Vec<SessionStepDto>,
+) {
+    let res = run_blocking(app, move |database| {
+        database.run_in_connection(|conn| {
+            let Some(connect_id) = SessionRepository::select()
+                .columns(&[session::entity::columns::CONNECT_ID])
+                .where_(Where::Eq(session::entity::columns::DATE, timestamp.into()))
+                .fetch_in(conn)?
+                .first()
+                .and_then(|row| {
+                    row.get_text_nullable(session::entity::columns::CONNECT_ID.as_ref())
+                })
+            else {
+                return Ok(None);
+            };
+
+            let keys: BTreeSet<(u16, u16)> =
+                sets.iter().filter_map(|s| s.ex_cat.zip(s.ex_id)).collect();
+            let names: HashMap<(u16, u16), (String, String)> =
+                fetch_exercises_with_category(conn, &keys)?
+                    .into_iter()
+                    .filter_map(|(key, exercise)| {
+                        Some((key, (exercise.exercise_category?.name, exercise.name)))
+                    })
+                    .collect();
+
+            let updates: Vec<ConnectUpdateSets> = sets
+                .iter()
+                .filter_map(|set| {
+                    let (exercise_category, exercise_id) =
+                        names.get(&set.ex_cat.zip(set.ex_id)?)?.clone();
+                    Some(ConnectUpdateSets {
+                        idx: set.idx as u16,
+                        reps: set.reps,
+                        weight: set.weight,
+                        exercise_category,
+                        exercise_id,
+                    })
+                })
+                .collect();
+            Ok(Some((connect_id, updates)))
+        })
+    })
+    .await;
+
+    let (connect_id, updates) = match res {
+        Ok(Some((connect_id, updates))) if !updates.is_empty() => (connect_id, updates),
+        Ok(_) => return,
+        Err(e) => {
+            error!(
+                "Error loading sets of session {} for Connect: {}",
+                timestamp, e
+            );
+            return;
+        }
+    };
+    let Ok(id) = connect_id.parse::<u64>() else {
+        error!("Invalid Connect activity id '{}'", connect_id);
+        return;
+    };
+
+    let connect = app.state::<ConnectLock>();
+    let mut connect = connect.lock().await;
+    if connect.logged_user().is_none() {
+        return;
+    }
+    update_session_sets(&mut connect, id, updates).await;
+}
+
+/// Applies `sets` over the current sets of the Connect activity `id` and sends them back.
+/// Sets are matched by their FIT message index, which is the local set index.
+pub async fn update_session_sets(
+    connect: &mut ConnectClient,
+    id: u64,
+    sets: Vec<ConnectUpdateSets>,
+) {
+    let Ok(mut original_sets) = connect.get_session_sets(id).await else {
+        return;
+    };
+
+    for set in &sets {
+        let Some(target) = original_sets
+            .exercise_sets
+            .iter_mut()
+            .find(|s| s.message_index == Some(set.idx))
+        else {
+            error!("Set {} not found in Connect activity {}", set.idx, id);
+            continue;
+        };
+        // Stored in kg, Connect expects grams
+        target.weight = set.weight.map(|v| (v as f64 * 1000.0).round());
+        target.repetition_count = set.reps;
+        target.exercises = vec![crate::connect::client::ExerciseCandidate {
+            category: set.exercise_category.clone(),
+            name: Some(set.exercise_id.clone()),
+            probability: 100_f64,
+        }];
+    }
+
+    let _ = connect.update_session_sets(&original_sets).await;
 }

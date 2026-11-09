@@ -38,6 +38,14 @@ pub enum ConnectError {
     CreateWorkout(#[source] crate::connect::client::GarminError),
     #[error("Error updating workout '{0}': {1}")]
     UpdateWorkout(u64, #[source] crate::connect::client::GarminError),
+    #[error("Error fetching activity '{0}': {1}")]
+    FetchActivity(u64, #[source] crate::connect::client::GarminError),
+    #[error("Error updating activity '{0}': {1}")]
+    UpdateActivity(u64, #[source] crate::connect::client::GarminError),
+    #[error("Error fetching exercise sets of activity '{0}': {1}")]
+    FetchExerciseSets(u64, #[source] crate::connect::client::GarminError),
+    #[error("Error updating exercise sets of activity '{0}': {1}")]
+    UpdateExerciseSets(u64, #[source] crate::connect::client::GarminError),
     #[error("Error sending workout '{0}' to device '{1}': {2}")]
     SendWorkout(u64, u64, #[source] crate::connect::client::GarminError),
 }

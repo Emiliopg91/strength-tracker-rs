@@ -26,6 +26,7 @@ pub struct Session {
     pub workout: Option<String>,
     pub sport: u8,
     pub sub_sport: u8,
+    pub connect_id: Option<String>,
 
     #[relationship((date, session_step::entity::columns::SESSION))]
     pub steps: Vec<SessionStep>,

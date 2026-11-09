@@ -51,6 +51,7 @@ pub fn session(date: u32) -> Session {
         data: None,
         sub_sport_obj: None,
         workout_obj: None,
+        connect_id: None,
     }
 }
 

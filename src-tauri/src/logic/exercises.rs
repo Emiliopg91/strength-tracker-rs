@@ -557,10 +557,7 @@ pub fn progression_suggestions(
 ) -> rusqlite_orm::errors::Result<HashSet<(u16, u16)>> {
     let mut suggested = HashSet::new();
     for exercise in ExerciseRepository::select()
-        .where_(Where::Eq(
-            exercise::entity::columns::PROGRESSION,
-            true.into(),
-        ))
+        .where_(progression_candidates())
         .fetch_in(conn)?
     {
         if progression_suggestion_for(conn, &exercise)?.is_some() {
@@ -568,6 +565,48 @@ pub fn progression_suggestions(
         }
     }
     Ok(suggested)
+}
+
+/// Exercises with progression enabled that could have a suggestion: performed at least once and programmed in an enabled workout.
+/// Prunes the catalog in SQL so the per-exercise checks only run for the handful of exercises actually in use.
+fn progression_candidates() -> Where<Exercise> {
+    let performed = SessionStepRepository::select()
+        .distinct(&[
+            session_step::entity::columns::EX_CAT,
+            session_step::entity::columns::EX_ID,
+        ])
+        .where_(Where::Eq(
+            session_step::entity::columns::KIND,
+            StepType::Exercise.into(),
+        ))
+        .to_subquery();
+    let programmed = WorkoutStepRepository::select()
+        .distinct(&[
+            workout_step::entity::columns::EX_CAT,
+            workout_step::entity::columns::EX_ID,
+        ])
+        .where_(Where::And(vec![
+            exercise_step(),
+            Where::InSub(
+                workout_step::entity::columns::WORKOUT,
+                WorkoutRepository::select()
+                    .columns(&[workout::entity::columns::NAME])
+                    .where_(Where::Eq(workout::entity::columns::ENABLED, true.into()))
+                    .to_subquery(),
+            ),
+        ]))
+        .to_subquery();
+    let key = || {
+        vec![
+            exercise::entity::columns::CATEGORY,
+            exercise::entity::columns::ID,
+        ]
+    };
+    Where::And(vec![
+        Where::Eq(exercise::entity::columns::PROGRESSION, true.into()),
+        Where::InMultipleSub(key(), performed),
+        Where::InMultipleSub(key(), programmed),
+    ])
 }
 
 /// Suggestion for an already loaded `exercise`, `None` if it has progression disabled.
@@ -898,10 +937,7 @@ pub fn any_progression_suggestion(
 ) -> rusqlite_orm::errors::Result<bool> {
     // Stops at the first suggestion; an exercise failing to evaluate counts as none
     Ok(ExerciseRepository::select()
-        .where_(Where::Eq(
-            exercise::entity::columns::PROGRESSION,
-            true.into(),
-        ))
+        .where_(progression_candidates())
         .fetch_in(conn)?
         .iter()
         .any(|exercise| {

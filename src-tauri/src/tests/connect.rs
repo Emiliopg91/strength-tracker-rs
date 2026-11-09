@@ -2,7 +2,11 @@ use chrono::{Local, NaiveDate, TimeZone};
 
 use crate::connect::{
     calendar_months, calendar_page_items,
-    client::{CalendarItem, CalendarItemType, CalendarMonth, api::calendar_month_path},
+    client::{
+        CalendarItem, CalendarItemType, CalendarMonth, ExerciseSetType, ExerciseSets,
+        api::calendar_month_path, models::ActivityDescriptionUpdate,
+    },
+    session_activity_id,
 };
 use serde_json::{Value, json};
 
@@ -591,4 +595,97 @@ fn step_exercises_are_filled_with_their_category() {
         assert_eq!(exercise.exercise_category.as_ref().map(|c| c.id), Some(0));
     }
     assert!(steps[1].exercise.is_none());
+}
+
+fn exercise_sets_fixture() -> String {
+    std::fs::read_to_string(format!(
+        "{}/src/tests/fixtures/exercise_sets.json",
+        env!("CARGO_MANIFEST_DIR")
+    ))
+    .unwrap()
+}
+
+#[test]
+fn exercise_sets_round_trip_untouched() {
+    let json = exercise_sets_fixture();
+
+    let sets: ExerciseSets = serde_json::from_str(&json).unwrap();
+
+    let original: Value = serde_json::from_str(&json).unwrap();
+    assert_eq!(serde_json::to_value(&sets).unwrap(), original);
+}
+
+#[test]
+fn exercise_sets_expose_the_modelled_fields() {
+    let sets: ExerciseSets = serde_json::from_str(&exercise_sets_fixture()).unwrap();
+
+    assert_eq!(sets.activity_id, 25017923159);
+    assert_eq!(sets.exercise_sets.len(), 45);
+
+    let deadlift = &sets.exercise_sets[2];
+    assert_eq!(deadlift.set_type, ExerciseSetType::Active);
+    assert_eq!(deadlift.repetition_count, Some(8));
+    assert_eq!(deadlift.weight, Some(76000.0));
+    assert_eq!(deadlift.message_index, Some(2));
+    assert_eq!(deadlift.wkt_step_index, Some(3));
+    assert_eq!(deadlift.exercises[0].category, "DEADLIFT");
+    assert_eq!(
+        deadlift.exercises[0].name.as_deref(),
+        Some("BARBELL_DEADLIFT")
+    );
+
+    let last = sets.exercise_sets.last().unwrap();
+    assert_eq!(last.set_type, ExerciseSetType::Rest);
+    assert!(last.exercises.is_empty());
+    assert_eq!(last.wkt_step_index, None);
+}
+
+#[test]
+fn unknown_set_type_is_kept_as_it_came() {
+    let json = json!({
+        "activityId": 1,
+        "exerciseSets": [{
+            "exercises": [], "duration": 10.0, "repetitionCount": null, "weight": null,
+            "setType": "WARMUP", "startTime": null, "wktStepIndex": null, "messageIndex": 0
+        }]
+    });
+
+    let sets: ExerciseSets = serde_json::from_value(json.clone()).unwrap();
+
+    assert_eq!(
+        sets.exercise_sets[0].set_type,
+        ExerciseSetType::Other("WARMUP".to_string())
+    );
+    assert_eq!(serde_json::to_value(&sets).unwrap(), json);
+}
+
+#[test]
+fn activity_description_update_body() {
+    let body = ActivityDescriptionUpdate {
+        activity_id: 25017923159,
+        description: "Notes",
+    };
+
+    assert_eq!(
+        serde_json::to_value(&body).unwrap(),
+        json!({"activityId": 25017923159_u64, "description": "Notes"})
+    );
+}
+
+#[test]
+fn session_activity_is_the_activity_started_with_the_session() {
+    let item = |id, item_type, start_timestamp_local| CalendarItem {
+        id,
+        item_type,
+        date: day(2026, 11, 9),
+        start_timestamp_local,
+    };
+    let items = [
+        item(Some(1), CalendarItemType::Weight, Some(1000)),
+        item(Some(2), CalendarItemType::Activity, Some(900)),
+        item(Some(3), CalendarItemType::Activity, Some(1000)),
+    ];
+
+    assert_eq!(session_activity_id(&items, 1000), Some(3));
+    assert_eq!(session_activity_id(&items, 1100), None);
 }

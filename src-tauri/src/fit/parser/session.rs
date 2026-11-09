@@ -192,6 +192,7 @@ impl TryFrom<FitParser> for Session {
             device,
             device_obj: None,
             data: additional_data,
+            connect_id: None,
         })
     }
 }

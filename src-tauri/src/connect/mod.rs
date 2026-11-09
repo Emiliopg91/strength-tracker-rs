@@ -5,8 +5,9 @@ pub mod errors;
 use crate::{
     connect::{
         client::{
-            CalendarItem, DeviceSummary, GarminClient, GarminError, OAuth1Token, OAuth2Token,
-            SsoClient, WeightEntry, WeightRange,
+            CalendarItem, CalendarItemType, DeviceMessage, DeviceSummary, ExerciseSets,
+            GarminClient, GarminError, OAuth1Token, OAuth2Token, SsoClient, WeightEntry,
+            WeightRange, WorkoutSummary,
         },
         errors::{ConnectError, Result},
     },
@@ -15,12 +16,12 @@ use crate::{
     utils::constants,
 };
 use bytes::Bytes;
-use chrono::{Datelike, Local, NaiveDate};
+use chrono::{Datelike, Local, NaiveDate, TimeZone};
 use futures_util::{
     future::BoxFuture,
     stream::{self, StreamExt, TryStreamExt},
 };
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use serde::{Serialize, de::DeserializeOwned};
 use std::{
     io::{Cursor, Read},
     sync::Arc,
@@ -75,26 +76,15 @@ pub fn calendar_page_items(
         .collect()
 }
 
-/// Workout entry returned from the workout list and create endpoints
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WorkoutSummary {
-    pub workout_id: u64,
-    pub workout_name: String,
-}
-
-/// Entry of the device message queue, which Connect delivers on the device's next sync
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct DeviceMessage<'a> {
-    device_id: u64,
-    message_url: String,
-    message_type: &'a str,
-    message_name: &'a str,
-    group_name: Option<&'a str>,
-    priority: u8,
-    file_type: &'a str,
-    meta_data_id: u64,
+/// Id of the activity of `items` that started at `timestamp`, as sessions are keyed by their start.
+pub fn session_activity_id(items: &[CalendarItem], timestamp: u32) -> Option<u64> {
+    items
+        .iter()
+        .find(|item| {
+            item.item_type == CalendarItemType::Activity
+                && item.start_timestamp_local == Some(timestamp)
+        })
+        .and_then(|item| item.id)
 }
 
 /// Asks the user for the inputs a Garmin Connect login needs. Each future resolves to `None` if
@@ -347,6 +337,146 @@ impl ConnectClient {
         info!("Listed {} calendar items.", items.len());
 
         Ok(items)
+    }
+
+    /// Id of the Connect activity of the session that started at `timestamp`, or `None` when
+    /// Connect does not have it (yet, if the device has not synced it).
+    pub async fn find_session_activity(&mut self, timestamp: u32) -> Result<Option<u64>> {
+        info!("Looking for the activity of session {}...", timestamp);
+
+        let date = Local
+            .timestamp_opt(i64::from(timestamp), 0)
+            .single()
+            .ok_or_else(|| {
+                log_error(
+                    "Error parsing session timestamp",
+                    ConnectError::InvalidTimestamp(timestamp),
+                )
+            })?
+            .date_naive();
+        let (year, month) = (date.year() as u16, date.month() as u8);
+
+        let (client, oauth2) = self.api_client(ConnectError::FetchCalendar).await?;
+        let page = with_retry(|| client.list_calendar_month(oauth2, year, month))
+            .await
+            .map_err(|e| log_error("Error fetching calendar", ConnectError::FetchCalendar(e)))?;
+
+        let id = session_activity_id(
+            &calendar_page_items(page, year, month, date, date),
+            timestamp,
+        );
+        match id {
+            Some(id) => info!("Session {} is activity {}.", timestamp, id),
+            None => info!("Session {} not found in Connect.", timestamp),
+        }
+
+        Ok(id)
+    }
+
+    /// Notes (description) of the activity `id`.
+    pub async fn get_activity_notes(&mut self, id: u64) -> Result<Option<String>> {
+        info!("Fetching notes of activity {}...", id);
+
+        let (client, oauth2) = self
+            .api_client(|e| ConnectError::FetchActivity(id, e))
+            .await?;
+        let activity = with_retry(|| client.get_activity(oauth2, id))
+            .await
+            .map_err(|e| {
+                log_error(
+                    "Error fetching activity",
+                    ConnectError::FetchActivity(id, e),
+                )
+            })?;
+        info!("Fetched notes of activity {}.", id);
+
+        Ok(activity.description.filter(|notes| !notes.is_empty()))
+    }
+
+    /// Replaces the notes (description) of the activity `id`; empty `notes` clear them.
+    pub async fn update_activity_notes(&mut self, id: u64, notes: &str) -> Result<()> {
+        info!("Updating notes of activity {}...", id);
+
+        let (client, oauth2) = self
+            .api_client(|e| ConnectError::UpdateActivity(id, e))
+            .await?;
+        // Retried: it replaces the description, so repeating it is harmless
+        with_retry(|| client.update_activity_description(oauth2, id, notes))
+            .await
+            .map_err(|e| {
+                log_error(
+                    "Error updating activity",
+                    ConnectError::UpdateActivity(id, e),
+                )
+            })?;
+        info!("Updated notes of activity {}.", id);
+
+        Ok(())
+    }
+
+    /// Sets of the strength activity `id`.
+    pub async fn get_session_sets(&mut self, id: u64) -> Result<ExerciseSets> {
+        info!("Fetching exercise sets of activity {}...", id);
+
+        let (client, oauth2) = self
+            .api_client(|e| ConnectError::FetchExerciseSets(id, e))
+            .await?;
+        let sets = with_retry(|| client.get_exercise_sets(oauth2, id))
+            .await
+            .map_err(|e| {
+                log_error(
+                    "Error fetching exercise sets",
+                    ConnectError::FetchExerciseSets(id, e),
+                )
+            })?;
+        info!(
+            "Fetched {} exercise sets of activity {}.",
+            sets.exercise_sets.len(),
+            id
+        );
+
+        Ok(sets)
+    }
+
+    /// Replaces every set of the strength activity `sets.activity_id` with `sets`, which should
+    /// come from `get_exercise_sets` so the fields not modelled are kept.
+    pub async fn update_session_sets(&mut self, sets: &ExerciseSets) -> Result<()> {
+        let id = sets.activity_id;
+        info!("Updating exercise sets of activity {}...", id);
+
+        let (client, oauth2) = self
+            .api_client(|e| ConnectError::UpdateExerciseSets(id, e))
+            .await?;
+        // Retried: it replaces the whole list, so repeating it is harmless
+        with_retry(|| client.update_exercise_sets(oauth2, sets))
+            .await
+            .map_err(|e| {
+                log_error(
+                    "Error updating exercise sets",
+                    ConnectError::UpdateExerciseSets(id, e),
+                )
+            })?;
+        info!("Updated exercise sets of activity {}.", id);
+
+        Ok(())
+    }
+
+    /// Refreshes the token if needed and builds an API client for the domain of the account.
+    /// `wrap` turns a client creation failure into the error of the calling operation.
+    async fn api_client(
+        &mut self,
+        wrap: impl FnOnce(GarminError) -> ConnectError,
+    ) -> Result<(GarminClient, &OAuth2Token)> {
+        self.refresh_token().await?;
+
+        let (Some(oauth1), Some(oauth2)) = (&self.oauth1, &self.oauth2) else {
+            return Err(ConnectError::LoginRequired());
+        };
+
+        let client = GarminClient::new(&oauth1.domain)
+            .map_err(|e| log_error("Error creating Garmin client", wrap(e)))?;
+
+        Ok((client, oauth2))
     }
 
     /// Lists every workout stored in Connect.

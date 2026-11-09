@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::{
-    SettingsLock,
+    ConnectLock, SettingsLock,
     dao::{
         device::{self, Device, DeviceRepository},
         exercise::{self, Exercise, ExerciseRepository},
@@ -25,6 +25,7 @@ use crate::{
     fit::{FitFile, parser::FitParser, writer::FitWriter},
     logic::{
         ask_open_paths, ask_save_path,
+        connect::sync_session_sets_connect,
         exercises::{
             fetch_exercises_muscles, fetch_progression_suggestion, progression_suggestions,
             update_prs,
@@ -187,6 +188,13 @@ pub async fn get_session_details<R: Runtime>(
     match res {
         Ok(details) => {
             info!("Found details for session {}", details.timestamp);
+            if details.connect_id.clone().is_none() {
+                let app_cl = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    retrieve_session_connect_id(&app_cl, details.timestamp).await;
+                });
+            }
+
             Ok(details)
         }
         Err(e) => Err(report_error(
@@ -195,6 +203,22 @@ pub async fn get_session_details<R: Runtime>(
             "error_session_details",
             "Error getting session details",
         )),
+    }
+}
+
+async fn retrieve_session_connect_id<R: Runtime>(app: &AppHandle<R>, timestamp: u32) {
+    let connect = app.state::<ConnectLock>();
+    let mut connect = connect.lock().await;
+    if connect.logged_user().is_some()
+        && let Ok(Some(id)) = connect.find_session_activity(timestamp).await
+    {
+        let _ = run_blocking(app, move |database| {
+            SessionRepository::update()
+                .where_(Where::Eq(session::entity::columns::DATE, timestamp.into()))
+                .set(session::entity::columns::CONNECT_ID, id.into())
+                .execute(database)
+        })
+        .await;
     }
 }
 
@@ -457,6 +481,7 @@ pub async fn save_session_changes<R: Runtime>(
             .to_rfc3339()
     );
     let lang = settings.read().unwrap().language;
+    let (timestamp, sets) = (details.timestamp, details.sets.clone());
 
     let res = run_blocking(app, move |database| {
         database.run_in_transaction(|tx| {
@@ -547,6 +572,11 @@ pub async fn save_session_changes<R: Runtime>(
             }
             let payload: bool = any_progression;
             let _ = app.emit("progressions_available", payload);
+
+            let app_cl = app.clone();
+            tauri::async_runtime::spawn(async move {
+                sync_session_sets_connect(&app_cl, timestamp, sets).await;
+            });
 
             Ok(())
         }
