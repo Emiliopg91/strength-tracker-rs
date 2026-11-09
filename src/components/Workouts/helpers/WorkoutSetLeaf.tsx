@@ -172,7 +172,7 @@ export function WorkoutSetLeaf({
 
     const limitControls = (
         <>
-            <FormControl size="small" sx={{ width: 140, marginRight: "20px" }}>
+            <FormControl size="small" sx={{ width: 140 }}>
                 <InputLabel id={limitLabelId}>
                     {translate("step_limit_type")}
                 </InputLabel>
@@ -240,29 +240,23 @@ export function WorkoutSetLeaf({
     );
 
     const notesBlk = (
-        <Box
-            sx={{
-                py: 1,
+        <TextField
+            label={translate("notes")}
+            type="text"
+            maxRows={1}
+            size="small"
+            sx={{ flex: 1, minWidth: 200 }}
+            value={leaf.notes ?? ""}
+            placeholder={notesPlaceholder}
+            slotProps={{
+                htmlInput: {
+                    maxLength: 200,
+                },
+                // Keep the label shrunk so the exercise notes placeholder is visible
+                inputLabel: notesPlaceholder ? { shrink: true } : undefined,
             }}
-        >
-            <TextField
-                label={translate("notes")}
-                type="text"
-                maxRows={1}
-                size="small"
-                sx={{ width: 500 }}
-                value={leaf.notes ?? ""}
-                placeholder={notesPlaceholder}
-                slotProps={{
-                    htmlInput: {
-                        maxLength: 200,
-                    },
-                    // Keep the label shrunk so the exercise notes placeholder is visible
-                    inputLabel: notesPlaceholder ? { shrink: true } : undefined,
-                }}
-                onChange={(e) => onChange({ ...leaf, notes: e.target.value })}
-            />
-        </Box>
+            onChange={(e) => onChange({ ...leaf, notes: e.target.value })}
+        />
     );
 
     const actions = (
@@ -314,55 +308,44 @@ export function WorkoutSetLeaf({
         </Box>
     );
 
-    if (!isActive) {
-        return (
-            <Box
-                sx={{
-                    display: "flex",
-                    flexWrap: "wrap",
-                    alignItems: "center",
-                    gap: 0.5,
-                    px: 2,
-                    py: 2,
-                }}
-            >
-                <Box sx={{ marginRight: "20px" }}>{typeSelect}</Box>
-                {limitControls}
-                {notesBlk}
-                {actions}
-            </Box>
-        );
-    }
-
     return (
-        <>
+        <Box
+            sx={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 1,
+                px: 1,
+                py: 1.5,
+            }}
+        >
             <Box
                 sx={{
                     display: "flex",
                     flexWrap: "wrap",
                     alignItems: "center",
                     gap: 1,
-                    px: 2,
-                    py: 2,
                 }}
             >
                 {typeSelect}
-                <ExerciseField
-                    selected={selected}
-                    error={errors.exercise}
-                    onChange={(opt) => onExerciseChange(opt!)}
-                    onClear={
-                        leaf.kind != StepType.Exercise
-                            ? () =>
-                                  onChange({
-                                      ...leaf,
-                                      ex_cat: null,
-                                      ex_id: null,
-                                  })
-                            : undefined
-                    }
-                    sx={{ width: 480 }}
-                />
+                {isActive && (
+                    <ExerciseField
+                        selected={selected}
+                        error={errors.exercise}
+                        onChange={(opt) => onExerciseChange(opt!)}
+                        onClear={
+                            leaf.kind != StepType.Exercise
+                                ? () =>
+                                      onChange({
+                                          ...leaf,
+                                          ex_cat: null,
+                                          ex_id: null,
+                                      })
+                                : undefined
+                        }
+                        sx={{ flex: 1, minWidth: 300 }}
+                    />
+                )}
+                {actions}
             </Box>
 
             <Box
@@ -370,15 +353,12 @@ export function WorkoutSetLeaf({
                     display: "flex",
                     flexWrap: "wrap",
                     alignItems: "center",
-                    gap: 0.5,
-                    px: 2,
-                    pb: 2,
+                    gap: 1,
                 }}
             >
                 {limitControls}
                 {notesBlk}
-                {actions}
             </Box>
-        </>
+        </Box>
     );
 }

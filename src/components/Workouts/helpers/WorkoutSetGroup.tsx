@@ -84,156 +84,177 @@ export function WorkoutSetGroup({
                 style={{
                     backgroundColor: "rgba(0, 0, 0, 0.15)",
                     borderRadius: "10px",
+                    padding: "0 8px 4px",
+                    marginBottom: "12px",
                 }}
             >
                 <legend>
-                    <FormControl
-                        size="small"
+                    {/* The legend breaks the border along its whole width, so the actions sit on the same line */}
+                    <Box
                         sx={{
-                            minWidth: 100,
-                            // Straddles the fieldset border, so it needs an opaque background.
-                            // --Paper-overlay is inherited from the dialog's Paper (dark-mode elevation tint).
-                            "& .MuiInputBase-root": {
-                                backgroundColor: "background.paper",
-                                backgroundImage: "var(--Paper-overlay)",
-                            },
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 1,
+                            px: 0.5,
                         }}
                     >
-                        <InputLabel id={lapsLabelId}>
-                            {translate("repeat")}
-                        </InputLabel>
-                        <Select
-                            labelId={lapsLabelId}
-                            value={group.laps}
-                            label={translate("repeat")}
-                            onChange={onLapChanged}
-                            MenuProps={{
-                                slotProps: {
-                                    paper: { style: { maxHeight: 300 } },
+                        <FormControl
+                            size="small"
+                            sx={{
+                                minWidth: 100,
+                                // Straddles the fieldset border, so it needs an opaque background.
+                                // --Paper-overlay is inherited from the dialog's Paper (dark-mode elevation tint).
+                                "& .MuiInputBase-root": {
+                                    backgroundColor: "background.paper",
+                                    backgroundImage: "var(--Paper-overlay)",
                                 },
                             }}
                         >
-                            {Array.from({ length: 50 }, (_, i) => i + 1).map(
-                                (n) => (
+                            <InputLabel id={lapsLabelId}>
+                                {translate("repeat")}
+                            </InputLabel>
+                            <Select
+                                labelId={lapsLabelId}
+                                value={group.laps}
+                                label={translate("repeat")}
+                                onChange={onLapChanged}
+                                MenuProps={{
+                                    slotProps: {
+                                        paper: { style: { maxHeight: 300 } },
+                                    },
+                                }}
+                            >
+                                {Array.from(
+                                    { length: 50 },
+                                    (_, i) => i + 1,
+                                ).map((n) => (
                                     <MenuItem key={n} value={n}>
                                         {n}
                                     </MenuItem>
-                                ),
-                            )}
-                        </Select>
-                    </FormControl>
-                </legend>
-                <Box
-                    sx={{
-                        display: "flex",
-                        flexWrap: "wrap",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        gap: 1,
-                        pb: 1,
-                    }}
-                >
-                    <Box sx={{ display: "flex", gap: 0.5 }}>
-                        <Tooltip title={translate("move_up")}>
-                            <span>
+                                ))}
+                            </Select>
+                        </FormControl>
+                        <Box sx={{ display: "flex", gap: 0.5 }}>
+                            <Tooltip title={translate("move_up")}>
+                                <span>
+                                    <IconButton
+                                        size="small"
+                                        color="inherit"
+                                        disabled={index == 0}
+                                        onClick={() =>
+                                            swapPosition(index, index - 1)
+                                        }
+                                    >
+                                        <ArrowUpwardIcon fontSize="small" />
+                                    </IconButton>
+                                </span>
+                            </Tooltip>
+                            <Tooltip title={translate("move_down")}>
+                                <span>
+                                    <IconButton
+                                        size="small"
+                                        color="inherit"
+                                        disabled={index == sameLevel - 1}
+                                        onClick={() =>
+                                            swapPosition(index, index + 1)
+                                        }
+                                    >
+                                        <ArrowDownwardIcon fontSize="small" />
+                                    </IconButton>
+                                </span>
+                            </Tooltip>
+                            <Tooltip title={translate("add_step")}>
                                 <IconButton
-                                    color="inherit"
-                                    disabled={index == 0}
-                                    onClick={() =>
-                                        swapPosition(index, index - 1)
+                                    size="small"
+                                    onClick={(e) =>
+                                        setAddMenuAnchor(e.currentTarget)
                                     }
                                 >
-                                    <ArrowUpwardIcon />
+                                    <AddCircleOutlineRoundedIcon fontSize="small" />
                                 </IconButton>
-                            </span>
-                        </Tooltip>
-                        <Tooltip title={translate("move_down")}>
-                            <span>
-                                <IconButton
-                                    color="inherit"
-                                    disabled={index == sameLevel - 1}
-                                    onClick={() =>
-                                        swapPosition(index, index + 1)
-                                    }
+                            </Tooltip>
+                            <Menu
+                                anchorEl={addMenuAnchor}
+                                open={Boolean(addMenuAnchor)}
+                                onClose={() => setAddMenuAnchor(null)}
+                                anchorOrigin={{
+                                    vertical: "bottom",
+                                    horizontal: "right",
+                                }}
+                                transformOrigin={{
+                                    vertical: "top",
+                                    horizontal: "right",
+                                }}
+                            >
+                                <MenuItem
+                                    onClick={() => addStep(StepType.Exercise)}
                                 >
-                                    <ArrowDownwardIcon />
-                                </IconButton>
-                            </span>
-                        </Tooltip>
-                        <Tooltip title={translate("add_step")}>
-                            <IconButton
-                                onClick={(e) =>
-                                    setAddMenuAnchor(e.currentTarget)
-                                }
-                            >
-                                <AddCircleOutlineRoundedIcon />
-                            </IconButton>
-                        </Tooltip>
-                        <Menu
-                            anchorEl={addMenuAnchor}
-                            open={Boolean(addMenuAnchor)}
-                            onClose={() => setAddMenuAnchor(null)}
-                            anchorOrigin={{
-                                vertical: "bottom",
-                                horizontal: "right",
-                            }}
-                            transformOrigin={{
-                                vertical: "top",
-                                horizontal: "right",
-                            }}
-                        >
-                            <MenuItem
-                                onClick={() => addStep(StepType.Exercise)}
-                            >
-                                <ListItemText>
-                                    {translate("step_type_exercise")}
-                                </ListItemText>
-                            </MenuItem>
-                            <MenuItem onClick={() => addStep(StepType.Warmup)}>
-                                <ListItemText>
-                                    {translate("step_type_warmup")}
-                                </ListItemText>
-                            </MenuItem>
-                            <MenuItem
-                                onClick={() => addStep(StepType.Cooldown)}
-                            >
-                                <ListItemText>
-                                    {translate("step_type_cooldown")}
-                                </ListItemText>
-                            </MenuItem>
-                            <MenuItem
-                                onClick={() => addStep(StepType.Recovery)}
-                            >
-                                <ListItemText>
-                                    {translate("step_type_recovery")}
-                                </ListItemText>
-                            </MenuItem>
-                            <MenuItem onClick={() => addStep(StepType.Rest)}>
-                                <ListItemText>
-                                    {translate("step_type_rest")}
-                                </ListItemText>
-                            </MenuItem>
-                            <MenuItem onClick={() => addStep(StepType.Other)}>
-                                <ListItemText>
-                                    {translate("step_type_other")}
-                                </ListItemText>
-                            </MenuItem>
-                        </Menu>
-                        <Tooltip title={translate("delete")}>
-                            <span>
-                                <IconButton
-                                    color="error"
-                                    disabled={sameLevel <= 1}
-                                    onClick={onDelete}
+                                    <ListItemText>
+                                        {translate("step_type_exercise")}
+                                    </ListItemText>
+                                </MenuItem>
+                                <MenuItem
+                                    onClick={() => addStep(StepType.Warmup)}
                                 >
-                                    <ClearIcon />
-                                </IconButton>
-                            </span>
-                        </Tooltip>
+                                    <ListItemText>
+                                        {translate("step_type_warmup")}
+                                    </ListItemText>
+                                </MenuItem>
+                                <MenuItem
+                                    onClick={() => addStep(StepType.Cooldown)}
+                                >
+                                    <ListItemText>
+                                        {translate("step_type_cooldown")}
+                                    </ListItemText>
+                                </MenuItem>
+                                <MenuItem
+                                    onClick={() => addStep(StepType.Recovery)}
+                                >
+                                    <ListItemText>
+                                        {translate("step_type_recovery")}
+                                    </ListItemText>
+                                </MenuItem>
+                                <MenuItem
+                                    onClick={() => addStep(StepType.Rest)}
+                                >
+                                    <ListItemText>
+                                        {translate("step_type_rest")}
+                                    </ListItemText>
+                                </MenuItem>
+                                <MenuItem
+                                    onClick={() => addStep(StepType.Other)}
+                                >
+                                    <ListItemText>
+                                        {translate("step_type_other")}
+                                    </ListItemText>
+                                </MenuItem>
+                            </Menu>
+                            <Tooltip title={translate("delete")}>
+                                <span>
+                                    <IconButton
+                                        size="small"
+                                        color="error"
+                                        disabled={sameLevel <= 1}
+                                        onClick={onDelete}
+                                    >
+                                        <ClearIcon fontSize="small" />
+                                    </IconButton>
+                                </span>
+                            </Tooltip>
+                        </Box>
                     </Box>
-                </Box>
-                <Divider />
-                <Stack divider={<Divider flexItem />} sx={{ px: 1 }}>
+                </legend>
+                <Stack
+                    divider={
+                        <Divider
+                            flexItem
+                            sx={{
+                                borderBottomWidth: 2,
+                                borderColor: "rgba(255, 255, 255, 0.25)",
+                            }}
+                        />
+                    }
+                >
                     {leafs.map((leaf, idx) => (
                         <WorkoutSetLeaf
                             key={`leaf-${idx}`}
@@ -247,9 +268,7 @@ export function WorkoutSetGroup({
                         />
                     ))}
                 </Stack>
-                <Divider />
             </fieldset>
-            <br />
         </>
     );
 }
