@@ -15,13 +15,16 @@ import { useLoadingTask } from "@/hooks/useLoadingTask";
 import "@/styles/Exercises/ExercisesList.css";
 import { Button } from "@mui/material";
 
-export type ExerciseListEntry = ExerciseListItem & { used: boolean };
+/// `relevant`: it has a record or is planned in some workout; the rest of the catalog is dimmed.
+export type ExerciseListEntry = ExerciseListItem & { relevant: boolean };
 
 export function ExercisesList() {
     const loadingTask = useLoadingTask();
     const {
         sessionsVersion,
         exercisesCatalog,
+        exerciseName,
+        categoryName,
         setProgressionsAvailable,
         unsetProgressionsAvailable,
     } = useContext(AppContext);
@@ -29,47 +32,38 @@ export function ExercisesList() {
     const [exercises, setExercises] = useBackendList<ExerciseListEntry>(
         () =>
             BackendClient.getExercises().then((data) => {
-                const exercises = data
-                    .toSorted((a, b) => {
-                        return translate(
-                            "exercise_" + a.category + "_" + a.id,
-                        ).localeCompare(
-                            translate("exercise_" + b.category + "_" + b.id),
-                        );
-                    })
-                    .map((e) => ({ ...e, used: true }));
+                const byName = (a: ExerciseListItem, b: ExerciseListItem) =>
+                    exerciseName(a.category, a.id).localeCompare(
+                        exerciseName(b.category, b.id),
+                    );
 
-                const used_keys = data.map((e) => e.category + "-" + e.id);
-                const unused_exercises: ExerciseListEntry[] = [];
-                exercisesCatalog.forEach((ec) => {
-                    const key = ec.ex_cat + "-" + ec.ex_id;
-                    if (!used_keys.includes(key)) {
-                        unused_exercises.push({
-                            category: ec.ex_cat,
-                            id: ec.ex_id,
-                            date: 0,
-                            notes: null,
-                            progression: false,
-                            reps: 0,
-                            unilateral: false,
-                            weight: 0,
-                            used: false,
-                        });
-                    }
-                });
+                const listed = new Set(
+                    data.map((e) => e.category + "-" + e.id),
+                );
+                const others: ExerciseListEntry[] = exercisesCatalog
+                    .filter((ec) => !listed.has(ec.ex_cat + "-" + ec.ex_id))
+                    .map((ec) => ({
+                        category: ec.ex_cat,
+                        id: ec.ex_id,
+                        date: 0,
+                        notes: null,
+                        progression: false,
+                        reps: 0,
+                        unilateral: false,
+                        used: false,
+                        weight: 0,
+                        relevant: false,
+                    }));
 
+                // Recorded or planned exercises first, then the rest of the catalog
                 return [
-                    ...exercises,
-                    ...unused_exercises.toSorted((a, b) => {
-                        return translate(
-                            "exercise_" + a.category + "_" + a.id,
-                        ).localeCompare(
-                            translate("exercise_" + b.category + "_" + b.id),
-                        );
-                    }),
+                    ...data
+                        .map((e) => ({ ...e, relevant: true }))
+                        .toSorted(byName),
+                    ...others.toSorted(byName),
                 ];
             }),
-        // The catalog loads in the background; refetch once it arrives to list unused exercises
+        // The catalog loads in the background; refetch once it arrives to list the rest
         [sessionsVersion, exercisesCatalog.length],
     );
     const [exerciseDetails, setExerciseDetails] = useState<
@@ -117,8 +111,8 @@ export function ExercisesList() {
 
     const [filter, filteredExercises] = useFilterList(exercises, (exercise) => {
         return [
-            translate("exercise_" + exercise.category + "_" + exercise.id),
-            translate("category_" + exercise.category),
+            exerciseName(exercise.category, exercise.id),
+            categoryName(exercise.category),
             formatDate(exercise.date),
         ];
     });

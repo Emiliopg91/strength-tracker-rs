@@ -43,7 +43,8 @@ export function ExerciseModal({
         formatTimeDate,
         formatNumber,
     } = useContext(I18nSettingsContext);
-    const { updateExerciseNotes } = useContext(AppContext);
+    const { updateExerciseNotes, exerciseName, categoryName } =
+        useContext(AppContext);
 
     const [unilateral, setUnilateral] = useState(exercise.unilateral);
     const [progression, setProgression] = useState(exercise.progression);
@@ -212,7 +213,7 @@ export function ExerciseModal({
     return (
         <Dialog open={true} onClose={onClose} fullWidth maxWidth="sm">
             <DialogTitle>
-                {translate("exercise_" + exercise.category + "_" + exercise.id)}
+                {exerciseName(exercise.category, exercise.id)}
                 <IconButton onClick={onClose} className="modal-close-button">
                     <CloseIcon />
                 </IconButton>
@@ -230,11 +231,7 @@ export function ExerciseModal({
                             <tbody>
                                 <tr>
                                     <td>{translate("category")}:</td>
-                                    <td>
-                                        {translate(
-                                            "category_" + exercise.category,
-                                        )}
-                                    </td>
+                                    <td>{categoryName(exercise.category)}</td>
                                 </tr>
                                 {Object.keys(exercise.sessions).length > 0 && (
                                     <>

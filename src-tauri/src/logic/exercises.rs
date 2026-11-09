@@ -12,7 +12,8 @@ use crate::{
     ConnectLock, SettingsLock,
     dao::{
         body_metric::{self, BodyMetric, BodyMetricRepository},
-        exercise::{self, Exercise, ExerciseRepository},
+        exercise::{self, Exercise, ExerciseRepository, GENERIC_EXERCISE_ID},
+        exercise_category::ExerciseCategoryRepository,
         muscle_exercise::{self, MuscleExercise, MuscleExerciseRepository},
         session::{self, SessionRepository},
         session_step::{self, SessionStepRepository},
@@ -32,7 +33,8 @@ use crate::{
     utils::translations::{Languages, translate},
 };
 
-/// Returns every exercise in the catalog, each annotated with its current personal record.
+/// Returns the exercises with a personal record, annotated with it, plus those planned in some
+/// workout step that have none yet.
 pub async fn get_exercises<R: Runtime>(
     app: &AppHandle<R>,
     settings: &SettingsLock,
@@ -43,51 +45,90 @@ pub async fn get_exercises<R: Runtime>(
             let prs = SessionStepRepository::select()
                 .where_(Where::And(vec![
                     Where::Eq(session_step::entity::columns::PR, true.into()),
-                    Where::NotEq(session_step::entity::columns::KIND, StepType::Rest.into()),
+                    Where::NotNull(session_step::entity::columns::EX_CAT),
+                    Where::NotNull(session_step::entity::columns::EX_ID),
                 ]))
                 .fetch_in(conn)?;
-            let exercises = ExerciseRepository::select()
-                .where_(Where::And(vec![Where::InMultiple(
-                    vec![
-                        exercise::entity::columns::CATEGORY,
-                        exercise::entity::columns::ID,
-                    ],
-                    prs.iter()
-                        .map(|e| vec![e.ex_cat.into(), e.ex_id.into()])
-                        .collect(),
-                )]))
-                .fetch_in(conn)?;
-            let mut suggested_progressions = Vec::new();
-            for exercise in &exercises {
-                if progression_suggestion_for(conn, exercise)?.is_some() {
-                    suggested_progressions.push((exercise.category, exercise.id));
+            let pr_keys: HashSet<(u16, u16)> = prs
+                .iter()
+                .filter_map(|s| Some((s.ex_cat?, s.ex_id?)))
+                .collect();
+
+            let mut planned: Vec<(u16, u16)> = WorkoutStepRepository::select()
+                .where_(Where::And(vec![
+                    Where::NotNull(workout_step::entity::columns::EX_CAT),
+                    Where::NotNull(workout_step::entity::columns::EX_ID),
+                ]))
+                .fetch_in(conn)?
+                .iter()
+                .filter_map(|s| Some((s.ex_cat?, s.ex_id?)))
+                .filter(|key| !pr_keys.contains(key))
+                .collect::<HashSet<_>>()
+                .into_iter()
+                .collect();
+            planned.sort();
+
+            let keys: Vec<_> = pr_keys.iter().chain(planned.iter()).collect();
+            let exercises: HashMap<(u16, u16), Exercise> = if keys.is_empty() {
+                HashMap::new()
+            } else {
+                ExerciseRepository::select()
+                    .where_(Where::InMultiple(
+                        vec![
+                            exercise::entity::columns::CATEGORY,
+                            exercise::entity::columns::ID,
+                        ],
+                        keys.iter().map(|k| vec![k.0.into(), k.1.into()]).collect(),
+                    ))
+                    .fetch_in(conn)?
+                    .into_iter()
+                    .map(|e| ((e.category, e.id), e))
+                    .collect()
+            };
+
+            let mut suggested_progressions = HashSet::new();
+            for (key, exercise) in &exercises {
+                if pr_keys.contains(key) && progression_suggestion_for(conn, exercise)?.is_some() {
+                    suggested_progressions.insert(*key);
                 }
             }
 
-            Ok(prs
+            let mut items: Vec<_> = prs
                 .iter()
-                .map(|pr| ExerciseListItem {
-                    category: pr.ex_cat.unwrap(),
-                    id: pr.ex_id.unwrap(),
-                    // Rest steps, the only ones without these, can't be personal records
-                    reps: pr.reps.unwrap_or_default(),
-                    weight: pr.weight.unwrap_or_default(),
-                    date: pr.session,
-                    unilateral: exercises
-                        .iter()
-                        .find(|e| e.category == pr.ex_cat.unwrap() && e.id == pr.ex_id.unwrap())
-                        .unwrap()
-                        .unilateral,
-                    progression: suggested_progressions
-                        .contains(&(pr.ex_cat.unwrap(), pr.ex_id.unwrap())),
-                    notes: exercises
-                        .iter()
-                        .find(|e| e.category == pr.ex_cat.unwrap() && e.id == pr.ex_id.unwrap())
-                        .unwrap()
-                        .notes
-                        .clone(),
+                .map(|pr| {
+                    let key = (pr.ex_cat.unwrap(), pr.ex_id.unwrap());
+                    let exercise = exercises.get(&key);
+                    ExerciseListItem {
+                        category: key.0,
+                        id: key.1,
+                        reps: pr.reps.unwrap_or_default(),
+                        weight: pr.weight.unwrap_or_default(),
+                        date: pr.session,
+                        unilateral: exercise.is_some_and(|e| e.unilateral),
+                        progression: suggested_progressions.contains(&key),
+                        notes: exercise.and_then(|e| e.notes.clone()),
+                        used: true,
+                    }
                 })
-                .collect::<Vec<_>>())
+                .collect();
+
+            // Planned exercises may not have been recorded yet, so they can lack a catalog row
+            items.extend(planned.iter().map(|key| match exercises.get(key) {
+                Some(exercise) => ExerciseListItem::from(exercise),
+                None => ExerciseListItem {
+                    category: key.0,
+                    id: key.1,
+                    reps: 0,
+                    weight: 0.0,
+                    date: 0,
+                    unilateral: false,
+                    progression: false,
+                    notes: None,
+                    used: false,
+                },
+            }));
+
+            Ok(items)
         })
     })
     .await;
@@ -168,8 +209,9 @@ pub fn exercise_details(
         ]),
     )?;
 
-    if !series.is_empty() {
-        let pr = series.iter().find(|s| s.pr).unwrap();
+    if !series.is_empty()
+        && let Some(pr) = series.iter().find(|s| s.pr)
+    {
         res.reps = pr.reps.unwrap_or_default();
         res.weight = pr.weight.unwrap_or_default();
         res.pr_date = pr.session;
@@ -281,19 +323,42 @@ pub async fn get_exercises_catalog<R: Runtime>(
     app: &AppHandle<R>,
 ) -> Result<HashMap<u16, Vec<u16>>, String> {
     run_blocking(app, |db| {
-        let mut catalog: HashMap<u16, Vec<u16>> = HashMap::new();
-
-        ExerciseRepository::select()
-            .fetch(db)?
-            .iter()
-            .for_each(|e| {
-                catalog.entry(e.category).or_default().push(e.id);
-            });
-
-        Ok(catalog)
+        db.run_in_connection(|conn| Ok(exercises_catalog(conn)?))
     })
     .await
     .map_err(|e: DatabaseError| e.to_string())
+}
+
+/// Exercises that can be picked, by category. The generic exercise of a category is left out when
+/// the category already has a real exercise with its same name (e.g. `SQUAT` within squats).
+pub fn exercises_catalog(
+    conn: &rusqlite_orm::rusqlite::Connection,
+) -> Result<HashMap<u16, Vec<u16>>, DatabaseError> {
+    let category_names: HashMap<u16, String> = ExerciseCategoryRepository::select()
+        .fetch_in(conn)?
+        .into_iter()
+        .map(|c| (c.id, c.name))
+        .collect();
+    let exercises = ExerciseRepository::select().fetch_in(conn)?;
+    let named_as_category: HashSet<u16> = exercises
+        .iter()
+        .filter(|e| {
+            e.id != GENERIC_EXERCISE_ID
+                && category_names
+                    .get(&e.category)
+                    .is_some_and(|name| *name == e.name)
+        })
+        .map(|e| e.category)
+        .collect();
+
+    let mut catalog: HashMap<u16, Vec<u16>> = HashMap::new();
+    for e in &exercises {
+        if e.id != GENERIC_EXERCISE_ID || !named_as_category.contains(&e.category) {
+            catalog.entry(e.category).or_default().push(e.id);
+        }
+    }
+
+    Ok(catalog)
 }
 
 #[cfg(debug_assertions)]
@@ -338,8 +403,6 @@ pub fn update_prs(
             .where_(Where::And(vec![
                 Where::Eq(session_step::entity::columns::EX_CAT, exer.0.into()),
                 Where::Eq(session_step::entity::columns::EX_ID, exer.1.into()),
-                // Warmup, recovery, cooldown... sets never count as a record
-                Where::Eq(session_step::entity::columns::KIND, StepType::Exercise.into()),
             ]))
             .order_by(OrderBy::Desc(session_step::entity::columns::WEIGHT))
             .order_by(OrderBy::Desc(session_step::entity::columns::REPS))

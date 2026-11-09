@@ -26,7 +26,7 @@ export function SessionSetsTable({
 }: Props) {
     const { translate, formatDuration } = useContext(I18nSettingsContext);
     // Without catalog the exercise name is rendered as plain text instead of a selector
-    const { exercisesCatalog } = useContext(AppContext);
+    const { exercisesCatalog, exerciseName } = useContext(AppContext);
 
     const [hasRests] = useState(
         series.find((s) => s.kind == StepType.Rest) !== undefined,
@@ -129,11 +129,9 @@ export function SessionSetsTable({
                                                 <td>
                                                     {!selected && (
                                                         <>
-                                                            {translate(
-                                                                "exercise_" +
-                                                                    serie.ex_cat +
-                                                                    "_" +
-                                                                    serie.ex_id,
+                                                            {exerciseName(
+                                                                serie.ex_cat,
+                                                                serie.ex_id,
                                                             )}
                                                         </>
                                                     )}
@@ -247,11 +245,9 @@ export function SessionSetsTable({
                                         >
                                             {!selected && (
                                                 <>
-                                                    {translate(
-                                                        "exercise_" +
-                                                            serie.ex_cat +
-                                                            "_" +
-                                                            serie.ex_id,
+                                                    {exerciseName(
+                                                        serie.ex_cat,
+                                                        serie.ex_id,
                                                     )}
                                                 </>
                                             )}

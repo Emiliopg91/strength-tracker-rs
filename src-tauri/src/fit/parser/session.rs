@@ -253,11 +253,8 @@ fn handle_set_message(msg: mesgdef::Set, sets_data: &mut Vec<(usize, u16, f32, O
 fn handle_step_message(msg: &mesgdef::WorkoutStep, exercises: &mut Vec<Option<Exercise>>) {
     if msg.exercise_category.0 != u16::MAX {
         let ex_cat = msg.exercise_category.0;
-        let ex_id = if msg.exercise_name == u16::MAX {
-            1
-        } else {
-            msg.exercise_name
-        };
+        // An invalid name is the generic exercise of the category, stored under that same id
+        let ex_id = msg.exercise_name;
 
         exercises.push(Some(Exercise {
             category: ex_cat,

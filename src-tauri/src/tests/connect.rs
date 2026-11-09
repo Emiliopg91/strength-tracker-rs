@@ -689,3 +689,17 @@ fn session_activity_is_the_activity_started_with_the_session() {
     assert_eq!(session_activity_id(&items, 1000), Some(3));
     assert_eq!(session_activity_id(&items, 1100), None);
 }
+
+#[test]
+fn generic_exercise_goes_with_its_category_only() {
+    let mut step = exercise_step(0);
+    step.ex_id = Some(crate::dao::exercise::GENERIC_EXERCISE_ID);
+    if let Some(exercise) = step.exercise.as_mut() {
+        exercise.id = crate::dao::exercise::GENERIC_EXERCISE_ID;
+        exercise.name = String::new();
+    }
+    let json = steps_json(&[step]);
+
+    assert_eq!(json[0]["category"], "BENCH_PRESS");
+    assert!(json[0].get("exerciseName").is_none());
+}

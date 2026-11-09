@@ -108,10 +108,7 @@ fn connect_activity_id_is_stored() {
         .unwrap()
         .with_activity_id(25017923159);
 
-    assert_eq!(
-        import_connect_id(&db, file).as_deref(),
-        Some("25017923159")
-    );
+    assert_eq!(import_connect_id(&db, file).as_deref(), Some("25017923159"));
 }
 
 #[test]

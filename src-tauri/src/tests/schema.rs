@@ -55,7 +55,7 @@ fn migration_26_turns_rest_flag_into_kind() {
     db.create_schema(&before).unwrap();
 
     db.run_in_transaction(|tx| {
-        common::insert_session(tx, common::session(1));
+        insert_legacy_session(tx, 1)?;
         tx.execute_batch(
             "INSERT INTO SESSION_STEP (session, idx, exercise_category, exercise_id, reps, weight, pr, rest)
              VALUES (1, 0, 0, 1, 10, 50, 0, 0), (1, 1, NULL, NULL, 0, 0, 0, 1);",
@@ -200,7 +200,7 @@ fn migration_27_nulls_reps_and_weight_only_on_rest_steps() {
     db.create_schema(&before).unwrap();
 
     db.run_in_transaction(|tx| {
-        common::insert_session(tx, common::session(1));
+        insert_legacy_session(tx, 1)?;
         tx.execute_batch(
             "INSERT INTO SESSION_STEP (session, idx, exercise_category, exercise_id, reps, weight, pr, duration, kind)
              VALUES (1, 0, 0, 1, 10, 50, 1, 60, 'Exercise'),
@@ -254,7 +254,7 @@ fn migration_27_keeps_the_children_of_rebuilt_tables() {
     db.create_schema(&before).unwrap();
 
     db.run_in_transaction(|tx| {
-        common::insert_session(tx, common::session(1));
+        insert_legacy_session(tx, 1)?;
         tx.execute_batch(
             "INSERT INTO LAP (session, idx) VALUES (1, 0);
              INSERT INTO ADDITIONAL_DATA (session, max_hr) VALUES (1, 190);
@@ -287,7 +287,12 @@ fn migration_27_keeps_the_children_of_rebuilt_tables() {
     let expected: Vec<_> = tables.iter().map(|t| count(t)).collect();
     assert!(expected.iter().all(|c| *c > 0));
 
-    db.create_schema(&schema_ddls()).unwrap();
+    // Up to 28: later migrations add catalog rows on purpose
+    let up_to_28: Vec<_> = schema_ddls()
+        .into_iter()
+        .filter(|d| d.version <= 28)
+        .collect();
+    db.create_schema(&up_to_28).unwrap();
 
     // Migration 28 renames LAP and ADDITIONAL_DATA
     let renamed = |table: &'static str| match table {
@@ -414,4 +419,28 @@ fn migration_28_drops_chart_flag_and_cascades_workout_device() {
         .execute(&db)
         .unwrap();
     assert_eq!(entries(&db), [("b".to_string(), false)]);
+}
+
+/// Inserts a session with raw SQL, using only the columns that exist before migration 28:
+/// the `Session` entity tracks the latest schema, so its inserts fail on older ones.
+fn insert_legacy_session(
+    tx: &rusqlite_orm::rusqlite::Transaction,
+    date: u32,
+) -> rusqlite_orm::rusqlite::Result<()> {
+    let session = common::session(date);
+    tx.execute(
+        "INSERT INTO SESSION (date, name, total_elapsed_time, active_time, active_calories, training_load, sport, sub_sport)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        rusqlite_orm::rusqlite::params![
+            session.date,
+            session.name,
+            session.total_elapsed_time,
+            session.active_time,
+            session.active_calories,
+            session.training_load,
+            session.sport,
+            session.sub_sport,
+        ],
+    )?;
+    Ok(())
 }

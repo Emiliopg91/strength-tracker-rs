@@ -1,3 +1,4 @@
+import { AppContext } from "@/context/AppContext";
 import { JSX, useContext } from "react";
 import PageContent from "./PageContent";
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
@@ -9,6 +10,7 @@ type Props = {
 
 export default function ContentTable({ data }: Props): JSX.Element {
     const { translate, formatTimeDate } = useContext(I18nSettingsContext);
+    const { exerciseName } = useContext(AppContext);
     return (
         <PageContent>
             <h2>{translate("content_table")}</h2>
@@ -40,11 +42,9 @@ export default function ContentTable({ data }: Props): JSX.Element {
                         <ul>
                             {data.exercises.map((exercise) => (
                                 <li key={exercise.category + "_" + exercise.id}>
-                                    {translate(
-                                        "exercise_" +
-                                            exercise.category +
-                                            "_" +
-                                            exercise.id,
+                                    {exerciseName(
+                                        exercise.category,
+                                        exercise.id,
                                     )}
                                 </li>
                             ))}

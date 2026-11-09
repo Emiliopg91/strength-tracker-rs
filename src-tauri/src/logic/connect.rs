@@ -753,7 +753,8 @@ pub async fn update_session_sets(
         target.repetition_count = set.reps;
         target.exercises = vec![crate::connect::client::ExerciseCandidate {
             category: set.exercise_category.clone(),
-            name: Some(set.exercise_id.clone()),
+            // Generic exercises go without name, just with their category
+            name: Some(set.exercise_id.clone()).filter(|name| !name.is_empty()),
             probability: 100_f64,
         }];
     }

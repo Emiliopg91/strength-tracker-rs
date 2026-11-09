@@ -5,6 +5,7 @@ use rustyfit::profile::{
 
 use crate::{
     dao::{
+        exercise::GENERIC_EXERCISE_ID,
         session::Session,
         settings::WeightUnit,
         workout::Workout,
@@ -301,5 +302,26 @@ fn session_duration_target_stays_in_seconds_after_a_round_trip() {
     assert_eq!(
         round_trip(&session, "duration_ref").steps[idx].duration_ref,
         Some(90)
+    );
+}
+
+#[test]
+fn generic_exercise_survives_a_fit_round_trip() {
+    let mut session = parse_fixture("strength_1");
+    let step = session
+        .steps
+        .iter_mut()
+        .find(|s| s.ex_cat.is_some())
+        .unwrap();
+    step.ex_cat = Some(13);
+    step.ex_id = Some(GENERIC_EXERCISE_ID);
+    let idx = step.idx;
+
+    let written = round_trip(&session, "generic");
+    let step = written.steps.iter().find(|s| s.idx == idx).unwrap();
+
+    assert_eq!(
+        (step.ex_cat, step.ex_id),
+        (Some(13), Some(GENERIC_EXERCISE_ID))
     );
 }

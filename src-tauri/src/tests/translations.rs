@@ -75,3 +75,17 @@ fn language_codes() {
         ));
     }
 }
+
+#[test]
+fn catalog_files_are_loaded() {
+    assert_eq!(
+        translate("exercise_13_65535", Languages::Spanish),
+        "Hiperextensión"
+    );
+    assert_eq!(
+        translate("category_13", Languages::English),
+        "Hyperextension"
+    );
+    assert_eq!(translate("sport_10", Languages::English), "Training");
+    assert_eq!(translate("sport_10_20", Languages::English), "Strength");
+}

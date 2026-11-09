@@ -8,6 +8,7 @@ mod dump;
 mod exercise_notes;
 mod export;
 mod fit_writer;
+mod generic_exercises;
 mod home;
 mod import;
 mod notes;

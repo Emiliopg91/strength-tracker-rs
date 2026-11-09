@@ -82,6 +82,9 @@ exercise_0_26:
 exercise_0_27:
   en: Decline barbell bench press
   es: Press de banca declinado con barra
+exercise_0_65535:
+  en: Bench press
+  es: Press banca
 exercise_1_0:
   en: 3-Way calf raise
   es: Levantamiento de gemelos tres formas
@@ -145,6 +148,9 @@ exercise_1_19:
 exercise_1_20:
   en: Standing dumbbell calf raise
   es: Elevación de gemelos de pie con mancuernas
+exercise_1_65535:
+  en: Calf raise
+  es: Elevación de talones
 exercise_2_0:
   en: Bob and weave circle
   es: Círculos con rotación y agachamiento
@@ -274,6 +280,9 @@ exercise_2_41:
 exercise_2_42:
   en: Punch
   es: Puñetazo
+exercise_2_65535:
+  en: Cardio
+  es: Cardio
 exercise_3_0:
   en: Bar holds
   es: Levantamiento de barra sostenido
@@ -301,6 +310,9 @@ exercise_3_7:
 exercise_3_8:
   en: Farmer's carry on toes
   es: Paseo del granjero de puntillas
+exercise_3_65535:
+  en: Carry
+  es: Transporte de carga
 exercise_4_0:
   en: Cable pull-through
   es: Estiramiento en polea
@@ -370,6 +382,9 @@ exercise_4_21:
 exercise_4_22:
   en: Standing stability reverse chop
   es: Leñador inverso de estabilidad de pie
+exercise_4_65535:
+  en: Chop
+  es: Leñador
 exercise_5_0:
   en: Abs jabs
   es: Puñetazos de abdominales
@@ -643,6 +658,9 @@ exercise_5_95:
 exercise_5_96:
   en: Seated side bend
   es: Flexión lateral de tronco sentado
+exercise_5_65535:
+  en: Core
+  es: Core
 exercise_6_0:
   en: Bicycle crunch
   es: Crunch de bicicleta
@@ -904,6 +922,9 @@ exercise_6_86:
 exercise_6_87:
   en: Ruck flutter kicks
   es: Tijeras cortas con mochila
+exercise_6_65535:
+  en: Crunch
+  es: Abdominal
 exercise_7_0:
   en: Alternating dumbbell biceps curl
   es: Curl de bíceps alterno con mancuerna
@@ -1057,6 +1078,9 @@ exercise_7_49:
 exercise_7_50:
   en: Seated bottle curl
   es: Curl con botella sentado
+exercise_7_65535:
+  en: Curl
+  es: Curl
 exercise_8_0:
   en: Barbell deadlift
   es: Peso muerto con barra
@@ -1132,6 +1156,9 @@ exercise_8_25:
 exercise_8_26:
   en: Ruck deadlift
   es: Peso muerto con mochila
+exercise_8_65535:
+  en: Deadlift
+  es: Peso muerto
 exercise_9_0:
   en: Cable crossover
   es: Crossover con polea
@@ -1171,6 +1198,9 @@ exercise_9_11:
 exercise_9_12:
   en: Rear delt fly
   es: Pájaros laterales
+exercise_9_65535:
+  en: Flye
+  es: Aperturas
 exercise_10_0:
   en: Barbell hip thrust on floor
   es: Levantamiento de barra sobre cadera en el suelo
@@ -1315,6 +1345,9 @@ exercise_10_48:
 exercise_10_49:
   en: Leg lift in external rotation
   es: Levantamiento de pierna con rotación externa
+exercise_10_65535:
+  en: Hip raise
+  es: Elevación de cadera
 exercise_11_0:
   en: Band side-lying leg raise
   es: Elevación de piernas tumbado de lado con cinta
@@ -1420,6 +1453,9 @@ exercise_11_33:
 exercise_11_34:
   en: Lying abduction stretch
   es: Estiramiento de abductores acostado
+exercise_11_65535:
+  en: Hip stability
+  es: Estabilidad de cadera
 exercise_12_0:
   en: Single-arm kettlebell swing
   es: Balanceo a un brazo con pesa rusa
@@ -1432,12 +1468,15 @@ exercise_12_2:
 exercise_12_3:
   en: One-arm swing
   es: Balanceo con un brazo
+exercise_12_65535:
+  en: Hip swing
+  es: Balanceo de cadera
 exercise_13_0:
   en: Back extension with opposite arm and leg reach
   es: Extensión de espalda con estiramiento de pierna y brazo opuestos
 exercise_13_1:
-  en: Hyperextension
-  es: Hiperextensión
+  en: Weighted back extension with opposite arm and leg reach
+  es: Extensión de espalda lastrada con estiramiento de pierna y brazo opuestos
 exercise_13_2:
   en: Base rotations
   es: Rotaciones de base
@@ -1549,6 +1588,9 @@ exercise_13_37:
 exercise_13_38:
   en: Cobra
   es: Cobra
+exercise_13_65535:
+  en: Hyperextension
+  es: Hiperextensión
 exercise_14_0:
   en: 45-Degree cable external rotation
   es: Rotación externa de 45 grados con polea
@@ -1672,6 +1714,9 @@ exercise_14_40:
 exercise_14_41:
   en: Straight-arm overhead
   es: Elevación sobre la cabeza con el brazo recto
+exercise_14_65535:
+  en: Lateral raise
+  es: Elevación lateral
 exercise_15_0:
   en: Leg curl
   es: Curl de pierna
@@ -1714,6 +1759,9 @@ exercise_15_12:
 exercise_15_13:
   en: Bar good morning
   es: Buenos días con barra
+exercise_15_65535:
+  en: Leg curl
+  es: Curl femoral
 exercise_16_0:
   en: Hanging knee raise
   es: Extensión de rodillas en suspensión
@@ -1780,6 +1828,9 @@ exercise_16_20:
 exercise_16_21:
   en: Weighted lateral step-over
   es: Paso lateral lastrado
+exercise_16_65535:
+  en: Leg raise
+  es: Elevación de piernas
 exercise_17_0:
   en: Overhead lunge
   es: Zancada con brazos en alto
@@ -2059,6 +2110,9 @@ exercise_17_91:
 exercise_17_92:
   en: Ruck back lunge
   es: Zancada con mochila a la espalda
+exercise_17_65535:
+  en: Lunge
+  es: Zancada
 exercise_18_0:
   en: Barbell hang power clean
   es: Cargada de potencia desde colgante con barra
@@ -2155,6 +2209,9 @@ exercise_18_31:
 exercise_18_32:
   en: Trap bar high pull
   es: Remo vertical con barra hexagonal
+exercise_18_65535:
+  en: Olympic lift
+  es: Levantamiento olímpico
 exercise_19_0:
   en: 45-Degree plank
   es: Plancha a 45 grados
@@ -2563,6 +2620,9 @@ exercise_19_134:
 exercise_19_135:
   en: Ring plank sprawls
   es: Planchas con extensión en anillas
+exercise_19_65535:
+  en: Plank
+  es: Plancha
 exercise_20_0:
   en: Alternating jump lunge
   es: Zancadas con saltos alternos
@@ -2683,6 +2743,9 @@ exercise_20_38:
 exercise_20_39:
   en: Barbell split jump
   es: Zancadas con salto con barra
+exercise_20_65535:
+  en: Plyo
+  es: Pliometría
 exercise_21_0:
   en: Banded pull-ups (progression)
   es: Dominadas con cinta (progresión)
@@ -2821,6 +2884,9 @@ exercise_21_44:
 exercise_21_45:
   en: Weighted neutral-grip pull-up
   es: Dominada lastrada con agarre neutro
+exercise_21_65535:
+  en: Pull up
+  es: Dominadas
 exercise_22_0:
   en: Chest press with band
   es: Press de tórax con banda elástica
@@ -3094,6 +3160,9 @@ exercise_22_89:
 exercise_22_90:
   en: Wall push-up
   es: Flexión en pared
+exercise_22_65535:
+  en: Push up
+  es: Flexiones
 exercise_23_0:
   en: Barbell straight-leg deadlift to row
   es: Peso muerto y remo con barra con la pierna estirada
@@ -3259,6 +3328,9 @@ exercise_23_53:
 exercise_23_54:
   en: Ruck bent-over row
   es: Remo inclinado con mochila
+exercise_23_65535:
+  en: Row
+  es: Remo
 exercise_24_0:
   en: Alternating dumbbell shoulder press
   es: Press de hombros alterno con mancuernas
@@ -3361,6 +3433,9 @@ exercise_24_33:
 exercise_24_34:
   en: Ruck press
   es: Press con mochila
+exercise_24_65535:
+  en: Shoulder press
+  es: Press de hombro
 exercise_25_0:
   en: 90-Degree cable external rotation
   es: Rotación externa de 90 grados con polea
@@ -3469,6 +3544,9 @@ exercise_25_34:
 exercise_25_35:
   en: Seated dumbbell internal rotation
   es: Rotación interna sentado con mancuerna
+exercise_25_65535:
+  en: Shoulder stability
+  es: Estabilidad de hombro
 exercise_26_0:
   en: Barbell jump shrug
   es: Encogimiento de hombros con salto y barra
@@ -3544,6 +3622,9 @@ exercise_26_23:
 exercise_26_24:
   en: Upright row
   es: Remo vertical
+exercise_26_65535:
+  en: Shrug
+  es: Encogimiento de hombros
 exercise_27_0:
   en: Alternating sit-up
   es: Abdominales alternos
@@ -3667,6 +3748,9 @@ exercise_27_39:
 exercise_27_40:
   en: Russian twist on Swiss ball
   es: Giro ruso con balón suizo
+exercise_27_65535:
+  en: Sit up
+  es: Abdominales
 exercise_28_0:
   en: Leg press
   es: Press de piernas
@@ -3985,6 +4069,9 @@ exercise_28_107:
 exercise_28_108:
   en: Ruck front squat
   es: Sentadilla con mochila al frente
+exercise_28_65535:
+  en: Squat
+  es: Sentadilla
 exercise_29_0:
   en: Burpee
   es: Burpee
@@ -4045,6 +4132,9 @@ exercise_29_19:
 exercise_29_20:
   en: Burpee
   es: Burpee
+exercise_29_65535:
+  en: Total body
+  es: Cuerpo completo
 exercise_30_0:
   en: Bench dip
   es: Fondos con bancos
@@ -4180,6 +4270,9 @@ exercise_30_43:
 exercise_30_44:
   en: Overhead triceps extension
   es: Extensión de tríceps por encima de la cabeza
+exercise_30_65535:
+  en: Triceps extension
+  es: Extensión de tríceps
 exercise_31_0:
   en: Quadruped rocking
   es: Balanceo cuadrúpedo
@@ -4450,6 +4543,9 @@ exercise_31_89:
 exercise_31_90:
   en: Upper back stretch
   es: Estiramiento de la espalda alta
+exercise_31_65535:
+  en: Warm up
+  es: Calentamiento
 exercise_32_0:
   en: Run
   es: Carrera
@@ -4471,6 +4567,9 @@ exercise_32_5:
 exercise_32_6:
   en: Warm up
   es: Calentamiento
+exercise_32_65535:
+  en: Run
+  es: Carrera
 exercise_33_0:
   en: Bike
   es: Bicicleta
@@ -4480,6 +4579,9 @@ exercise_33_1:
 exercise_33_2:
   en: Sprint
   es: Sprint
+exercise_33_65535:
+  en: Bike
+  es: Bicicleta
 exercise_35_0:
   en: Arch and curl
   es: Arco y curl
@@ -4735,6 +4837,9 @@ exercise_35_83:
 exercise_35_84:
   en: Toe touch
   es: Tocarse los dedos de los pies
+exercise_35_65535:
+  en: Move
+  es: Movimiento
 exercise_36_0:
   en: All fours pose
   es: Postura en cuatro puntos
@@ -5083,6 +5188,9 @@ exercise_36_114:
 exercise_36_115:
   en: Seated cat-cow
   es: Gato-vaca sentado
+exercise_36_65535:
+  en: Pose
+  es: Postura
 exercise_37_1:
   en: Banded ab twist
   es: Abdominales oblicuos con goma elástica
@@ -5263,6 +5371,9 @@ exercise_37_60:
 exercise_37_61:
   en: Overhead banded press
   es: Press sobre la cabeza con goma elástica
+exercise_37_65535:
+  en: Banded exercises
+  es: Ejercicios con bandas
 exercise_38_0:
   en: Battle rope alternating figure eight
   es: Número ocho alterno con cuerda de batalla
@@ -5347,12 +5458,21 @@ exercise_38_26:
 exercise_38_27:
   en: Battle rope upper cuts
   es: Ganchos con cuerda de batalla
+exercise_38_65535:
+  en: Battle rope
+  es: Cuerda de batalla
 exercise_39_0:
+  en: Elliptical
+  es: Elíptica
+exercise_39_65535:
   en: Elliptical
   es: Elíptica
 exercise_40_0:
   en: Floor climb
   es: Subida de pisos
+exercise_40_65535:
+  en: Floor climb
+  es: Escalador de suelo
 exercise_41_0:
   en: Air bike
   es: Bicicleta de aire
@@ -5362,15 +5482,24 @@ exercise_41_1:
 exercise_41_3:
   en: Stationary bike
   es: Bicicleta estática
+exercise_41_65535:
+  en: Indoor bike
+  es: Bicicleta indoor
 exercise_42_0:
   en: Rowing machine
   es: Máquina de remo
+exercise_42_65535:
+  en: Indoor row
+  es: Remo indoor
 exercise_43_0:
   en: Agility ladder
   es: Escalera de agilidad
 exercise_43_1:
   en: Speed ladder
   es: Escalera de velocidad
+exercise_43_65535:
+  en: Ladder
+  es: Escalera de agilidad
 exercise_44_0:
   en: Sandbag around the world
   es: Alrededor del mundo con saco de arena
@@ -5431,6 +5560,9 @@ exercise_44_18:
 exercise_44_19:
   en: Sandbag Zercher squat
   es: Sentadilla Zercher con saco de arena
+exercise_44_65535:
+  en: Sandbag
+  es: Saco de arena
 exercise_45_0:
   en: Sled backward drag
   es: Arrastre de trineo hacia atrás
@@ -5449,15 +5581,24 @@ exercise_45_4:
 exercise_45_5:
   en: Sled row
   es: Remo con trineo
+exercise_45_65535:
+  en: Sled
+  es: Trineo
 exercise_46_0:
   en: Sledge hammer lateral swing
   es: Giro lateral con mazo
 exercise_46_1:
   en: Sledge hammer slam
   es: Golpeo con mazo
+exercise_46_65535:
+  en: Sledge hammer
+  es: Mazo
 exercise_47_0:
   en: Stair stepper
   es: Escaladora
+exercise_47_65535:
+  en: Stair stepper
+  es: Escalador
 exercise_49_0:
   en: Suspension chest fly
   es: Apertura de pecho en suspensión
@@ -5563,18 +5704,33 @@ exercise_49_33:
 exercise_49_34:
   en: Suspension Y fly
   es: Extensión en Y en suspensión
+exercise_49_65535:
+  en: Suspension
+  es: Suspensión
 exercise_50_0:
   en: Tire flip
   es: Volteo de neumático
+exercise_50_65535:
+  en: Tire
+  es: Neumático
 exercise_52_0:
   en: Indoor track run
   es: Carrera en pista en interiores
 exercise_52_1:
   en: Treadmill
   es: Cinta
+exercise_52_65535:
+  en: Run indoor
+  es: Carrera indoor
 exercise_53_0:
   en: Bike
   es: Bicicleta
+exercise_53_65535:
+  en: Bike outdoor
+  es: Bicicleta exterior
+exercise_34_65535:
+  en: Cardio sensors
+  es: Cardio con sensores
 sport_0:
   en: Generic
   es: Genérico

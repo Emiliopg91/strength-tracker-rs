@@ -35,7 +35,7 @@ export enum DistanceUnit {
 	Miles = "Miles",
 }
 
-// From src-tauri/src/dao/exercise.rs:12
+// From src-tauri/src/dao/exercise.rs:15
 export interface Exercise {
   category: number;
   exercise_category: ExerciseCategory | null;
@@ -55,7 +55,7 @@ export interface ExerciseCategory {
   name: string;
 }
 
-// From src-tauri/src/dto/exercises.rs:41
+// From src-tauri/src/dto/exercises.rs:44
 export interface ExerciseDetails {
   category: number;
   id: number;
@@ -82,10 +82,11 @@ export interface ExerciseListItem {
   progression: boolean;
   reps: number;
   unilateral: boolean;
+  used: boolean;
   weight: number;
 }
 
-// From src-tauri/src/dto/exercises.rs:35
+// From src-tauri/src/dto/exercises.rs:38
 export interface ExerciseSession {
   series: SessionStepDto[];
   weight: number | null;
@@ -111,7 +112,7 @@ export interface MuscleExercise {
   muscle_obj: Muscle | null;
 }
 
-// From src-tauri/src/dto/exercises.rs:100
+// From src-tauri/src/dto/exercises.rs:103
 export interface ProgressionSuggestion {
   reps: number;
   weight: number;

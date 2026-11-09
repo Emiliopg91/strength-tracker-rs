@@ -203,7 +203,12 @@ impl WorkoutStep {
                             .as_ref()
                             .and_then(|e| e.exercise_category.as_ref())
                             .map(|c| c.name.clone()),
-                        exercise_name: step.exercise.as_ref().map(|e| e.name.clone()),
+                        // Generic exercises go without name, just with their category
+                        exercise_name: step
+                            .exercise
+                            .as_ref()
+                            .map(|e| e.name.clone())
+                            .filter(|name| !name.is_empty()),
                         // Rounded to 0.1, as the frontend displays it
                         weight_value: step.weight.map(|weight| {
                             (weight as f64 * 1000.0 / unit.factor * 10.0).round() / 10.0

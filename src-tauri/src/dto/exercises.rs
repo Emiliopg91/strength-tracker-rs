@@ -14,6 +14,8 @@ pub struct ExerciseListItem {
     pub unilateral: bool,
     pub progression: bool,
     pub notes: Option<String>,
+    /// Whether it has a personal record; planned-only exercises come with no record data.
+    pub used: bool,
 }
 
 impl From<&Exercise> for ExerciseListItem {
@@ -27,6 +29,7 @@ impl From<&Exercise> for ExerciseListItem {
             unilateral: value.unilateral,
             progression: false,
             notes: value.notes.clone(),
+            used: false,
         }
     }
 }

@@ -15,6 +15,9 @@ interface AppContexType {
     // Empty until loaded, or if loading failed
     exercisesCatalog: ExerciseOption[];
     updateExerciseNotes: (ex_cat: number, ex_id: number, notes: string) => void;
+    // Translated names, keyed by the Garmin names of the catalog; ids until it loads
+    exerciseName: (ex_cat: number | null, ex_id: number | null) => string;
+    categoryName: (ex_cat: number) => string;
     connectUser: string | null;
     progressionsAvailable: boolean;
     setProgressionsAvailable: () => void;
@@ -29,6 +32,9 @@ const defaultValue: AppContexType = {
     updateExerciseNotes: () => {
         /** */
     },
+    exerciseName: (ex_cat, ex_id) =>
+        ex_cat == null || ex_id == null ? "" : `${ex_cat}/${ex_id}`,
+    categoryName: (ex_cat) => `${ex_cat}`,
     connectUser: null,
     progressionsAvailable: false,
     setProgressionsAvailable: () => {

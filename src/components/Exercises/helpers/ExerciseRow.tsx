@@ -1,3 +1,4 @@
+import { AppContext } from "@/context/AppContext";
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
 import { SessionUtils } from "@/utils/SessionUtils";
 import { useContext } from "react";
@@ -13,10 +14,11 @@ type Props = {
 export function ExerciseRow({ exercise, onSelect }: Props) {
     const { translate, fromKg, getWeightUnit, formatDate, formatNumber } =
         useContext(I18nSettingsContext);
+    const { exerciseName } = useContext(AppContext);
 
     return (
         <tr
-            className={`clickable-row ${exercise.used ? "" : "unused-exercise"}`}
+            className={`clickable-row ${exercise.relevant ? "" : "unused-exercise"}`}
             onClick={() => onSelect(exercise.category, exercise.id)}
         >
             <td className="text-left" style={{ paddingLeft: "5px" }}>
@@ -25,7 +27,7 @@ export function ExerciseRow({ exercise, onSelect }: Props) {
                         <PriorityHighIcon className="warn-icon" />
                     </Tooltip>
                 )}
-                {translate("exercise_" + exercise.category + "_" + exercise.id)}
+                {exerciseName(exercise.category, exercise.id)}
             </td>
             <td>
                 {exercise.used &&

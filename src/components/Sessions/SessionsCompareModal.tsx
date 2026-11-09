@@ -1,3 +1,4 @@
+import { AppContext } from "@/context/AppContext";
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
 import { Fragment, useContext } from "react";
 import { Dialog, DialogContent, DialogTitle, IconButton } from "@mui/material";
@@ -19,6 +20,7 @@ export function SessionsCompareModal({ sessions, onClose }: Props) {
         formatTimeDate,
         formatNumber,
     } = useContext(I18nSettingsContext);
+    const { exerciseName } = useContext(AppContext);
     // Sets with exercise grouped by exercise ("cat-id"); exercises follow the order
     // of their first set across sessions
     const exercises: string[] = [];
@@ -155,9 +157,11 @@ export function SessionsCompareModal({ sessions, onClose }: Props) {
                                 style={{ textAlign: "center" }}
                             >
                                 <td className="divider-bottom-white">
-                                    {translate(
-                                        "exercise_" +
-                                            exercise.replace("-", "_"),
+                                    {exerciseName(
+                                        ...(exercise.split("-").map(Number) as [
+                                            number,
+                                            number,
+                                        ]),
                                     )}
                                 </td>
                                 {groupedSets.map((groups, idx) => (

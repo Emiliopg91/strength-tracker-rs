@@ -7,10 +7,7 @@ use rusqlite_orm::{
 };
 
 use crate::{
-    dao::{
-        session_step::{self, SessionStep, SessionStepRepository},
-        workout_step::StepType,
-    },
+    dao::session_step::{self, SessionStep, SessionStepRepository},
     logic::exercises::update_prs,
     tests::common,
 };
@@ -131,31 +128,4 @@ fn new_record_moves_the_flag() {
 
     insert_and_update(&db, vec![(2, vec![common::set(2, 0, SQUAT, 5, 105.0)])]);
     assert_eq!(pr_sets(&db), vec![(2, 0, SQUAT.0, SQUAT.1)]);
-}
-
-#[test]
-fn non_exercise_sets_are_ignored() {
-    let db = common::test_db();
-    let non_exercise = [
-        StepType::Warmup,
-        StepType::Recovery,
-        StepType::Cooldown,
-        StepType::Rest,
-        StepType::Other,
-        StepType::Repeat,
-    ];
-    let mut sets: Vec<SessionStep> = non_exercise
-        .into_iter()
-        .enumerate()
-        .map(|(i, kind)| SessionStep {
-            kind,
-            ..common::set(1, i as u8, SQUAT, 10, 200.0)
-        })
-        .collect();
-    sets.push(common::set(1, sets.len() as u8, SQUAT, 5, 100.0));
-    let exercise_idx = sets.len() as u8 - 1;
-
-    insert_and_update(&db, vec![(1, sets)]);
-
-    assert_eq!(pr_sets(&db), vec![(1, exercise_idx, SQUAT.0, SQUAT.1)]);
 }

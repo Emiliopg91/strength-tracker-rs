@@ -1,3 +1,4 @@
+import { AppContext } from "@/context/AppContext";
 import { JSX, useContext } from "react";
 import PageContent from "./PageContent";
 import NoPageBreak from "./NoPageBreak";
@@ -11,6 +12,7 @@ type Props = {
 export default function ExercisesSection({ exercises }: Props): JSX.Element {
     const { translate, formatTimeDate, fromKg, getWeightUnit, formatNumber } =
         useContext(I18nSettingsContext);
+    const { exerciseName } = useContext(AppContext);
 
     return (
         <>
@@ -24,11 +26,9 @@ export default function ExercisesSection({ exercises }: Props): JSX.Element {
                                 key={exercise.category + "-" + exercise.id}
                             >
                                 <h4>
-                                    {translate(
-                                        "exercise_" +
-                                            exercise.category +
-                                            "_" +
-                                            exercise.id,
+                                    {exerciseName(
+                                        exercise.category,
+                                        exercise.id,
                                     )}{" "}
                                     {exercise.unilateral && (
                                         <>

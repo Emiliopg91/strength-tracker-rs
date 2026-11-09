@@ -119,28 +119,30 @@ export function AppProvider({
 
     const appReady = i18nReady && (!notifyBackend || backendNotified);
 
+    const exerciseName = (ex_cat: number | null, ex_id: number | null) => {
+        if (ex_cat == null || ex_id == null) {
+            return "";
+        }
+        return translate(`exercise_${ex_cat}_${ex_id}`);
+    };
+
+    const categoryName = (ex_cat: number) => {
+        return translate(`category_${ex_cat}`);
+    };
+
     const exercisesCatalog: ExerciseOption[] = [];
-    const categoryLabels = new Map<number, string>();
     for (const [cat, ex_ids] of Object.entries(rawCatalog)) {
         const ex_cat = Number(cat);
-        categoryLabels.set(ex_cat, translate("category_" + ex_cat));
         for (const ex_id of ex_ids) {
             exercisesCatalog.push({
                 ex_cat,
                 ex_id,
-                label: translate("exercise_" + ex_cat + "_" + ex_id),
+                label: exerciseName(ex_cat, ex_id),
                 notes: exerciseNotes.get(`${ex_cat}-${ex_id}`) ?? null,
             });
         }
     }
-    // Sorted by category first, as Autocomplete's groupBy expects grouped options to be contiguous
-    exercisesCatalog.sort(
-        (a, b) =>
-            categoryLabels
-                .get(a.ex_cat)!
-                .localeCompare(categoryLabels.get(b.ex_cat)!) ||
-            a.label.localeCompare(b.label),
-    );
+    exercisesCatalog.sort((a, b) => a.label.localeCompare(b.label));
 
     const value = {
         appReady,
@@ -148,6 +150,8 @@ export function AppProvider({
         sessionsVersion,
         exercisesCatalog,
         updateExerciseNotes,
+        exerciseName,
+        categoryName,
         connectUser,
         progressionsAvailable,
         unsetProgressionsAvailable,

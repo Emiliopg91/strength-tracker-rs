@@ -15,7 +15,7 @@ type Props = {
 export default function WorkoutPrintView({
     workout: workout_name,
 }: Props): JSX.Element {
-    const { appReady } = useContext(AppContext);
+    const { appReady, exerciseName } = useContext(AppContext);
     const { translate, fromKg, formatDuration, formatNumber, getWeightUnit } =
         useContext(I18nSettingsContext);
     const [workout, setWorkout] = useState<WorkoutDetails>();
@@ -53,6 +53,7 @@ export default function WorkoutPrintView({
                         exercises,
                         unilaterals,
                         translate,
+                        exerciseName,
                         formatDuration,
                         formatNumber,
                         fromKg,
@@ -65,6 +66,7 @@ export default function WorkoutPrintView({
                         exercises,
                         unilaterals,
                         translate,
+                        exerciseName,
                         formatDuration,
                         formatNumber,
                         fromKg,
@@ -81,6 +83,7 @@ function groupToHtml(
     exercises: ExerciseListItem[],
     unilaterals: ExerciseListItem[],
     translate: (lit: string) => string,
+    exerciseName: (ex_cat: number | null, ex_id: number | null) => string,
     formatDuration: (time: number) => string,
     formatNumber: (time: number, dec: number) => string,
     fromKg: (weight: number) => number,
@@ -119,6 +122,7 @@ function groupToHtml(
                                 exercises,
                                 unilaterals,
                                 translate,
+                                exerciseName,
                                 formatDuration,
                                 formatNumber,
                                 fromKg,
@@ -138,6 +142,7 @@ function leafToHtml(
     exercises: ExerciseListItem[],
     unilaterals: ExerciseListItem[],
     translate: (lit: string) => string,
+    exerciseName: (ex_cat: number | null, ex_id: number | null) => string,
     formatDuration: (time: number) => string,
     formatNumber: (time: number, dec: number) => string,
     fromKg: (weight: number) => number,
@@ -173,11 +178,9 @@ function leafToHtml(
             <tr key={idx}>
                 <td>
                     <b>
-                        {translate(
-                            leaf.ex_cat != null
-                                ? "exercise_" + leaf.ex_cat + "_" + leaf.ex_id
-                                : "step_type_" + leaf.kind.toLowerCase(),
-                        )}
+                        {leaf.ex_cat != null
+                            ? exerciseName(leaf.ex_cat, leaf.ex_id)
+                            : translate("step_type_" + leaf.kind.toLowerCase())}
                     </b>
                 </td>
                 <td className="centered">

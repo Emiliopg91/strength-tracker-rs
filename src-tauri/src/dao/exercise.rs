@@ -6,6 +6,9 @@ use crate::dao::{
     muscle_exercise::{self, MuscleExercise},
 };
 
+/// Id of the generic exercise of each category: what FIT files carry as an invalid exercise name.
+pub const GENERIC_EXERCISE_ID: u16 = u16::MAX;
+
 #[derive(Clone, Entity, Serialize, Deserialize)]
 #[entity(hashable = true, comparable = true)]
 #[primary_key(category, id)]

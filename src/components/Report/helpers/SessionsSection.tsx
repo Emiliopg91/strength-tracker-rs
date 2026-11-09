@@ -1,3 +1,4 @@
+import { AppContext } from "@/context/AppContext";
 import { JSX, useContext } from "react";
 import PageContent from "./PageContent";
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
@@ -16,6 +17,7 @@ export default function SessionsSection({
 }: Props): JSX.Element {
     const { translate, formatTimeDate, formatDuration, fromKg, getWeightUnit } =
         useContext(I18nSettingsContext);
+    const { exerciseName } = useContext(AppContext);
 
     return (
         <PageContent>
@@ -70,12 +72,13 @@ export default function SessionsSection({
                                         </thead>
                                         <tbody>
                                             {exercises.map((exercise) => {
-                                                let name = translate(
-                                                    "exercise_" +
-                                                        exercise.replace(
-                                                            "-",
-                                                            "_",
-                                                        ),
+                                                let name = exerciseName(
+                                                    ...(exercise
+                                                        .split("-")
+                                                        .map(Number) as [
+                                                        number,
+                                                        number,
+                                                    ]),
                                                 );
                                                 if (
                                                     exercises_details.find(
