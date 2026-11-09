@@ -736,7 +736,13 @@ pub fn import_file_list<'a>(
     let (mut sessions, failed): (Vec<_>, Vec<_>) = files.par_iter().partition_map(|file| {
         info!("Parsing session file {}", file.name);
         match Session::try_from(FitParser::from_fit_file(file.clone())) {
-            Ok(session) => Either::Left(session),
+            Ok(mut session) => {
+                // Known up front when downloaded from Connect, saving the later lookup
+                if let Some(id) = file.activity_id {
+                    session.connect_id = Some(id.to_string());
+                }
+                Either::Left(session)
+            }
             Err(e) => {
                 error!("Error parsing session file {}: {}", file.name, e);
                 notify_parse_error(&file.name, &e.to_string(), lang);

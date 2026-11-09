@@ -794,7 +794,7 @@ impl ConnectClient {
                     ConnectError::ExtractActivity(id, e),
                 )
             })?;
-            files.push(FitFile::new(file_name.to_string_lossy(), fit));
+            files.push(FitFile::new(file_name.to_string_lossy(), fit).with_activity_id(id));
         }
 
         Ok(files)

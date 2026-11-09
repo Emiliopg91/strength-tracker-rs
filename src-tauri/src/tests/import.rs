@@ -86,3 +86,38 @@ fn unknown_device_is_cleared() {
 
     assert_eq!(import(&db, "strength_1"), None);
 }
+
+/// Imports the given files and returns the Connect id stored in the single session created.
+fn import_connect_id(db: &DatabasePool, file: FitFile) -> Option<String> {
+    let files = [file];
+    let imported = db
+        .run_in_transaction(|tx| Ok(import_file_list(tx, &files, Languages::English)?))
+        .unwrap();
+    assert_eq!(imported.sessions.len(), 1);
+
+    SessionRepository::select_by_id(db, imported.sessions[0])
+        .unwrap()
+        .unwrap()
+        .connect_id
+}
+
+#[test]
+fn connect_activity_id_is_stored() {
+    let db = common::test_db();
+    let file = FitFile::read(fixture_path("strength_1"))
+        .unwrap()
+        .with_activity_id(25017923159);
+
+    assert_eq!(
+        import_connect_id(&db, file).as_deref(),
+        Some("25017923159")
+    );
+}
+
+#[test]
+fn local_file_has_no_connect_id() {
+    let db = common::test_db();
+    let file = FitFile::read(fixture_path("strength_1")).unwrap();
+
+    assert_eq!(import_connect_id(&db, file), None);
+}

@@ -7,6 +7,8 @@ pub struct FitFile {
     /// File name, used to identify it in logs and as its name if it gets stored as pending.
     pub name: String,
     pub data: Vec<u8>,
+    /// Connect activity the file was downloaded from, if any.
+    pub activity_id: Option<u64>,
 }
 
 impl FitFile {
@@ -14,7 +16,14 @@ impl FitFile {
         Self {
             name: name.into(),
             data,
+            activity_id: None,
         }
+    }
+
+    /// Tags the file with the Connect activity it was downloaded from.
+    pub fn with_activity_id(mut self, id: u64) -> Self {
+        self.activity_id = Some(id);
+        self
     }
 
     /// Reads the file at `path` into memory, named after its full path.
