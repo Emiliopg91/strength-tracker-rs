@@ -372,7 +372,7 @@ export function Home() {
                                                 ) +
                                                     " - " +
                                                     translate(
-                                                        "sport_" +
+                                                        "subsport_" +
                                                             session!.sport +
                                                             "_" +
                                                             session!.sub_sport,

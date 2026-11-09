@@ -39,7 +39,7 @@ export default function SessionsSection({
                                     {translate("sport_" + session.sport) +
                                         " - " +
                                         translate(
-                                            "sport_" +
+                                            "subsport_" +
                                                 session.sport +
                                                 "_" +
                                                 session.sub_sport,

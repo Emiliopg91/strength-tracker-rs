@@ -1,0 +1,246 @@
+sport_0:
+  en: Generic
+  es: Genérico
+sport_1:
+  en: Running
+  es: Correr
+sport_2:
+  en: Cycling
+  es: Ciclismo
+sport_3:
+  en: Transition
+  es: Transición
+sport_4:
+  en: Fitness equipment
+  es: Equipo de fitness
+sport_5:
+  en: Swimming
+  es: Natación
+sport_6:
+  en: Basketball
+  es: Baloncesto
+sport_7:
+  en: Soccer
+  es: Fútbol
+sport_8:
+  en: Tennis
+  es: Tenis
+sport_9:
+  en: American football
+  es: Fútbol americano
+sport_10:
+  en: Training
+  es: Entrenamiento
+sport_11:
+  en: Walking
+  es: Caminar
+sport_12:
+  en: Cross country skiing
+  es: Esquí de fondo
+sport_13:
+  en: Alpine skiing
+  es: Esquí alpino
+sport_14:
+  en: Snowboarding
+  es: Snowboard
+sport_15:
+  en: Rowing
+  es: Remo
+sport_16:
+  en: Mountaineering
+  es: Montañismo
+sport_17:
+  en: Hiking
+  es: Senderismo
+sport_18:
+  en: Multisport
+  es: Multideporte
+sport_19:
+  en: Paddling
+  es: Piragüismo
+sport_20:
+  en: Flying
+  es: Vuelo
+sport_21:
+  en: E-biking
+  es: Bicicleta eléctrica
+sport_22:
+  en: Motorcycling
+  es: Motociclismo
+sport_23:
+  en: Boating
+  es: Navegación
+sport_24:
+  en: Driving
+  es: Conducción
+sport_25:
+  en: Golf
+  es: Golf
+sport_26:
+  en: Hang gliding
+  es: Ala delta
+sport_27:
+  en: Horseback riding
+  es: Equitación
+sport_28:
+  en: Hunting
+  es: Caza
+sport_29:
+  en: Fishing
+  es: Pesca
+sport_30:
+  en: Inline skating
+  es: Patinaje en línea
+sport_31:
+  en: Rock climbing
+  es: Escalada
+sport_32:
+  en: Sailing
+  es: Vela
+sport_33:
+  en: Ice skating
+  es: Patinaje sobre hielo
+sport_34:
+  en: Sky diving
+  es: Paracaidismo
+sport_35:
+  en: Snowshoeing
+  es: Raquetas de nieve
+sport_36:
+  en: Snowmobiling
+  es: Moto de nieve
+sport_37:
+  en: Stand up paddleboarding
+  es: Paddle surf
+sport_38:
+  en: Surfing
+  es: Surf
+sport_39:
+  en: Wakeboarding
+  es: Wakeboard
+sport_40:
+  en: Water skiing
+  es: Esquí acuático
+sport_41:
+  en: Kayaking
+  es: Kayak
+sport_42:
+  en: Rafting
+  es: Rafting
+sport_43:
+  en: Windsurfing
+  es: Windsurf
+sport_44:
+  en: Kitesurfing
+  es: Kitesurf
+sport_45:
+  en: Tactical
+  es: Táctico
+sport_46:
+  en: Jumpmaster
+  es: Jefe de salto
+sport_47:
+  en: Boxing
+  es: Boxeo
+sport_48:
+  en: Floor climbing
+  es: Escalada en suelo
+sport_49:
+  en: Baseball
+  es: Béisbol
+sport_53:
+  en: Diving
+  es: Buceo
+sport_56:
+  en: Shooting
+  es: Tiro
+sport_58:
+  en: Winter sport
+  es: Deporte de invierno
+sport_59:
+  en: Grinding
+  es: Grinding
+sport_62:
+  en: HIIT
+  es: HIIT
+sport_63:
+  en: Video gaming
+  es: Videojuegos
+sport_64:
+  en: Racket
+  es: Raqueta
+sport_65:
+  en: Wheelchair push walk
+  es: Silla de ruedas (marcha)
+sport_66:
+  en: Wheelchair push run
+  es: Silla de ruedas (carrera)
+sport_67:
+  en: Meditation
+  es: Meditación
+sport_68:
+  en: Para sport
+  es: Paradeporte
+sport_69:
+  en: Disc golf
+  es: Disc golf
+sport_70:
+  en: Team sport
+  es: Deporte de equipo
+sport_71:
+  en: Cricket
+  es: Críquet
+sport_72:
+  en: Rugby
+  es: Rugby
+sport_73:
+  en: Hockey
+  es: Hockey
+sport_74:
+  en: Lacrosse
+  es: Lacrosse
+sport_75:
+  en: Volleyball
+  es: Voleibol
+sport_76:
+  en: Water tubing
+  es: Tubing acuático
+sport_77:
+  en: Wakesurfing
+  es: Wakesurf
+sport_78:
+  en: Water sport
+  es: Deporte acuático
+sport_79:
+  en: Archery
+  es: Tiro con arco
+sport_80:
+  en: Mixed martial arts
+  es: Artes marciales mixtas
+sport_81:
+  en: Motor sports
+  es: Motorsport
+sport_82:
+  en: Snorkeling
+  es: Esnórquel
+sport_83:
+  en: Dance
+  es: Baile
+sport_84:
+  en: Jump rope
+  es: Comba
+sport_85:
+  en: Pool apnea
+  es: Apnea en piscina
+sport_86:
+  en: Mobility
+  es: Movilidad
+sport_87:
+  en: Geocaching
+  es: Geocaching
+sport_88:
+  en: Canoeing
+  es: Piragüismo (canoa)
+sport_254:
+  en: All
+  es: Todos

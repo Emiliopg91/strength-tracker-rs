@@ -89,7 +89,7 @@ fn workout_step(name: &str, idx: u16, step: &SessionStep) -> WorkoutStep {
 
 fn sport_name(session: &Session, lang: Languages) -> String {
     translate(
-        &format!("sport_{}_{}", session.sport, session.sub_sport),
+        &format!("subsport_{}_{}", session.sport, session.sub_sport),
         lang,
     )
 }

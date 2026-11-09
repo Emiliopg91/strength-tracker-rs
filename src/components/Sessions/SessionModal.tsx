@@ -120,7 +120,7 @@ export function SessionModal({ session, onClose, onUpdate }: Props) {
                         {translate("sport_" + localSession.sport) +
                             " - " +
                             translate(
-                                "sport_" +
+                                "subsport_" +
                                     localSession.sport +
                                     "_" +
                                     localSession.sub_sport,

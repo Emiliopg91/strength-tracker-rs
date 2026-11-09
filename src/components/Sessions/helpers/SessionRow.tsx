@@ -38,7 +38,7 @@ export function SessionRow({
                 {translate("sport_" + session.sport) +
                     " - " +
                     translate(
-                        "sport_" + session.sport + "_" + session.sub_sport,
+                        "subsport_" + session.sport + "_" + session.sub_sport,
                     )}
             </td>
             <td>{session.name}</td>

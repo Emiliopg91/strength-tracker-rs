@@ -1,0 +1,609 @@
+subsport_0_0:
+  en: Generic
+  es: Genérico
+subsport_0_24:
+  en: Challenge
+  es: Desafío
+subsport_0_50:
+  en: Navigate
+  es: Navegar
+subsport_0_51:
+  en: Track me
+  es: Localizarme
+subsport_0_52:
+  en: Map
+  es: Mapa
+subsport_0_58:
+  en: Virtual activity
+  es: Actividad virtual
+subsport_0_66:
+  en: Expedition
+  es: Expedición
+subsport_0_99:
+  en: Trolling motor
+  es: Motor eléctrico de pesca
+subsport_1_0:
+  en: Generic
+  es: Genérico
+subsport_1_1:
+  en: Treadmill
+  es: Cinta
+subsport_1_2:
+  en: Street
+  es: Calle
+subsport_1_3:
+  en: Trail
+  es: Trail
+subsport_1_4:
+  en: Track
+  es: Pista
+subsport_1_45:
+  en: Indoor
+  es: Carrera en interior
+subsport_1_58:
+  en: Virtual activity
+  es: Actividad virtual
+subsport_1_59:
+  en: Obstacle
+  es: Carrera de obstáculos
+subsport_1_67:
+  en: Ultra
+  es: Ultramaratón
+subsport_1_82:
+  en: Adventure race
+  es: Carrera de aventura
+subsport_2_0:
+  en: Generic
+  es: Genérico
+subsport_2_5:
+  en: Spin
+  es: Spinning
+subsport_2_6:
+  en: Indoor
+  es: Indoor
+subsport_2_7:
+  en: Road
+  es: Carretera
+subsport_2_8:
+  en: Mountain
+  es: Montaña
+subsport_2_9:
+  en: Downhill
+  es: Descenso
+subsport_2_10:
+  en: Recumbent
+  es: Reclinada
+subsport_2_11:
+  en: Cyclocross
+  es: Ciclocross
+subsport_2_12:
+  en: Hand
+  es: Handbike
+subsport_2_13:
+  en: Track
+  es: Pista
+subsport_2_29:
+  en: BMX
+  es: BMX
+subsport_2_46:
+  en: Gravel
+  es: Gravel
+subsport_2_47:
+  en: E-bike mountain
+  es: Bicicleta de montaña eléctrica
+subsport_2_48:
+  en: Commuting
+  es: Desplazamiento
+subsport_2_49:
+  en: Mixed surface
+  es: Superficie mixta
+subsport_2_58:
+  en: Virtual activity
+  es: Actividad virtual
+subsport_2_77:
+  en: Esport
+  es: Deporte electrónico
+subsport_2_88:
+  en: Indoor hand
+  es: Handbike indoor
+subsport_2_123:
+  en: Enduro
+  es: Enduro
+subsport_2_127:
+  en: E-bike enduro
+  es: Enduro eléctrico
+subsport_3_0:
+  en: Generic
+  es: Genérico
+subsport_3_32:
+  en: Bike to run
+  es: Bici-carrera
+subsport_3_33:
+  en: Run to bike
+  es: Carrera-bici
+subsport_3_34:
+  en: Swim to bike
+  es: Natación-bici
+subsport_4_0:
+  en: Generic
+  es: Genérico
+subsport_4_1:
+  en: Treadmill
+  es: Cinta de correr
+subsport_4_6:
+  en: Indoor cycling
+  es: Ciclismo indoor
+subsport_4_14:
+  en: Indoor rowing
+  es: Remo indoor
+subsport_4_15:
+  en: Elliptical
+  es: Elíptica
+subsport_4_16:
+  en: Stair climbing
+  es: Step
+subsport_4_25:
+  en: Indoor skiing
+  es: Esquí indoor
+subsport_4_27:
+  en: Indoor walking
+  es: Caminar en interior
+subsport_4_44:
+  en: Pilates
+  es: Pilates
+subsport_5_0:
+  en: Generic
+  es: Genérico
+subsport_5_17:
+  en: Lap
+  es: Piscina
+subsport_5_18:
+  en: Open water
+  es: Aguas abiertas
+subsport_6_0:
+  en: Generic
+  es: Genérico
+subsport_7_0:
+  en: Generic
+  es: Genérico
+subsport_8_0:
+  en: Generic
+  es: Genérico
+subsport_8_21:
+  en: Warm up
+  es: Calentamiento
+subsport_8_22:
+  en: Match
+  es: Partido
+subsport_8_23:
+  en: Exercise
+  es: Ejercicio
+subsport_9_0:
+  en: Generic
+  es: Genérico
+subsport_10_0:
+  en: Generic
+  es: Genérico
+subsport_10_19:
+  en: Flexibility
+  es: Flexibilidad
+subsport_10_20:
+  en: Strength
+  es: Fuerza
+subsport_10_26:
+  en: Cardio
+  es: Cardiovascular
+subsport_10_43:
+  en: Yoga
+  es: Yoga
+subsport_10_83:
+  en: Trucker workout
+  es: Camionero
+subsport_11_0:
+  en: Generic
+  es: Genérico
+subsport_11_27:
+  en: Indoor
+  es: Interior
+subsport_11_30:
+  en: Casual
+  es: Paseo
+subsport_11_31:
+  en: Speed
+  es: Marcha rápida
+subsport_12_0:
+  en: Generic
+  es: Genérico
+subsport_12_42:
+  en: Skate skiing
+  es: Esquí de patinador
+subsport_13_0:
+  en: Generic
+  es: Genérico
+subsport_13_37:
+  en: Backcountry
+  es: Fuera de pista
+subsport_13_38:
+  en: Resort
+  es: Estación
+subsport_14_0:
+  en: Generic
+  es: Genérico
+subsport_14_37:
+  en: Backcountry
+  es: Fuera de pista
+subsport_14_38:
+  en: Resort
+  es: Estación
+subsport_15_0:
+  en: Generic
+  es: Genérico
+subsport_16_0:
+  en: Generic
+  es: Genérico
+subsport_17_0:
+  en: Generic
+  es: Genérico
+subsport_17_124:
+  en: Rucking
+  es: Marcha con carga
+subsport_18_0:
+  en: Generic
+  es: Genérico
+subsport_18_78:
+  en: Triathlon
+  es: Triatlón
+subsport_18_79:
+  en: Duathlon
+  es: Duatlón
+subsport_18_80:
+  en: Brick
+  es: Brick
+subsport_18_81:
+  en: Swim run
+  es: SwimRun
+subsport_18_82:
+  en: Adventure race
+  es: Carrera de aventura
+subsport_18_126:
+  en: Pool triathlon
+  es: Triatlón en piscina
+subsport_19_0:
+  en: Generic
+  es: Genérico
+subsport_20_0:
+  en: Generic
+  es: Genérico
+subsport_20_39:
+  en: RC drone
+  es: Dron RC
+subsport_20_40:
+  en: Wingsuit
+  es: Traje aéreo
+subsport_20_110:
+  en: Fly canopy
+  es: Dosel
+subsport_20_111:
+  en: Fly paraglide
+  es: Parapente
+subsport_20_112:
+  en: Fly paramotor
+  es: Paramotor
+subsport_20_113:
+  en: Fly pressurized
+  es: Presurizado
+subsport_20_114:
+  en: Fly navigate
+  es: Navegación
+subsport_20_115:
+  en: Fly timer
+  es: Temporizador
+subsport_20_116:
+  en: Fly altimeter
+  es: Altímetro
+subsport_20_117:
+  en: Fly weather
+  es: Meteorología
+subsport_20_118:
+  en: Fly VFR
+  es: VFR
+subsport_20_119:
+  en: Fly IFR
+  es: IFR
+subsport_21_0:
+  en: Generic
+  es: Genérico
+subsport_21_28:
+  en: E-bike fitness
+  es: Fitness
+subsport_22_0:
+  en: Generic
+  es: Genérico
+subsport_22_35:
+  en: ATV
+  es: Quad
+subsport_22_36:
+  en: Motocross
+  es: Motocross
+subsport_23_0:
+  en: Generic
+  es: Genérico
+subsport_24_0:
+  en: Generic
+  es: Genérico
+subsport_24_98:
+  en: Overland
+  es: Todoterreno
+subsport_25_0:
+  en: Generic
+  es: Genérico
+subsport_26_0:
+  en: Generic
+  es: Genérico
+subsport_27_0:
+  en: Generic
+  es: Genérico
+subsport_28_0:
+  en: Generic
+  es: Genérico
+subsport_28_72:
+  en: Dogs
+  es: Perros
+subsport_29_0:
+  en: Generic
+  es: Genérico
+subsport_30_0:
+  en: Generic
+  es: Genérico
+subsport_31_0:
+  en: Generic
+  es: Genérico
+subsport_31_68:
+  en: Indoor climbing
+  es: Indoor
+subsport_31_69:
+  en: Bouldering
+  es: Búlder
+subsport_32_0:
+  en: Generic
+  es: Genérico
+subsport_32_65:
+  en: Sail race
+  es: Regata
+subsport_33_0:
+  en: Generic
+  es: Genérico
+subsport_34_0:
+  en: Generic
+  es: Genérico
+subsport_35_0:
+  en: Generic
+  es: Genérico
+subsport_36_0:
+  en: Generic
+  es: Genérico
+subsport_37_0:
+  en: Generic
+  es: Genérico
+subsport_38_0:
+  en: Generic
+  es: Genérico
+subsport_39_0:
+  en: Generic
+  es: Genérico
+subsport_40_0:
+  en: Generic
+  es: Genérico
+subsport_41_0:
+  en: Generic
+  es: Genérico
+subsport_41_41:
+  en: Whitewater
+  es: Aguas bravas
+subsport_42_0:
+  en: Generic
+  es: Genérico
+subsport_42_41:
+  en: Whitewater
+  es: Aguas bravas
+subsport_43_0:
+  en: Generic
+  es: Genérico
+subsport_44_0:
+  en: Generic
+  es: Genérico
+subsport_45_0:
+  en: Generic
+  es: Genérico
+subsport_46_0:
+  en: Generic
+  es: Genérico
+subsport_47_0:
+  en: Generic
+  es: Genérico
+subsport_48_0:
+  en: Generic
+  es: Genérico
+subsport_49_0:
+  en: Generic
+  es: Genérico
+subsport_53_0:
+  en: Generic
+  es: Genérico
+subsport_53_53:
+  en: Single gas
+  es: Un solo gas
+subsport_53_54:
+  en: Multi gas
+  es: Varios gases
+subsport_53_55:
+  en: Gauge
+  es: Manómetro
+subsport_53_56:
+  en: Apnea
+  es: Apnea
+subsport_53_57:
+  en: Apnea hunting
+  es: Caza en apnea
+subsport_53_63:
+  en: CCR
+  es: Reciclador
+subsport_56_0:
+  en: Generic
+  es: Genérico
+subsport_58_0:
+  en: Generic
+  es: Genérico
+subsport_59_0:
+  en: Generic
+  es: Genérico
+subsport_59_71:
+  en: Indoor
+  es: Indoor
+subsport_62_0:
+  en: Generic
+  es: Genérico
+subsport_62_70:
+  en: HIIT
+  es: HIIT
+subsport_62_73:
+  en: AMRAP
+  es: AMRAP
+subsport_62_74:
+  en: EMOM
+  es: EMOM
+subsport_62_75:
+  en: Tabata
+  es: Tabata
+subsport_63_0:
+  en: Generic
+  es: Genérico
+subsport_63_77:
+  en: Esport
+  es: Deporte electrónico
+subsport_64_0:
+  en: Generic
+  es: Genérico
+subsport_64_84:
+  en: Pickleball
+  es: Pickleball
+subsport_64_85:
+  en: Padel
+  es: Pádel
+subsport_64_93:
+  en: Platform
+  es: Plataforma
+subsport_64_94:
+  en: Squash
+  es: Squash
+subsport_64_95:
+  en: Badminton
+  es: Bádminton
+subsport_64_96:
+  en: Racquetball
+  es: Ráquetbol
+subsport_64_97:
+  en: Table tennis
+  es: Tenis de mesa
+subsport_65_0:
+  en: Generic
+  es: Genérico
+subsport_65_86:
+  en: Indoor wheelchair walk
+  es: Silla de ruedas en interior (marcha)
+subsport_66_0:
+  en: Generic
+  es: Genérico
+subsport_66_87:
+  en: Indoor wheelchair run
+  es: Silla de ruedas en interior (carrera)
+subsport_67_0:
+  en: Generic
+  es: Genérico
+subsport_67_62:
+  en: Breathing
+  es: Respiración
+subsport_68_0:
+  en: Generic
+  es: Genérico
+subsport_69_0:
+  en: Generic
+  es: Genérico
+subsport_69_92:
+  en: Ultimate
+  es: Ultimate frisbee
+subsport_70_0:
+  en: Generic
+  es: Genérico
+subsport_71_0:
+  en: Generic
+  es: Genérico
+subsport_72_0:
+  en: Generic
+  es: Genérico
+subsport_73_0:
+  en: Generic
+  es: Genérico
+subsport_73_90:
+  en: Field
+  es: Hierba
+subsport_73_91:
+  en: Ice
+  es: Hielo
+subsport_74_0:
+  en: Generic
+  es: Genérico
+subsport_75_0:
+  en: Generic
+  es: Genérico
+subsport_76_0:
+  en: Generic
+  es: Genérico
+subsport_77_0:
+  en: Generic
+  es: Genérico
+subsport_78_0:
+  en: Generic
+  es: Genérico
+subsport_79_0:
+  en: Generic
+  es: Genérico
+subsport_80_0:
+  en: Generic
+  es: Genérico
+subsport_81_0:
+  en: Generic
+  es: Genérico
+subsport_81_125:
+  en: Rally
+  es: Rally
+subsport_82_0:
+  en: Generic
+  es: Genérico
+subsport_83_0:
+  en: Generic
+  es: Genérico
+subsport_84_0:
+  en: Generic
+  es: Genérico
+subsport_85_0:
+  en: Generic
+  es: Genérico
+subsport_85_121:
+  en: Dynamic apnea
+  es: Apnea dinámica
+subsport_86_0:
+  en: Generic
+  es: Genérico
+subsport_87_0:
+  en: Generic
+  es: Genérico
+subsport_88_0:
+  en: Generic
+  es: Genérico
+subsport_254_0:
+  en: Generic
+  es: Genérico
+subsport_254_254:
+  en: All
+  es: Todos

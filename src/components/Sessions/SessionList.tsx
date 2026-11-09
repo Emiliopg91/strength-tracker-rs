@@ -102,7 +102,9 @@ export function SessionsList() {
             session.name,
             translate("sport_" + session.sport) +
                 " - " +
-                translate("sport_" + session.sport + "_" + session.sub_sport),
+                translate(
+                    "subsport_" + session.sport + "_" + session.sub_sport,
+                ),
         ];
     });
 
