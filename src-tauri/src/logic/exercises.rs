@@ -338,6 +338,8 @@ pub fn update_prs(
             .where_(Where::And(vec![
                 Where::Eq(session_step::entity::columns::EX_CAT, exer.0.into()),
                 Where::Eq(session_step::entity::columns::EX_ID, exer.1.into()),
+                // Warmup, recovery, cooldown... sets never count as a record
+                Where::Eq(session_step::entity::columns::KIND, StepType::Exercise.into()),
             ]))
             .order_by(OrderBy::Desc(session_step::entity::columns::WEIGHT))
             .order_by(OrderBy::Desc(session_step::entity::columns::REPS))
