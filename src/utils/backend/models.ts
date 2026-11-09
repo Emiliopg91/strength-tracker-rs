@@ -147,7 +147,7 @@ export interface SessionDetails {
   device: string | null;
   distance: number | null;
   heart_rates: (number | null)[];
-  laps: SessionLap[];
+  laps: SessionLapDto[];
   max_hr: number;
   name: string;
   notes: string;
@@ -163,7 +163,7 @@ export interface SessionDetails {
 }
 
 // From src-tauri/src/dto/sessions.rs:84
-export interface SessionLap {
+export interface SessionLapDto {
   idx: number;
   start_latitude: number | null;
   start_longitude: number | null;

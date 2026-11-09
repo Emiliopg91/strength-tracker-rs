@@ -1,7 +1,7 @@
 use std::fs;
 
 use crate::{
-    dao::{additional_data::AdditionalData, session::Session, workout_step::StepType},
+    dao::{session::Session, session_data::SessionData, workout_step::StepType},
     fit::parser::{FitParser, errors::ParseFitFileError},
     tests::common::{STRENGTH_SPORT, STRENGTH_SUB_SPORT},
 };
@@ -195,7 +195,7 @@ fn assert_session(session: &Session, expected: &Expected, sport: (u8, u8)) {
     assert_eq!((session.sport, session.sub_sport), sport, "{ctx}");
     assert_eq!(session.steps.len(), expected.sets, "{ctx}");
 
-    let additional_data = session.additional_data.as_ref().expect(ctx);
+    let additional_data = session.data.as_ref().expect(ctx);
     assert_eq!(additional_data.session, expected.date, "{ctx}");
     assert_eq!(
         additional_data.heart_rates.as_ref().map(Vec::len),
@@ -236,7 +236,7 @@ fn parses_strength_sessions() {
             }
         }
 
-        let additional_data = session.additional_data.unwrap();
+        let additional_data = session.data.unwrap();
         assert!(
             additional_data.coordinates.is_none(),
             "{}",
@@ -298,15 +298,15 @@ fn parses_walk_sessions() {
         for (idx, lap) in session.laps.iter().enumerate() {
             assert_eq!(lap.session, expected.date);
             assert_eq!(lap.idx as usize, idx);
-            let lat = lap.start_latitude.unwrap() as f64 * AdditionalData::SEMICIRCLE_TO_DEGREES;
-            let lon = lap.start_longitude.unwrap() as f64 * AdditionalData::SEMICIRCLE_TO_DEGREES;
+            let lat = lap.start_latitude.unwrap() as f64 * SessionData::SEMICIRCLE_TO_DEGREES;
+            let lon = lap.start_longitude.unwrap() as f64 * SessionData::SEMICIRCLE_TO_DEGREES;
             assert!(
                 (lat - city.0).abs() < 0.1 && (lon - city.1).abs() < 0.1,
                 "{ctx}: lap at {lat},{lon}"
             );
         }
 
-        let additional_data = session.additional_data.unwrap();
+        let additional_data = session.data.unwrap();
         assert_eq!(additional_data.distance, Some(*distance), "{ctx}");
         assert_eq!(
             additional_data.get_speeds().map(|v| v.len()),
@@ -358,7 +358,7 @@ fn parses_indoor_biking_session() {
     assert!(session.laps.is_empty(), "{ctx}");
 
     // Distance and speed come from the speed sensor, but there is no GPS nor barometer data
-    let additional_data = session.additional_data.unwrap();
+    let additional_data = session.data.unwrap();
     assert_eq!(additional_data.distance, Some(19731.78), "{ctx}");
     let speeds = additional_data.get_speeds().unwrap();
     assert_eq!(speeds.len(), expected.records, "{ctx}");

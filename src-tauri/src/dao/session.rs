@@ -2,9 +2,9 @@ use rusqlite_orm::Entity;
 use serde::{Deserialize, Serialize};
 
 use crate::dao::{
-    additional_data::{self, AdditionalData},
     device::{self, Device},
-    lap::{self, Lap},
+    session_data::{self, SessionData},
+    session_lap::{self, SessionLap},
     session_step,
     sub_sport::{self, SubSport},
     workout::{self, Workout},
@@ -30,14 +30,14 @@ pub struct Session {
     #[relationship((date, session_step::entity::columns::SESSION))]
     pub steps: Vec<SessionStep>,
 
-    #[relationship((date, lap::entity::columns::SESSION))]
-    pub laps: Vec<Lap>,
+    #[relationship((date, session_lap::entity::columns::SESSION))]
+    pub laps: Vec<SessionLap>,
 
     #[relationship((device, device::entity::columns::SERIAL))]
     pub device_obj: Option<Device>,
 
-    #[relationship((date, additional_data::entity::columns::SESSION))]
-    pub additional_data: Option<AdditionalData>,
+    #[relationship((date, session_data::entity::columns::SESSION))]
+    pub data: Option<SessionData>,
 
     #[relationship((sport, sub_sport::entity::columns::SPORT),(sub_sport, sub_sport::entity::columns::ID))]
     pub sub_sport_obj: Option<SubSport>,

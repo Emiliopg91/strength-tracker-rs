@@ -1,9 +1,9 @@
 use crate::{
     dao::{
-        additional_data::AdditionalData,
         device::Device,
         exercise::Exercise,
         session::Session,
+        session_data::SessionData,
         session_step::SessionStep,
         sport::Sport,
         sub_sport::SubSport,
@@ -168,7 +168,7 @@ impl TryFrom<FitParser> for Session {
             .collect();
 
         records.timestamp = session_data.timestamp;
-        let mut additional_data: Option<AdditionalData> = records.into();
+        let mut additional_data: Option<SessionData> = records.into();
         if let Some(ad) = additional_data.as_mut()
             && ad.heart_rates.is_some()
         {
@@ -191,7 +191,7 @@ impl TryFrom<FitParser> for Session {
             laps,
             device,
             device_obj: None,
-            additional_data,
+            data: additional_data,
         })
     }
 }
@@ -209,7 +209,7 @@ fn set_kind(wkt_step: Option<&WorkoutStep>, has_exercise: bool) -> StepType {
 
 fn handle_lap_message(
     msg: mesgdef::Lap,
-    laps: &mut Vec<crate::dao::lap::Lap>,
+    laps: &mut Vec<crate::dao::session_lap::SessionLap>,
 ) -> errors::Result<()> {
     let start_latitude = if msg.start_position_lat != i32::MAX {
         Some(msg.start_position_lat)
@@ -222,7 +222,7 @@ fn handle_lap_message(
         None
     };
 
-    laps.push(crate::dao::lap::Lap {
+    laps.push(crate::dao::session_lap::SessionLap {
         session: 0,
         idx: 0,
         start_latitude,
@@ -387,20 +387,17 @@ struct RecordAccumulator {
 impl RecordAccumulator {
     fn new() -> Self {
         Self {
-            last_coord: (
-                AdditionalData::INVALID_POSITION,
-                AdditionalData::INVALID_POSITION,
-            ),
+            last_coord: (SessionData::INVALID_POSITION, SessionData::INVALID_POSITION),
             ..Default::default()
         }
     }
 
     fn push(&mut self, msg: mesgdef::Record) {
-        self.any_hr |= msg.heart_rate != AdditionalData::INVALID_HEAR_RATE;
+        self.any_hr |= msg.heart_rate != SessionData::INVALID_HEAR_RATE;
         self.hrs.push(msg.heart_rate);
 
-        if msg.position_lat != AdditionalData::INVALID_POSITION
-            && msg.position_long != AdditionalData::INVALID_POSITION
+        if msg.position_lat != SessionData::INVALID_POSITION
+            && msg.position_long != SessionData::INVALID_POSITION
         {
             self.last_coord = (msg.position_lat, msg.position_long);
             self.any_coord = true;
@@ -413,23 +410,23 @@ impl RecordAccumulator {
                     self.any_speed = true;
                     v
                 }
-                None => AdditionalData::INVALID_SPEED,
+                None => SessionData::INVALID_SPEED,
             });
     }
 }
 
-impl From<RecordAccumulator> for Option<AdditionalData> {
+impl From<RecordAccumulator> for Option<SessionData> {
     fn from(value: RecordAccumulator) -> Self {
         let coords = value.any_coord.then_some(value.coords);
         let hrs = value.any_hr.then_some(value.hrs);
         let speeds = value.any_speed.then_some(value.speeds);
 
         if hrs.is_some() || coords.is_some() || speeds.is_some() || value.distance.is_some() {
-            Some(AdditionalData {
+            Some(SessionData {
                 session: value.timestamp,
                 heart_rates: hrs,
-                coordinates: coords.map(|coords| AdditionalData::build_coordinates_blob(&coords)),
-                speeds: speeds.map(|speeds| AdditionalData::build_speeds_blob(&speeds)),
+                coordinates: coords.map(|coords| SessionData::build_coordinates_blob(&coords)),
+                speeds: speeds.map(|speeds| SessionData::build_speeds_blob(&speeds)),
                 distance: value.distance,
                 notes: None,
                 max_hr: None,

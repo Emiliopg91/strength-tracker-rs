@@ -2,9 +2,9 @@ use rusqlite_orm::Entity;
 use serde::{Deserialize, Serialize};
 
 #[derive(Entity, Clone, Deserialize, Serialize)]
-#[entity("additional_data")]
+#[entity("session_data")]
 #[primary_key(session)]
-pub struct AdditionalData {
+pub struct SessionData {
     pub session: u32,
     pub heart_rates: Option<Vec<u8>>,
     pub coordinates: Option<Vec<u8>>,
@@ -14,7 +14,7 @@ pub struct AdditionalData {
     pub max_hr: Option<u8>,
 }
 
-impl AdditionalData {
+impl SessionData {
     pub const INVALID_HEAR_RATE: u8 = u8::MAX;
     pub const INVALID_POSITION: i32 = i32::MAX;
     pub const INVALID_SPEED: f64 = -1_f64;

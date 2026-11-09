@@ -3,7 +3,7 @@ use std::{collections::HashSet, hash::Hash};
 use serde::{Deserialize, Serialize};
 
 use crate::dao::{
-    exercise::Exercise, lap::Lap, session::Session, session_step::SessionStep,
+    exercise::Exercise, session::Session, session_lap::SessionLap, session_step::SessionStep,
     workout_step::StepType,
 };
 
@@ -81,14 +81,14 @@ impl From<&SessionStep> for SessionStepDto {
 }
 
 #[derive(Serialize)]
-pub struct SessionLap {
+pub struct SessionLapDto {
     idx: u16,
     start_latitude: Option<i32>,
     start_longitude: Option<i32>,
 }
 
-impl From<&Lap> for SessionLap {
-    fn from(value: &Lap) -> Self {
+impl From<&SessionLap> for SessionLapDto {
+    fn from(value: &SessionLap) -> Self {
         Self {
             idx: value.idx,
             start_latitude: value.start_latitude,
@@ -116,7 +116,7 @@ pub struct SessionDetails {
     pub heart_rates: Vec<Option<u8>>,
     pub max_hr: u8,
     pub coordinates: Vec<Option<(i32, i32)>>,
-    pub laps: Vec<SessionLap>,
+    pub laps: Vec<SessionLapDto>,
     pub speeds: Vec<Option<f64>>,
     pub distance: Option<f64>,
     pub notes: String,
@@ -135,8 +135,8 @@ fn round_samples(samples: Vec<Option<f64>>, scale: f64) -> Vec<Option<f64>> {
         .collect()
 }
 
-impl From<(&Session, &[Exercise], &[SessionStep], &[Lap])> for SessionDetails {
-    fn from(value: (&Session, &[Exercise], &[SessionStep], &[Lap])) -> Self {
+impl From<(&Session, &[Exercise], &[SessionStep], &[SessionLap])> for SessionDetails {
+    fn from(value: (&Session, &[Exercise], &[SessionStep], &[SessionLap])) -> Self {
         let device = value
             .0
             .device_obj
@@ -150,7 +150,7 @@ impl From<(&Session, &[Exercise], &[SessionStep], &[Lap])> for SessionDetails {
         let mut distance = None;
         let mut notes = "".to_string();
 
-        if let Some(add_data) = &value.0.additional_data {
+        if let Some(add_data) = &value.0.data {
             distance = add_data.distance.map(|d| d / 1000_f64);
             if let Some(hr_data) = add_data.get_heart_rates() {
                 heart_rates = hr_data;
@@ -188,7 +188,7 @@ impl From<(&Session, &[Exercise], &[SessionStep], &[Lap])> for SessionDetails {
         let primary_muscles = primary_set.into_iter().collect();
 
         let sets = value.2.iter().map(SessionStepDto::from).collect();
-        let laps = value.3.iter().map(SessionLap::from).collect();
+        let laps = value.3.iter().map(SessionLapDto::from).collect();
 
         Self {
             name: value.0.name.clone(),

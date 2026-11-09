@@ -85,7 +85,7 @@ fn batched_session_details_match_single_ones_in_the_given_order() {
                 common::set(date, 1, exercise, 8, 55.0),
             ];
             session.laps = vec![common::lap(date, 0, None)];
-            session.additional_data = Some(common::additional_data(date));
+            session.data = Some(common::additional_data(date));
             common::insert_session(tx, session);
         }
         Ok(())

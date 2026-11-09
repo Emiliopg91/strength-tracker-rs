@@ -16,9 +16,9 @@ use rustyfit::{
 
 use crate::{
     dao::{
-        additional_data::AdditionalData,
         device::Device,
         session::Session,
+        session_data::SessionData,
         session_step::SessionStep,
         settings::WeightUnit,
         workout::Workout,
@@ -46,7 +46,7 @@ fn timer_event(timestamp: u32, event_type: EventType) -> Message {
 }
 
 /// Sessions don't keep record times, so samples are spread evenly as the charts assume.
-fn record_messages(data: &AdditionalData, start: u32, elapsed: u32) -> Vec<Message> {
+fn record_messages(data: &SessionData, start: u32, elapsed: u32) -> Vec<Message> {
     let hrs = data.get_heart_rates().unwrap_or_default();
     let coords = data.get_coordinates_semicircle().unwrap_or_default();
     let speeds = data.get_speeds().unwrap_or_default();
@@ -158,7 +158,7 @@ fn unit_id(session: &Session) -> Option<u32> {
 
 fn first_position(session: &Session) -> Option<(i32, i32)> {
     session
-        .additional_data
+        .data
         .as_ref()?
         .get_coordinates_semicircle()?
         .into_iter()
@@ -288,7 +288,7 @@ fn session_message(session: &Session, num_laps: u16, lang: Languages) -> Message
         msg.start_position_long = long;
     }
 
-    if let Some(data) = &session.additional_data {
+    if let Some(data) = &session.data {
         if let Some(distance) = data.distance {
             // The scaled setter truncates, which would shift the value on every round trip
             msg.total_distance = (distance * 100.0).round() as u32;
@@ -359,7 +359,7 @@ impl ToFitMessages for Session {
         messages.push(sport_message(self, lang));
         messages.extend(workout_messages(self, lang, weight_unit)?);
 
-        if let Some(data) = &self.additional_data {
+        if let Some(data) = &self.data {
             messages.extend(record_messages(data, self.date, self.total_elapsed_time));
 
             if let Some(max_hr) = data.max_hr {

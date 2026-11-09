@@ -1,5 +1,5 @@
 use crate::{
-    dao::{additional_data::AdditionalData, body_metric::BodyMetric, device::Device},
+    dao::{body_metric::BodyMetric, device::Device, session_data::SessionData},
     dto::{
         body_metrics::BodyMetricListItem,
         sessions::{SessionDetails, SessionListItem, SessionStepDto},
@@ -78,11 +78,11 @@ fn session_details_with_additional_data() {
     });
 
     let mut data = common::additional_data(1);
-    data.heart_rates = Some(vec![100, AdditionalData::INVALID_HEAR_RATE]);
-    data.coordinates = Some(AdditionalData::build_coordinates_blob(&[(1, 2)]));
+    data.heart_rates = Some(vec![100, SessionData::INVALID_HEAR_RATE]);
+    data.coordinates = Some(SessionData::build_coordinates_blob(&[(1, 2)]));
     data.distance = Some(5_250.0);
     data.notes = Some("Easy run".to_string());
-    session.additional_data = Some(data);
+    session.data = Some(data);
 
     let details = SessionDetails::from((&session, &[][..], &[][..], &[][..]));
 

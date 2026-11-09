@@ -22,3 +22,6 @@ DROP TABLE MIG_WORKOUT_DEVICE;
 
 -- Lookups by workout are covered by the primary key, so only the device index is recreated
 CREATE INDEX WORKOUT_DEVICE_DEVICE ON WORKOUT_DEVICE(device);
+
+ALTER TABLE LAP RENAME TO SESSION_LAP;
+ALTER TABLE ADDITIONAL_DATA RENAME TO SESSION_DATA;

@@ -195,8 +195,8 @@ fn session_survives_a_fit_round_trip() {
         };
         assert_eq!(laps(&written), laps(&session), "{name}");
 
-        let data = session.additional_data.as_ref().unwrap();
-        let written_data = written.additional_data.as_ref().unwrap();
+        let data = session.data.as_ref().unwrap();
+        let written_data = written.data.as_ref().unwrap();
         assert_eq!(written_data.heart_rates, data.heart_rates, "{name}");
         assert_eq!(written_data.coordinates, data.coordinates, "{name}");
         assert_eq!(written_data.speeds, data.speeds, "{name}");

@@ -5,11 +5,11 @@ use serde::Serialize;
 
 use crate::{
     dao::{
-        additional_data::{AdditionalData, AdditionalDataRepository},
         body_metric::{BodyMetric, BodyMetricRepository},
         device::{Device, DeviceRepository},
-        lap::{Lap, LapRepository},
         session::{Session, SessionRepository},
+        session_data::{SessionData, SessionDataRepository},
+        session_lap::{SessionLap, SessionLapRepository},
         session_step::{SessionStep, SessionStepRepository},
         settings::{Settings, SettingsRepository},
         workout::{Workout, WorkoutRepository},
@@ -46,14 +46,14 @@ impl Export {
             let devices = DeviceRepository::select().fetch_in(conn)?;
             let settings = SettingsRepository::select().fetch_in(conn)?;
             let sessions = SessionRepository::select().fetch_in(conn)?;
-            let laps = LapRepository::select()
+            let laps = SessionLapRepository::select()
                 .fetch_in(conn)?
                 .into_iter()
                 .map(LapExport::from)
                 .collect();
 
-            let mut additional_datas: HashMap<u32, AdditionalData> = HashMap::new();
-            AdditionalDataRepository::select()
+            let mut additional_datas: HashMap<u32, SessionData> = HashMap::new();
+            SessionDataRepository::select()
                 .fetch_in(conn)?
                 .into_iter()
                 .for_each(|ad| {
@@ -137,8 +137,8 @@ pub struct SessionExport {
     pub sets: Option<Vec<SessionStepDto>>,
 }
 
-impl From<(&Session, Option<&AdditionalData>, Option<&Vec<SessionStep>>)> for SessionExport {
-    fn from(values: (&Session, Option<&AdditionalData>, Option<&Vec<SessionStep>>)) -> Self {
+impl From<(&Session, Option<&SessionData>, Option<&Vec<SessionStep>>)> for SessionExport {
+    fn from(values: (&Session, Option<&SessionData>, Option<&Vec<SessionStep>>)) -> Self {
         let mut heart_rates = None;
         let mut coordinates: Option<Vec<Option<(f64, f64)>>> = None;
         let mut series = None;
@@ -188,17 +188,17 @@ pub struct LapExport {
     pub start_longitude: Option<f64>,
 }
 
-impl From<Lap> for LapExport {
-    fn from(value: Lap) -> Self {
+impl From<SessionLap> for LapExport {
+    fn from(value: SessionLap) -> Self {
         Self {
             session: value.session,
             idx: value.idx,
             start_latitude: value
                 .start_latitude
-                .map(|s| s as f64 * AdditionalData::SEMICIRCLE_TO_DEGREES),
+                .map(|s| s as f64 * SessionData::SEMICIRCLE_TO_DEGREES),
             start_longitude: value
                 .start_longitude
-                .map(|s| s as f64 * AdditionalData::SEMICIRCLE_TO_DEGREES),
+                .map(|s| s as f64 * SessionData::SEMICIRCLE_TO_DEGREES),
         }
     }
 }

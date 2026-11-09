@@ -6,9 +6,9 @@ use rusqlite_orm::{
 
 use crate::{
     dao::{
-        additional_data::{AdditionalData, AdditionalDataRepository},
-        lap::{Lap, LapRepository},
         session::{Session, SessionRepository},
+        session_data::{SessionData, SessionDataRepository},
+        session_lap::{SessionLap, SessionLapRepository},
         session_step::{SessionStep, SessionStepRepository},
         workout_step::StepType,
     },
@@ -48,7 +48,7 @@ pub fn session(date: u32) -> Session {
         steps: Vec::new(),
         laps: Vec::new(),
         device_obj: None,
-        additional_data: None,
+        data: None,
         sub_sport_obj: None,
         workout_obj: None,
     }
@@ -72,8 +72,8 @@ pub fn set(session: u32, idx: u8, exercise: (u16, u16), reps: u16, weight: f32) 
     }
 }
 
-pub fn additional_data(session: u32) -> AdditionalData {
-    AdditionalData {
+pub fn additional_data(session: u32) -> SessionData {
+    SessionData {
         session,
         heart_rates: None,
         coordinates: None,
@@ -87,7 +87,7 @@ pub fn additional_data(session: u32) -> AdditionalData {
 pub fn insert_session(tx: &Transaction, mut session: Session) {
     let mut sets = std::mem::take(&mut session.steps);
     let mut laps = std::mem::take(&mut session.laps);
-    let additional_data = session.additional_data.take();
+    let additional_data = session.data.take();
 
     SessionRepository::insert()
         .item(&mut session)
@@ -103,7 +103,7 @@ pub fn insert_session(tx: &Transaction, mut session: Session) {
     }
 
     if !laps.is_empty() {
-        let mut insert = LapRepository::insert();
+        let mut insert = SessionLapRepository::insert();
         for lap in &mut laps {
             insert = insert.item(lap);
         }
@@ -111,15 +111,15 @@ pub fn insert_session(tx: &Transaction, mut session: Session) {
     }
 
     if let Some(mut additional_data) = additional_data {
-        AdditionalDataRepository::insert()
+        SessionDataRepository::insert()
             .item(&mut additional_data)
             .execute_in(tx)
             .expect("additional data insert");
     }
 }
 
-pub fn lap(session: u32, idx: u16, position: Option<(i32, i32)>) -> Lap {
-    Lap {
+pub fn lap(session: u32, idx: u16, position: Option<(i32, i32)>) -> SessionLap {
+    SessionLap {
         session,
         idx,
         start_latitude: position.map(|p| p.0),

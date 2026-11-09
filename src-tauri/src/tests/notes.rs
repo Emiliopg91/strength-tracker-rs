@@ -1,7 +1,7 @@
 use rusqlite_orm::database::DatabasePool;
 
 use crate::{
-    dao::additional_data::{AdditionalData, AdditionalDataRepository},
+    dao::session_data::{SessionData, SessionDataRepository},
     logic::sessions::update_session_notes,
     tests::common,
 };
@@ -18,7 +18,7 @@ fn setup() -> DatabasePool {
             let mut session = common::session(date);
             let mut add_data = common::additional_data(date);
             add_data.notes = Some(format!("Notes {date}"));
-            session.additional_data = Some(add_data);
+            session.data = Some(add_data);
             common::insert_session(tx, session);
         }
         common::insert_session(tx, common::session(WITHOUT_DATA));
@@ -33,8 +33,8 @@ fn save_notes(db: &DatabasePool, session: u32, notes: Option<&str>) {
         .unwrap();
 }
 
-fn additional_data(db: &DatabasePool, session: u32) -> Option<AdditionalData> {
-    AdditionalDataRepository::select_by_id(db, session).unwrap()
+fn additional_data(db: &DatabasePool, session: u32) -> Option<SessionData> {
+    SessionDataRepository::select_by_id(db, session).unwrap()
 }
 
 fn notes(db: &DatabasePool, session: u32) -> Option<String> {

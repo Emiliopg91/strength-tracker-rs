@@ -1,4 +1,4 @@
-use crate::{dao::additional_data::AdditionalData, tests::common};
+use crate::{dao::session_data::SessionData, tests::common};
 
 const QUARTER_TURN: i32 = 1 << 30;
 
@@ -7,7 +7,7 @@ fn coordinates_blob_roundtrip() {
     let points = [(0, 0), (123_456, -654_321), (i32::MIN + 1, i32::MAX - 1)];
 
     let mut data = common::additional_data(1);
-    data.coordinates = Some(AdditionalData::build_coordinates_blob(&points));
+    data.coordinates = Some(SessionData::build_coordinates_blob(&points));
 
     let decoded = data.get_coordinates_semicircle().unwrap();
     assert_eq!(
@@ -18,7 +18,7 @@ fn coordinates_blob_roundtrip() {
 
 #[test]
 fn coordinates_invalid_position_is_none() {
-    let invalid = AdditionalData::INVALID_POSITION;
+    let invalid = SessionData::INVALID_POSITION;
     let points = [
         (1, 2),
         (invalid, 5),
@@ -28,7 +28,7 @@ fn coordinates_invalid_position_is_none() {
     ];
 
     let mut data = common::additional_data(1);
-    data.coordinates = Some(AdditionalData::build_coordinates_blob(&points));
+    data.coordinates = Some(SessionData::build_coordinates_blob(&points));
 
     assert_eq!(
         data.get_coordinates_semicircle().unwrap(),
@@ -41,7 +41,7 @@ fn coordinates_to_degrees() {
     let points = [(0, 0), (QUARTER_TURN, -QUARTER_TURN)];
 
     let mut data = common::additional_data(1);
-    data.coordinates = Some(AdditionalData::build_coordinates_blob(&points));
+    data.coordinates = Some(SessionData::build_coordinates_blob(&points));
 
     let degrees = data.get_coordinates_degrees().unwrap();
     assert_eq!(degrees[0], Some((0.0, 0.0)));
@@ -52,7 +52,7 @@ fn coordinates_to_degrees() {
 
 #[test]
 fn coordinates_trailing_bytes_are_ignored() {
-    let mut blob = AdditionalData::build_coordinates_blob(&[(7, 8)]);
+    let mut blob = SessionData::build_coordinates_blob(&[(7, 8)]);
     blob.extend_from_slice(&[1, 2, 3]);
 
     let mut data = common::additional_data(1);
@@ -67,7 +67,7 @@ fn coordinates_trailing_bytes_are_ignored() {
 #[test]
 fn heart_rates_invalid_is_none() {
     let mut data = common::additional_data(1);
-    data.heart_rates = Some(vec![60, 0, AdditionalData::INVALID_HEAR_RATE, 254]);
+    data.heart_rates = Some(vec![60, 0, SessionData::INVALID_HEAR_RATE, 254]);
 
     assert_eq!(
         data.get_heart_rates().unwrap(),

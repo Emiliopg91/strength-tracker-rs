@@ -3,8 +3,8 @@ use serde_json::Value;
 
 use crate::{
     dao::{
-        additional_data::AdditionalData,
         body_metric::{BodyMetric, BodyMetricRepository},
+        session_data::SessionData,
     },
     dto::export::Export,
     tests::common,
@@ -50,9 +50,9 @@ fn export_contains_all_data() {
     let mut run = common::session(2);
     run.laps = vec![common::lap(2, 0, Some((0, 0)))];
     let mut data = common::additional_data(2);
-    data.coordinates = Some(AdditionalData::build_coordinates_blob(&[(0, 0)]));
+    data.coordinates = Some(SessionData::build_coordinates_blob(&[(0, 0)]));
     data.heart_rates = Some(vec![120]);
-    run.additional_data = Some(data);
+    run.data = Some(data);
 
     db.run_in_transaction(|tx| {
         common::insert_session(tx, strength.clone());

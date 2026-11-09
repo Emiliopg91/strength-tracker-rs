@@ -2,9 +2,10 @@ use rusqlite_orm::{dao::Repository, database::builder::DatabaseConnectionBuilder
 
 use crate::{
     dao::{
-        additional_data::AdditionalDataRepository, lap::LapRepository, session::SessionRepository,
-        session_step::SessionStepRepository, workout::WorkoutRepository,
-        workout_device::WorkoutDeviceRepository, workout_step::StepType,
+        session::SessionRepository, session_data::SessionDataRepository,
+        session_lap::SessionLapRepository, session_step::SessionStepRepository,
+        workout::WorkoutRepository, workout_device::WorkoutDeviceRepository,
+        workout_step::StepType,
     },
     schema_ddls,
     tests::common,
@@ -97,7 +98,7 @@ fn session_roundtrip_with_relationships() {
     let mut data = common::additional_data(1_700_000_000);
     data.notes = Some("Felt strong".to_string());
     data.distance = Some(1_000.0);
-    session.additional_data = Some(data);
+    session.data = Some(data);
 
     db.run_in_transaction(|tx| {
         WorkoutRepository::insert()
@@ -119,7 +120,7 @@ fn session_roundtrip_with_relationships() {
             let mut s = SessionRepository::select_by_id_in(conn, 1_700_000_000_u32)?.unwrap();
             s.fetch_steps_relationship_in(conn)?;
             s.fetch_laps_relationship_in(conn)?;
-            s.fetch_additional_data_relationship_in(conn)?;
+            s.fetch_data_relationship_in(conn)?;
             s.fetch_workout_obj_relationship_in(conn)?;
             Ok(s)
         })
@@ -130,7 +131,7 @@ fn session_roundtrip_with_relationships() {
     assert_eq!(stored.steps[0].weight, Some(100.0));
     assert_eq!(stored.laps.len(), 1);
     assert_eq!(stored.laps[0].start_latitude, Some(1));
-    let data = stored.additional_data.unwrap();
+    let data = stored.data.unwrap();
     assert_eq!(data.notes.as_deref(), Some("Felt strong"));
     assert_eq!(data.distance, Some(1_000.0));
     assert!(stored.workout_obj.unwrap().enabled);
@@ -143,7 +144,7 @@ fn deleting_a_session_cascades() {
     let mut session = common::session(1);
     session.steps = vec![common::set(1, 0, (28, 0), 5, 100.0)];
     session.laps = vec![common::lap(1, 0, None)];
-    session.additional_data = Some(common::additional_data(1));
+    session.data = Some(common::additional_data(1));
 
     db.run_in_transaction(|tx| {
         common::insert_session(tx, session.clone());
@@ -156,8 +157,8 @@ fn deleting_a_session_cascades() {
         .run_in_connection(|conn| {
             Ok((
                 SessionStepRepository::select().fetch_in(conn)?.len(),
-                LapRepository::select().fetch_in(conn)?.len(),
-                AdditionalDataRepository::select().fetch_in(conn)?.len(),
+                SessionLapRepository::select().fetch_in(conn)?.len(),
+                SessionDataRepository::select().fetch_in(conn)?.len(),
             ))
         })
         .unwrap();
@@ -288,8 +289,14 @@ fn migration_27_keeps_the_children_of_rebuilt_tables() {
 
     db.create_schema(&schema_ddls()).unwrap();
 
+    // Migration 28 renames LAP and ADDITIONAL_DATA
+    let renamed = |table: &'static str| match table {
+        "LAP" => "SESSION_LAP",
+        "ADDITIONAL_DATA" => "SESSION_DATA",
+        other => other,
+    };
     assert_eq!(
-        tables.iter().map(|t| count(t)).collect::<Vec<_>>(),
+        tables.iter().map(|t| count(renamed(t))).collect::<Vec<_>>(),
         expected
     );
 }

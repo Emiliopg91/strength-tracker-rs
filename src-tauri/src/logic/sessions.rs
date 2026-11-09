@@ -8,11 +8,11 @@ use std::{
 use crate::{
     SettingsLock,
     dao::{
-        additional_data::{self, AdditionalData, AdditionalDataRepository},
         device::{self, Device, DeviceRepository},
         exercise::{self, Exercise, ExerciseRepository},
-        lap::{self, LapRepository},
         session::{self, Session, SessionRepository},
+        session_data::{self, SessionData, SessionDataRepository},
+        session_lap::{self, SessionLapRepository},
         session_step::{self, SessionStepRepository, entity},
         settings::WeightUnit,
         workout::{self, Workout, WorkoutRepository},
@@ -284,7 +284,7 @@ pub async fn write_session_fit<R: Runtime>(
                     .ok_or_else(|| format!("Session {timestamp} not found"))?;
                 session.fetch_steps_relationship_in(conn)?;
                 session.fetch_laps_relationship_in(conn)?;
-                session.fetch_additional_data_relationship_in(conn)?;
+                session.fetch_data_relationship_in(conn)?;
                 if session.workout.is_some() {
                     session.fetch_workout_obj_relationship_in(conn)?;
                 }
@@ -364,22 +364,22 @@ pub fn fetch_sessions_details(
     }
 
     if with_add_data {
-        for add_data in AdditionalDataRepository::select()
+        for add_data in SessionDataRepository::select()
             .where_(Where::In(
-                additional_data::entity::columns::SESSION,
+                session_data::entity::columns::SESSION,
                 dates.clone(),
             ))
             .fetch_in(conn)?
         {
             if let Some(session) = sessions.get_mut(&add_data.session) {
-                session.additional_data = Some(add_data);
+                session.data = Some(add_data);
             }
         }
     }
 
     if with_laps {
-        for lap in LapRepository::select()
-            .where_(Where::In(lap::entity::columns::SESSION, dates))
+        for lap in SessionLapRepository::select()
+            .where_(Where::In(session_lap::entity::columns::SESSION, dates))
             .fetch_in(conn)?
         {
             if let Some(session) = sessions.get_mut(&lap.session) {
@@ -829,7 +829,7 @@ pub fn insert_session(
 ) -> Result<(), DatabaseError> {
     let mut series = std::mem::take(&mut session.steps);
     let mut laps = std::mem::take(&mut session.laps);
-    let mut add_data = session.additional_data.take();
+    let mut add_data = session.data.take();
 
     if let Some(workout) = &session.workout_obj {
         let updated = WorkoutRepository::update()
@@ -879,13 +879,13 @@ pub fn insert_session(
     }
 
     if let Some(additional_data) = &mut add_data {
-        AdditionalDataRepository::insert()
+        SessionDataRepository::insert()
             .item(additional_data)
             .execute_in(tx)?;
     }
 
     if !laps.is_empty() {
-        let mut insert = LapRepository::insert();
+        let mut insert = SessionLapRepository::insert();
         for lap in &mut laps {
             insert = insert.item(lap)
         }
@@ -894,7 +894,7 @@ pub fn insert_session(
 
     session.steps = series;
     session.laps = laps;
-    session.additional_data = add_data;
+    session.data = add_data;
 
     Ok(())
 }
@@ -906,21 +906,18 @@ pub fn update_session_notes(
 ) -> rusqlite_orm::errors::Result<()> {
     let notes = notes.filter(|n| !n.trim().is_empty()).map(str::to_string);
 
-    let updated = AdditionalDataRepository::update()
-        .set(
-            additional_data::entity::columns::NOTES,
-            notes.clone().into(),
-        )
+    let updated = SessionDataRepository::update()
+        .set(session_data::entity::columns::NOTES, notes.clone().into())
         .where_(Where::Eq(
-            additional_data::entity::columns::SESSION,
+            session_data::entity::columns::SESSION,
             session.into(),
         ))
         .execute_in(tx)?;
 
     if updated == 0 && notes.is_some() {
-        let mut add_data = AdditionalData::new(session);
+        let mut add_data = SessionData::new(session);
         add_data.notes = notes;
-        AdditionalDataRepository::insert()
+        SessionDataRepository::insert()
             .item(&mut add_data)
             .execute_in(tx)?;
     }
@@ -940,26 +937,25 @@ pub fn update_pending_geolocation<R: Runtime>(app: &AppHandle<R>, db: &DatabaseP
             .where_(Where::Eq(session::entity::columns::NAME, "".into()))
             .to_subquery();
 
-        AdditionalDataRepository::select()
+        SessionDataRepository::select()
             .columns(&[
-                additional_data::entity::columns::SESSION,
-                additional_data::entity::columns::COORDINATES,
+                session_data::entity::columns::SESSION,
+                session_data::entity::columns::COORDINATES,
             ])
             .where_(Where::And(vec![
-                Where::InSub(additional_data::entity::columns::SESSION, unnamed_sessions),
-                Where::NotNull(additional_data::entity::columns::COORDINATES),
+                Where::InSub(session_data::entity::columns::SESSION, unnamed_sessions),
+                Where::NotNull(session_data::entity::columns::COORDINATES),
             ]))
-            .order_by(OrderBy::Desc(additional_data::entity::columns::SESSION))
+            .order_by(OrderBy::Desc(session_data::entity::columns::SESSION))
             .fetch(db)
             .map(|rows| {
                 rows.into_iter()
                     .map(|row| {
-                        let mut add_data = AdditionalData::new(
-                            row.get_u32(additional_data::entity::columns::SESSION.as_ref()),
+                        let mut add_data = SessionData::new(
+                            row.get_u32(session_data::entity::columns::SESSION.as_ref()),
                         );
-                        add_data.coordinates = row.get_blob_nullable(
-                            additional_data::entity::columns::COORDINATES.as_ref(),
-                        );
+                        add_data.coordinates = row
+                            .get_blob_nullable(session_data::entity::columns::COORDINATES.as_ref());
                         add_data
                     })
                     .collect::<Vec<_>>()
@@ -1135,7 +1131,7 @@ pub fn merge_sessions(
     let mut to = SessionRepository::select_by_id(database, to_date)
         .expect("Error on database query")
         .unwrap_or_else(|| panic!("Could not find session with timestamp {}", to_date));
-    to.fetch_additional_data_relationship(database)
+    to.fetch_data_relationship(database)
         .expect("Error on database query");
     to.fetch_laps_relationship(database)
         .expect("Error on database query");
@@ -1145,7 +1141,7 @@ pub fn merge_sessions(
     let mut from = SessionRepository::select_by_id(database, from_date)
         .expect("Error on database query")
         .unwrap_or_else(|| panic!("Could not find session with timestamp {}", from_date));
-    from.fetch_additional_data_relationship(database)
+    from.fetch_data_relationship(database)
         .expect("Error on database query");
     from.fetch_laps_relationship(database)
         .expect("Error on database query");
@@ -1157,9 +1153,9 @@ pub fn merge_sessions(
     to.training_load += from.training_load;
     to.active_calories += from.active_calories;
 
-    match &mut to.additional_data {
+    match &mut to.data {
         Some(add_data) => {
-            if let Some(add_data2) = &mut from.additional_data {
+            if let Some(add_data2) = &mut from.data {
                 fn merge_vec<T>(to: &mut Option<Vec<T>>, from: &mut Option<Vec<T>>) {
                     if let Some(v2) = from.take() {
                         match to {
@@ -1195,7 +1191,7 @@ pub fn merge_sessions(
             }
         }
         None => {
-            to.additional_data = from.additional_data.take().map(|mut add_data| {
+            to.data = from.data.take().map(|mut add_data| {
                 add_data.session = to.date;
                 add_data
             })

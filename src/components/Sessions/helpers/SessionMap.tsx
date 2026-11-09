@@ -1,5 +1,5 @@
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
-import { SessionLap } from "@/utils/backend/models";
+import { SessionLapDto } from "@/utils/backend/models";
 import { SessionUtils } from "@/utils/SessionUtils";
 import { useContext, useEffect, useRef, useState } from "react";
 import { IconButton, Tooltip } from "@mui/material";
@@ -21,7 +21,7 @@ type Props = {
     }[];
     startPoint: [number, number];
     finishPoint: [number, number];
-    laps: SessionLap[];
+    laps: SessionLapDto[];
 };
 
 export function SessionMap({
