@@ -11,6 +11,7 @@ import { AppContext } from "@/context/AppContext";
 import { useBackendList } from "@/hooks/useBackendList";
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
 import { useFilterList } from "@/hooks/useFilterList";
+import { useBatchedRows } from "@/hooks/useBatchedRows";
 import { useLoadingTask } from "@/hooks/useLoadingTask";
 import "@/styles/Exercises/ExercisesList.css";
 import { Button } from "@mui/material";
@@ -117,6 +118,8 @@ export function ExercisesList() {
         ];
     });
 
+    const [visibleExercises, sentinel] = useBatchedRows(filteredExercises);
+
     const applyProgressions = async () => {
         const applied: ExerciseListItem[] = [];
         try {
@@ -178,13 +181,14 @@ export function ExercisesList() {
                     </tr>
                 </thead>
                 <tbody>
-                    {filteredExercises.map((exercise) => (
+                    {visibleExercises.map((exercise) => (
                         <ExerciseRow
                             key={`${exercise.category}_${exercise.id}`}
                             exercise={exercise}
                             onSelect={getExerciseDetails}
                         />
                     ))}
+                    {sentinel}
                 </tbody>
             </table>
 

@@ -14,6 +14,7 @@ import "@/styles/Sessions/SessionList.css";
 import { Button } from "@mui/material";
 import { SessionsCompareModal } from "./SessionsCompareModal";
 import { useFilterList } from "@/hooks/useFilterList";
+import { useBatchedRows } from "@/hooks/useBatchedRows";
 import { ImportSessionsMenu } from "./helpers/ImportSessionsMenu";
 
 export function SessionsList() {
@@ -107,6 +108,7 @@ export function SessionsList() {
                 ),
         ];
     });
+    const [visibleSessions, sentinel] = useBatchedRows(filteredSessions);
 
     return (
         <>
@@ -131,7 +133,7 @@ export function SessionsList() {
                     </thead>
 
                     <tbody>
-                        {filteredSessions.map((session) => (
+                        {visibleSessions.map((session) => (
                             <SessionRow
                                 key={session.timestamp}
                                 session={session}
@@ -142,6 +144,7 @@ export function SessionsList() {
                                 onToggleCompare={toggleSelect}
                             />
                         ))}
+                        {sentinel}
                     </tbody>
                 </table>
             </div>

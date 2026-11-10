@@ -299,16 +299,12 @@ pub(crate) fn fetch_progression_suggestion(
 pub(crate) fn progression_suggestions(
     conn: &rusqlite_orm::rusqlite::Connection,
 ) -> rusqlite_orm::errors::Result<HashSet<(u16, u16)>> {
-    let mut suggested = HashSet::new();
-    for exercise in ExerciseRepository::select()
+    let candidates = ExerciseRepository::select()
         .where_(progression_candidates())
-        .fetch_in(conn)?
-    {
-        if progression_suggestion_for(conn, &exercise)?.is_some() {
-            suggested.insert((exercise.category, exercise.id));
-        }
-    }
-    Ok(suggested)
+        .fetch_in(conn)?;
+    Ok(progression_suggestions_for(conn, &candidates)?
+        .into_keys()
+        .collect())
 }
 
 /// Exercises with progression enabled that could have a suggestion: performed at least once and programmed in an enabled workout.
@@ -353,101 +349,109 @@ pub(super) fn progression_candidates() -> Where<Exercise> {
     ])
 }
 
+/// A performed set, as weight (0 if unloaded) and reps.
+type Set = (f32, u16);
+
 /// Suggestion for an already loaded `exercise`, `None` if it has progression disabled.
 pub(super) fn progression_suggestion_for(
     conn: &rusqlite_orm::rusqlite::Connection,
     exercise: &Exercise,
 ) -> rusqlite_orm::errors::Result<Option<ProgressionSuggestion>> {
-    if !exercise.progression {
-        return Ok(None);
+    Ok(progression_suggestions_for(conn, [exercise])?.remove(&(exercise.category, exercise.id)))
+}
+
+/// Pending suggestions for the already loaded `exercises`, by key. Exercises with progression
+/// disabled or nothing to suggest are left out. Takes two queries whatever the number of exercises.
+pub(super) fn progression_suggestions_for<'a>(
+    conn: &rusqlite_orm::rusqlite::Connection,
+    exercises: impl IntoIterator<Item = &'a Exercise>,
+) -> rusqlite_orm::errors::Result<HashMap<(u16, u16), ProgressionSuggestion>> {
+    let exercises: HashMap<(u16, u16), &Exercise> = exercises
+        .into_iter()
+        .filter(|e| e.progression)
+        .map(|e| ((e.category, e.id), e))
+        .collect();
+    if exercises.is_empty() {
+        return Ok(HashMap::new());
     }
-    let (category, id) = (exercise.category, exercise.id);
+    let key_values = |keys: &mut dyn Iterator<Item = &(u16, u16)>| {
+        keys.map(|k| vec![k.0.into(), k.1.into()]).collect()
+    };
 
-    let latest_subquery = SessionStepRepository::select()
-        .columns(&[session_step::entity::columns::SESSION])
-        .where_(Where::And(vec![
-            Where::Eq(session_step::entity::columns::EX_CAT, category.into()),
-            Where::Eq(session_step::entity::columns::EX_ID, id.into()),
-            Where::Eq(
-                session_step::entity::columns::KIND,
-                StepType::Exercise.into(),
-            ),
-        ]))
-        .order_by(OrderBy::Desc(session_step::entity::columns::SESSION))
-        .limit(1)
-        .to_subquery();
-
-    let sets: Vec<_> = SessionStepRepository::select()
+    // Sets of the latest session of each exercise
+    let mut latest: HashMap<(u16, u16), (u32, Vec<Set>)> = HashMap::new();
+    for row in SessionStepRepository::select()
         .columns(&[
+            session_step::entity::columns::EX_CAT,
+            session_step::entity::columns::EX_ID,
+            session_step::entity::columns::SESSION,
             session_step::entity::columns::WEIGHT,
             session_step::entity::columns::REPS,
         ])
         .where_(Where::And(vec![
-            Where::Eq(session_step::entity::columns::EX_CAT, category.into()),
-            Where::Eq(session_step::entity::columns::EX_ID, id.into()),
             Where::Eq(
                 session_step::entity::columns::KIND,
                 StepType::Exercise.into(),
             ),
-            Where::EqSub(session_step::entity::columns::SESSION, latest_subquery),
+            Where::InMultiple(
+                vec![
+                    session_step::entity::columns::EX_CAT,
+                    session_step::entity::columns::EX_ID,
+                ],
+                key_values(&mut exercises.keys()),
+            ),
         ]))
         .fetch_in(conn)?
-        .iter()
-        .map(|r| {
-            (
-                r.get_f32_nullable(session_step::entity::columns::WEIGHT.as_ref())
-                    .unwrap_or_default(),
-                r.get_u16_nullable(session_step::entity::columns::REPS.as_ref())
-                    .unwrap_or_default(),
-            )
-        })
-        .collect();
-
-    let Some(&(weight, _)) = sets.first() else {
-        return Ok(None);
-    };
-    if sets.iter().any(|&(w, _)| w != weight) {
-        return Ok(None);
+    {
+        let key = (
+            row.get_u16(session_step::entity::columns::EX_CAT.as_ref()),
+            row.get_u16(session_step::entity::columns::EX_ID.as_ref()),
+        );
+        let session = row.get_u32(session_step::entity::columns::SESSION.as_ref());
+        let set = (
+            row.get_f32_nullable(session_step::entity::columns::WEIGHT.as_ref())
+                .unwrap_or_default(),
+            row.get_u16_nullable(session_step::entity::columns::REPS.as_ref())
+                .unwrap_or_default(),
+        );
+        let entry = latest.entry(key).or_insert((session, Vec::new()));
+        if session > entry.0 {
+            *entry = (session, Vec::new());
+        }
+        if session == entry.0 {
+            entry.1.push(set);
+        }
     }
 
-    let range: Vec<_> = exercise
-        .reps
-        .split('-')
-        .filter_map(|s| s.parse::<u16>().ok())
-        .collect();
-    if range.is_empty() {
-        return Ok(None);
-    }
-
-    // Index of the highest range step reached by each set; every set must reach the range and the weakest one rules
-    let brackets: Option<Vec<_>> = sets
+    let candidates: HashMap<(u16, u16), ProgressionSuggestion> = latest
         .iter()
-        .map(|&(_, reps)| {
-            let reps = if exercise.unilateral { reps / 2 } else { reps };
-            range.iter().rposition(|&r| reps >= r)
+        .filter_map(|(key, (_, sets))| {
+            Some((*key, suggestion_from_sets(exercises.get(key)?, sets)?))
         })
         .collect();
-    let Some(bracket) = brackets.and_then(|b| b.into_iter().min()) else {
-        return Ok(None);
-    };
-
-    let (weight, reps) = match bracket {
-        i if i == range.len() - 1 => (weight + exercise.weight, range[0]),
-        i => (weight, range[i + 1]),
-    };
-    let suggestion = ProgressionSuggestion {
-        weight,
-        reps: if exercise.unilateral { reps * 2 } else { reps },
-    };
+    if candidates.is_empty() {
+        return Ok(HashMap::new());
+    }
 
     // Steps of disabled workouts don't count: they alone would suggest what is already programmed
-    let pending = WorkoutStepRepository::select()
+    let mut pending = HashSet::new();
+    for row in WorkoutStepRepository::select()
+        .columns(&[
+            workout_step::entity::columns::EX_CAT,
+            workout_step::entity::columns::EX_ID,
+            workout_step::entity::columns::WEIGHT,
+            workout_step::entity::columns::REPS,
+        ])
         .where_(Where::And(vec![
-            Where::Eq(workout_step::entity::columns::EX_CAT, category.into()),
-            Where::Eq(workout_step::entity::columns::EX_ID, id.into()),
             exercise_step(),
             Where::NotNull(workout_step::entity::columns::REPS),
-            below_suggestion(&suggestion),
+            Where::InMultiple(
+                vec![
+                    workout_step::entity::columns::EX_CAT,
+                    workout_step::entity::columns::EX_ID,
+                ],
+                key_values(&mut candidates.keys()),
+            ),
             Where::InSub(
                 workout_step::entity::columns::WORKOUT,
                 WorkoutRepository::select()
@@ -456,9 +460,67 @@ pub(super) fn progression_suggestion_for(
                     .to_subquery(),
             ),
         ]))
-        .count_in(conn)?;
+        .fetch_in(conn)?
+    {
+        let key = (
+            row.get_u16(workout_step::entity::columns::EX_CAT.as_ref()),
+            row.get_u16(workout_step::entity::columns::EX_ID.as_ref()),
+        );
+        let Some(suggestion) = candidates.get(&key) else {
+            continue;
+        };
+        // Same as `below_suggestion`, a missing load counting as 0
+        let weight = row
+            .get_f32_nullable(workout_step::entity::columns::WEIGHT.as_ref())
+            .unwrap_or_default();
+        let reps = row.get_u16(workout_step::entity::columns::REPS.as_ref());
+        if weight < suggestion.weight || (weight == suggestion.weight && reps < suggestion.reps) {
+            pending.insert(key);
+        }
+    }
 
-    Ok((pending > 0).then_some(suggestion))
+    Ok(candidates
+        .into_iter()
+        .filter(|(key, _)| pending.contains(key))
+        .collect())
+}
+
+/// Load to suggest for `exercise` given the `sets` of its latest session, `None` if they don't
+/// share a weight or don't all reach its rep range.
+fn suggestion_from_sets(exercise: &Exercise, sets: &[Set]) -> Option<ProgressionSuggestion> {
+    let &(weight, _) = sets.first()?;
+    if sets.iter().any(|&(w, _)| w != weight) {
+        return None;
+    }
+
+    let range: Vec<_> = exercise
+        .reps
+        .split('-')
+        .filter_map(|s| s.parse::<u16>().ok())
+        .collect();
+    if range.is_empty() {
+        return None;
+    }
+
+    // Index of the highest range step reached by each set; every set must reach the range and the weakest one rules
+    let bracket = sets
+        .iter()
+        .map(|&(_, reps)| {
+            let reps = if exercise.unilateral { reps / 2 } else { reps };
+            range.iter().rposition(|&r| reps >= r)
+        })
+        .collect::<Option<Vec<_>>>()?
+        .into_iter()
+        .min()?;
+
+    let (weight, reps) = match bracket {
+        i if i == range.len() - 1 => (weight + exercise.weight, range[0]),
+        i => (weight, range[i + 1]),
+    };
+    Some(ProgressionSuggestion {
+        weight,
+        reps: if exercise.unilateral { reps * 2 } else { reps },
+    })
 }
 
 /// Only exercise steps progress: warm-ups and the like keep their own load.
@@ -558,17 +620,7 @@ pub(crate) fn update_exercise_notes(
 pub(super) fn any_progression_suggestion(
     conn: &rusqlite_orm::rusqlite::Connection,
 ) -> rusqlite_orm::errors::Result<bool> {
-    // Stops at the first suggestion; an exercise failing to evaluate counts as none
-    Ok(ExerciseRepository::select()
-        .where_(progression_candidates())
-        .fetch_in(conn)?
-        .iter()
-        .any(|exercise| {
-            progression_suggestion_for(conn, exercise)
-                .ok()
-                .flatten()
-                .is_some()
-        }))
+    progression_suggestions(conn).map(|suggested| !suggested.is_empty())
 }
 
 /// The exercises with a personal record, annotated with it, plus those planned in some workout
@@ -620,12 +672,13 @@ pub(super) fn exercise_list(
             .collect()
     };
 
-    let mut suggested_progressions = HashSet::new();
-    for (key, exercise) in &exercises {
-        if pr_keys.contains(key) && progression_suggestion_for(conn, exercise)?.is_some() {
-            suggested_progressions.insert(*key);
-        }
-    }
+    let suggested_progressions = progression_suggestions_for(
+        conn,
+        exercises
+            .iter()
+            .filter(|(key, _)| pr_keys.contains(key))
+            .map(|(_, e)| e),
+    )?;
 
     let mut items: Vec<_> = prs
         .iter()
@@ -639,7 +692,7 @@ pub(super) fn exercise_list(
                 weight: pr.weight.unwrap_or_default(),
                 date: pr.session,
                 unilateral: exercise.is_some_and(|e| e.unilateral),
-                progression: suggested_progressions.contains(&key),
+                progression: suggested_progressions.contains_key(&key),
                 notes: exercise.and_then(|e| e.notes.clone()),
                 used: true,
             }
