@@ -5,7 +5,7 @@ body {
   font-weight: 400;
 
   color: white;
-  background-color: #303030;
+  background-color: var(--background-color);
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -31,6 +31,7 @@ body {
 
 :root {
   --primary-color: #1779bd;
+  --background-color: #303030;
 }
 
 .no-spinner::-webkit-inner-spin-button,

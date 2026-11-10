@@ -26,29 +26,31 @@ export function useFilterList<T>(
               });
 
     const input = (
-        <TextField
-            value={filter}
-            helperText={
-                filtered.length === 0
-                    ? undefined
-                    : filtered.length === 1
-                      ? translate("1_entry")
-                      : translate("x_entries", [String(filtered.length)])
-            }
-            placeholder={translate("filter")}
-            size="small"
-            onChange={(e) => setFilter(e.target.value)}
-            sx={{ mt: 1, mx: 1 }}
-            slotProps={{
-                formHelperText: {
-                    sx: {
-                        fontSize: "0.85rem",
-                        margin: "auto",
+        <div className="list-filter">
+            <TextField
+                value={filter}
+                helperText={
+                    filtered.length === 0
+                        ? undefined
+                        : filtered.length === 1
+                          ? translate("1_entry")
+                          : translate("x_entries", [String(filtered.length)])
+                }
+                placeholder={translate("filter")}
+                size="small"
+                onChange={(e) => setFilter(e.target.value)}
+                sx={{ mt: 1, mx: 1 }}
+                slotProps={{
+                    formHelperText: {
+                        sx: {
+                            fontSize: "0.85rem",
+                            margin: "auto",
+                        },
                     },
-                },
-            }}
-            variant="standard"
-        />
+                }}
+                variant="standard"
+            />
+        </div>
     );
 
     return [input, filtered];
