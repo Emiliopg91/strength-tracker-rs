@@ -1,10 +1,6 @@
 use std::collections::HashSet;
 
-use rusqlite_orm::{
-    dao::Repository,
-    database::DatabasePool,
-    types::{order_by::OrderBy, where_clause::Where},
-};
+use rusqlite_orm::{database::DatabasePool, types::order_by::OrderBy};
 
 use crate::{
     dao::session_step::{self, SessionStep, SessionStepRepository},
@@ -17,13 +13,14 @@ const BENCH: (u16, u16) = (0, 0);
 
 fn pr_sets(db: &DatabasePool) -> Vec<(u32, u8, u16, u16)> {
     db.run_in_connection(|conn| {
-        Ok(SessionStepRepository::select()
-            .where_(Where::Eq(session_step::entity::columns::PR, true.into()))
-            .order_by(OrderBy::Asc(session_step::entity::columns::EX_CAT))
-            .fetch_in(conn)?
-            .into_iter()
-            .map(|s| (s.session, s.idx, s.ex_cat.unwrap(), s.ex_id.unwrap()))
-            .collect())
+        Ok(SessionStepRepository::select_by_personal_records_in(
+            conn,
+            true,
+            Some(&[OrderBy::Asc(session_step::entity::columns::EX_CAT)]),
+        )?
+        .into_iter()
+        .map(|s| (s.session, s.idx, s.ex_cat.unwrap(), s.ex_id.unwrap()))
+        .collect())
     })
     .unwrap()
 }

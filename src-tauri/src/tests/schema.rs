@@ -421,6 +421,66 @@ fn migration_28_drops_chart_flag_and_cascades_workout_device() {
     assert_eq!(entries(&db), [("b".to_string(), false)]);
 }
 
+#[test]
+fn migration_30_tunes_indexes() {
+    let db = common::test_db();
+
+    let index_sql = |name: &'static str| {
+        db.run_in_connection(move |conn| {
+            Ok(conn
+                .query_row(
+                    "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = ?1",
+                    [name],
+                    |r| r.get::<_, String>(0),
+                )
+                .ok())
+        })
+        .unwrap()
+    };
+    assert_eq!(index_sql("WORKOUT_STEP_WORKOUT"), None);
+    assert!(index_sql("SESSION_STEP_PR").is_some());
+    assert!(index_sql("MUSCLE_EXERCISE_EXERCISE").is_some());
+    assert!(
+        index_sql("SESSION_STEP_EXERCISE_PR")
+            .unwrap()
+            .ends_with("WHERE pr = true")
+    );
+
+    // The ORM renders booleans as `true`, which must still reach the partial index
+    let plan: Vec<String> = db
+        .run_in_connection(|conn| {
+            let mut stmt = conn.prepare(
+                "EXPLAIN QUERY PLAN SELECT session FROM SESSION_STEP
+                 WHERE pr=true AND exercise_category IS NOT NULL AND exercise_id IS NOT NULL",
+            )?;
+            let rows = stmt
+                .query_map([], |r| r.get::<_, String>(3))?
+                .collect::<Result<_, _>>()?;
+            Ok(rows)
+        })
+        .unwrap();
+    assert!(
+        plan.iter().any(|p| p.contains("SESSION_STEP_EXERCISE_PR")),
+        "{plan:?}"
+    );
+
+    // Lookups by the record flag alone keep SESSION_STEP_PR
+    let plan: Vec<String> = db
+        .run_in_connection(|conn| {
+            let mut stmt =
+                conn.prepare("EXPLAIN QUERY PLAN SELECT * FROM SESSION_STEP WHERE pr=true")?;
+            let rows = stmt
+                .query_map([], |r| r.get::<_, String>(3))?
+                .collect::<Result<_, _>>()?;
+            Ok(rows)
+        })
+        .unwrap();
+    assert!(
+        plan.iter().any(|p| p.contains("SESSION_STEP_PR ")),
+        "{plan:?}"
+    );
+}
+
 /// Inserts a session with raw SQL, using only the columns that exist before migration 28:
 /// the `Session` entity tracks the latest schema, so its inserts fail on older ones.
 fn insert_legacy_session(

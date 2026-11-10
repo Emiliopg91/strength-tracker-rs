@@ -103,7 +103,7 @@ export interface Muscle {
   name: string;
 }
 
-// From src-tauri/src/dao/muscle_exercise.rs:8
+// From src-tauri/src/dao/muscle_exercise.rs:9
 export interface MuscleExercise {
   ex_cat: number;
   ex_id: number;

@@ -5,6 +5,7 @@ use crate::dao::muscle::{self, Muscle};
 
 #[derive(Entity, Clone, Deserialize, Serialize)]
 #[entity("muscle_exercise")]
+#[index("exercise", (ex_cat, ex_id))]
 pub struct MuscleExercise {
     pub muscle: String,
     #[column("exercise_category")]

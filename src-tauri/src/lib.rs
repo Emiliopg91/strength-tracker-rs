@@ -27,7 +27,7 @@ use tauri::{
 };
 use tauri_plugin_log::{
     Target, TargetKind,
-    log::{LevelFilter, debug, error, info},
+    log::{LevelFilter, debug, error, info, warn},
 };
 
 #[cfg(debug_assertions)]
@@ -106,6 +106,12 @@ fn initialize(app: &AppHandle) -> (DatabasePool, Settings, ConnectClient, MtpCli
             if let Err(e) = database.create_schema(&schema_ddls()) {
                 error!("Could not initialize database: {}", e);
                 exit(constants::ExitCodes::DbError.into())
+            }
+            // Keeps the planner statistics current, analyzing only the tables that need it
+            if let Err(e) =
+                database.run_in_connection(|conn| Ok(conn.execute_batch("PRAGMA optimize;")?))
+            {
+                warn!("Could not optimize database: {}", e);
             }
 
             debug!("Loading settings...");

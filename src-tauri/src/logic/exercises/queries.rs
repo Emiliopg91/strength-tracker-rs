@@ -628,13 +628,11 @@ pub(super) fn any_progression_suggestion(
 pub(super) fn exercise_list(
     conn: &rusqlite_orm::rusqlite::Connection,
 ) -> rusqlite_orm::errors::Result<Vec<ExerciseListItem>> {
-    let prs = SessionStepRepository::select()
-        .where_(Where::And(vec![
-            Where::Eq(session_step::entity::columns::PR, true.into()),
-            Where::NotNull(session_step::entity::columns::EX_CAT),
-            Where::NotNull(session_step::entity::columns::EX_ID),
-        ]))
-        .fetch_in(conn)?;
+    // Only exercise sets can hold a record; the filter just keeps the unwraps below safe
+    let prs: Vec<_> = SessionStepRepository::select_by_personal_records_in(conn, true, None)?
+        .into_iter()
+        .filter(|s| s.ex_cat.is_some() && s.ex_id.is_some())
+        .collect();
     let pr_keys: HashSet<(u16, u16)> = prs
         .iter()
         .filter_map(|s| Some((s.ex_cat?, s.ex_id?)))
