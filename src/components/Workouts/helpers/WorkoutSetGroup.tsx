@@ -1,14 +1,13 @@
-import { LeafStep, StepGroup, WorkoutUtils } from "@/utils/WorkoutUtils";
+import { StepGroup, WorkoutStepData, WorkoutUtils } from "@/utils/WorkoutUtils";
 import { StepType } from "@/utils/backend/models";
 import { WorkoutSetLeaf } from "./WorkoutSetLeaf";
+import { StepTypeMenu } from "./StepTypeMenu";
 import {
     Box,
     Divider,
     FormControl,
     IconButton,
     InputLabel,
-    ListItemText,
-    Menu,
     MenuItem,
     Select,
     SelectChangeEvent,
@@ -47,35 +46,38 @@ export function WorkoutSetGroup({
     const [addMenuAnchor, setAddMenuAnchor] = useState<HTMLElement | null>(
         null,
     );
-    const leafs = group.wrapped;
+    const children = group.wrapped;
 
     const onLapChanged = (e: SelectChangeEvent<number>) => {
         onChange({ ...group, laps: e.target.value as number });
     };
 
-    const setLeafs = (wrapped: LeafStep[]) => {
+    const setChildren = (wrapped: WorkoutStepData[]) => {
         onChange({ ...group, wrapped });
     };
 
-    const swapLeafPosition = (pos1: number, pos2: number) => {
-        const nLeafs = [...leafs];
-        nLeafs[pos1] = leafs[pos2];
-        nLeafs[pos2] = leafs[pos1];
-        setLeafs(nLeafs);
+    const swapChildPosition = (pos1: number, pos2: number) => {
+        const nChildren = [...children];
+        nChildren[pos1] = children[pos2];
+        nChildren[pos2] = children[pos1];
+        setChildren(nChildren);
     };
 
-    const updateLeaf = (i: number, leaf: LeafStep) => {
-        setLeafs(leafs.map((l, idx) => (idx == i ? leaf : l)));
+    const updateChild = (i: number, child: WorkoutStepData) => {
+        setChildren(children.map((c, idx) => (idx == i ? child : c)));
     };
 
-    const deleteLeaf = (i: number) => {
-        setLeafs(leafs.filter((_, idx) => idx != i));
+    const deleteChild = (i: number) => {
+        setChildren(children.filter((_, idx) => idx != i));
     };
 
     const addStep = (kind: StepType) => {
-        setAddMenuAnchor(null);
         const leaf = WorkoutUtils.getDefaultLeaf(kind);
-        setLeafs([...leafs, structuredClone(leaf)]);
+        setChildren([...children, structuredClone(leaf)]);
+    };
+
+    const addGroup = () => {
+        setChildren([...children, structuredClone(WorkoutUtils.DEFAULT_GROUP)]);
     };
 
     return (
@@ -173,62 +175,12 @@ export function WorkoutSetGroup({
                                     <AddCircleOutlineRoundedIcon fontSize="small" />
                                 </IconButton>
                             </Tooltip>
-                            <Menu
-                                anchorEl={addMenuAnchor}
-                                open={Boolean(addMenuAnchor)}
+                            <StepTypeMenu
+                                anchor={addMenuAnchor}
                                 onClose={() => setAddMenuAnchor(null)}
-                                anchorOrigin={{
-                                    vertical: "bottom",
-                                    horizontal: "right",
-                                }}
-                                transformOrigin={{
-                                    vertical: "top",
-                                    horizontal: "right",
-                                }}
-                            >
-                                <MenuItem
-                                    onClick={() => addStep(StepType.Exercise)}
-                                >
-                                    <ListItemText>
-                                        {translate("step_type_exercise")}
-                                    </ListItemText>
-                                </MenuItem>
-                                <MenuItem
-                                    onClick={() => addStep(StepType.Warmup)}
-                                >
-                                    <ListItemText>
-                                        {translate("step_type_warmup")}
-                                    </ListItemText>
-                                </MenuItem>
-                                <MenuItem
-                                    onClick={() => addStep(StepType.Cooldown)}
-                                >
-                                    <ListItemText>
-                                        {translate("step_type_cooldown")}
-                                    </ListItemText>
-                                </MenuItem>
-                                <MenuItem
-                                    onClick={() => addStep(StepType.Recovery)}
-                                >
-                                    <ListItemText>
-                                        {translate("step_type_recovery")}
-                                    </ListItemText>
-                                </MenuItem>
-                                <MenuItem
-                                    onClick={() => addStep(StepType.Rest)}
-                                >
-                                    <ListItemText>
-                                        {translate("step_type_rest")}
-                                    </ListItemText>
-                                </MenuItem>
-                                <MenuItem
-                                    onClick={() => addStep(StepType.Other)}
-                                >
-                                    <ListItemText>
-                                        {translate("step_type_other")}
-                                    </ListItemText>
-                                </MenuItem>
-                            </Menu>
+                                onSelect={addStep}
+                                onSelectGroup={addGroup}
+                            />
                             <Tooltip title={translate("delete")}>
                                 <span>
                                     <IconButton
@@ -255,18 +207,33 @@ export function WorkoutSetGroup({
                         />
                     }
                 >
-                    {leafs.map((leaf, idx) => (
-                        <WorkoutSetLeaf
-                            key={`leaf-${idx}`}
-                            leaf={leaf}
-                            index={idx}
-                            exercisesCatalog={exercisesCatalog}
-                            sameLevel={leafs.length}
-                            swapPosition={swapLeafPosition}
-                            onChange={(l) => updateLeaf(idx, l)}
-                            onDelete={() => deleteLeaf(idx)}
-                        />
-                    ))}
+                    {children.map((child, idx) =>
+                        WorkoutUtils.isStepGroup(child) ? (
+                            // Nested repeat; the spacing keeps its legend clear of the dividers
+                            <Box key={`group-${idx}`} sx={{ pt: 1 }}>
+                                <WorkoutSetGroup
+                                    group={child}
+                                    index={idx}
+                                    exercisesCatalog={exercisesCatalog}
+                                    sameLevel={children.length}
+                                    swapPosition={swapChildPosition}
+                                    onChange={(g) => updateChild(idx, g)}
+                                    onDelete={() => deleteChild(idx)}
+                                />
+                            </Box>
+                        ) : (
+                            <WorkoutSetLeaf
+                                key={`leaf-${idx}`}
+                                leaf={child}
+                                index={idx}
+                                exercisesCatalog={exercisesCatalog}
+                                sameLevel={children.length}
+                                swapPosition={swapChildPosition}
+                                onChange={(l) => updateChild(idx, l)}
+                                onDelete={() => deleteChild(idx)}
+                            />
+                        ),
+                    )}
                 </Stack>
             </fieldset>
         </>

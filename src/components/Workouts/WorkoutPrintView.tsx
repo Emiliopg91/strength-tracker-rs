@@ -115,18 +115,36 @@ function groupToHtml(
                         </tr>
                     </thead>
                     <tbody>
-                        {group.wrapped.map((leaf, idx) =>
-                            leafToHtml(
-                                idx,
-                                leaf,
-                                exercises,
-                                unilaterals,
-                                translate,
-                                exerciseName,
-                                formatDuration,
-                                formatNumber,
-                                fromKg,
-                                getWeightUnit,
+                        {group.wrapped.map((child, idx) =>
+                            WorkoutUtils.isStepGroup(child) ? (
+                                <tr key={idx}>
+                                    <td colSpan={5}>
+                                        {groupToHtml(
+                                            child,
+                                            exercises,
+                                            unilaterals,
+                                            translate,
+                                            exerciseName,
+                                            formatDuration,
+                                            formatNumber,
+                                            fromKg,
+                                            getWeightUnit,
+                                        )}
+                                    </td>
+                                </tr>
+                            ) : (
+                                leafToHtml(
+                                    idx,
+                                    child,
+                                    exercises,
+                                    unilaterals,
+                                    translate,
+                                    exerciseName,
+                                    formatDuration,
+                                    formatNumber,
+                                    fromKg,
+                                    getWeightUnit,
+                                )
                             ),
                         )}
                     </tbody>

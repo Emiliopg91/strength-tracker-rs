@@ -1,4 +1,4 @@
-import { Workout, WorkoutDetails } from "@/utils/backend/models";
+import { StepType, Workout, WorkoutDetails } from "@/utils/backend/models";
 import {
     Button,
     Dialog,
@@ -11,6 +11,8 @@ import CloseIcon from "@mui/icons-material/Close";
 import { useContext, useState } from "react";
 import { WorkoutStepData, WorkoutUtils } from "@/utils/WorkoutUtils";
 import { WorkoutSetGroup } from "./helpers/WorkoutSetGroup";
+import { WorkoutSetLeaf } from "./helpers/WorkoutSetLeaf";
+import { StepTypeMenu } from "./helpers/StepTypeMenu";
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
 import { BackendClient } from "@/utils/backend/client";
 import { useLoadingTask } from "@/hooks/useLoadingTask";
@@ -36,6 +38,9 @@ export function WorkoutStepsModal({ workout, isEdit, onClose }: Props) {
     const [steps, setSteps] = useState(
         WorkoutUtils.parseWorkoutSteps(workout!.steps, fromKg),
     );
+    const [addMenuAnchor, setAddMenuAnchor] = useState<HTMLElement | null>(
+        null,
+    );
     const valid = name.length > 0 && WorkoutUtils.validateSteps(steps);
     const changed =
         name != workout.name ||
@@ -59,7 +64,14 @@ export function WorkoutStepsModal({ workout, isEdit, onClose }: Props) {
         setSteps([...steps, structuredClone(WorkoutUtils.DEFAULT_GROUP)]);
     };
 
-    const deleteGroup = (i: number) => {
+    const addStep = (kind: StepType) => {
+        setSteps([
+            ...steps,
+            structuredClone(WorkoutUtils.getDefaultLeaf(kind)),
+        ]);
+    };
+
+    const deleteStep = (i: number) => {
         const nSteps = steps.filter((_, idx) => idx != i);
         setSteps(nSteps);
     };
@@ -136,16 +148,30 @@ export function WorkoutStepsModal({ workout, isEdit, onClose }: Props) {
                                     swapPosition={swapPosition}
                                     onChange={(g) => updateStep(idx, g)}
                                     onDelete={() => {
-                                        deleteGroup(idx);
+                                        deleteStep(idx);
                                     }}
                                 />
                             ) : (
-                                <>
-                                    1x
-                                    <br />
-                                    {step.kind}
-                                    <hr />
-                                </>
+                                // Same frame as a group, without the repeat legend
+                                <fieldset
+                                    key={`leaf-${idx}`}
+                                    style={{
+                                        backgroundColor: "rgba(0, 0, 0, 0.15)",
+                                        borderRadius: "10px",
+                                        padding: "0 8px",
+                                        marginBottom: "12px",
+                                    }}
+                                >
+                                    <WorkoutSetLeaf
+                                        leaf={step}
+                                        index={idx}
+                                        sameLevel={steps.length}
+                                        exercisesCatalog={exercisesCatalog}
+                                        swapPosition={swapPosition}
+                                        onChange={(l) => updateStep(idx, l)}
+                                        onDelete={() => deleteStep(idx)}
+                                    />
+                                </fieldset>
                             ),
                         )}
                         <div
@@ -157,9 +183,20 @@ export function WorkoutStepsModal({ workout, isEdit, onClose }: Props) {
                                 gap: "8px",
                             }}
                         >
-                            <Button variant="contained" onClick={addGroup}>
-                                {translate("add_set")}
+                            <Button
+                                variant="contained"
+                                onClick={(e) =>
+                                    setAddMenuAnchor(e.currentTarget)
+                                }
+                            >
+                                {translate("add")}
                             </Button>
+                            <StepTypeMenu
+                                anchor={addMenuAnchor}
+                                onClose={() => setAddMenuAnchor(null)}
+                                onSelect={addStep}
+                                onSelectGroup={addGroup}
+                            />
                             <Button
                                 color="success"
                                 variant="contained"

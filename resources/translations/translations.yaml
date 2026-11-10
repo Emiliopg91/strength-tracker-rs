@@ -481,12 +481,15 @@ repeat:
 delete:
   en: Delete
   es: Eliminar
+add:
+  en: Add
+  es: Añadir
 add_step:
   en: Add step
   es: Añadir paso
-add_set:
-  en: Add set
-  es: Añadir serie
+set:
+  en: Set
+  es: Serie
 save_workout:
   en: Save
   es: Guardar

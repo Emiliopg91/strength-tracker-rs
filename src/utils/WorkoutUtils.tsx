@@ -2,9 +2,10 @@ import { StepType, WorkoutStep } from "./backend/models";
 
 export type LeafStep = Omit<WorkoutStep, "begin_idx" | "idx" | "workout">;
 
+// Groups may wrap other groups (nested repeats)
 export interface StepGroup {
     laps: number;
-    wrapped: LeafStep[];
+    wrapped: WorkoutStepData[];
 }
 
 export type WorkoutStepData = LeafStep | StepGroup;
@@ -27,20 +28,31 @@ export class WorkoutUtils {
         steps: WorkoutStep[],
         fromKg: (kg: number) => number,
     ): WorkoutStepData[] {
-        const elements: WorkoutStepData[] = [];
+        return WorkoutUtils.parseSortedSteps(
+            steps.toSorted((a, b) => a.idx - b.idx),
+            fromKg,
+        );
+    }
 
-        let localSteps = steps.toSorted((a, b) => a.idx - b.idx);
+    // Walks backwards: a repeat closes its group, which spans from its begin_idx up to itself
+    private static parseSortedSteps(
+        steps: WorkoutStep[],
+        fromKg: (kg: number) => number,
+    ): WorkoutStepData[] {
+        const elements: WorkoutStepData[] = [];
+        let localSteps = steps;
 
         while (localSteps.length > 0) {
             const elem = localSteps[localSteps.length - 1];
 
             if (elem.kind == StepType.Repeat) {
                 const laps = elem.reps!;
-                const wrapped = localSteps
-                    .filter(
+                const wrapped = WorkoutUtils.parseSortedSteps(
+                    localSteps.filter(
                         (ws) => ws.idx >= elem.begin_idx! && ws.idx < elem.idx,
-                    )
-                    .map((e) => WorkoutUtils.workoutStepToLeafStep(e, fromKg));
+                    ),
+                    fromKg,
+                );
                 const element: StepGroup = {
                     laps,
                     wrapped,
@@ -110,9 +122,7 @@ export class WorkoutUtils {
             steps.length > 0 &&
             steps.every((step) =>
                 WorkoutUtils.isStepGroup(step)
-                    ? step.laps >= 1 &&
-                      step.wrapped.length > 0 &&
-                      step.wrapped.every(WorkoutUtils.validateLeaf)
+                    ? step.laps >= 1 && WorkoutUtils.validateSteps(step.wrapped)
                     : WorkoutUtils.validateLeaf(step),
             )
         );
@@ -143,20 +153,26 @@ export class WorkoutUtils {
         toKg: (value: number) => number,
     ): WorkoutStep[] {
         const result: WorkoutStep[] = [];
+        WorkoutUtils.appendWorkoutSteps(steps, workout, toKg, result);
+        return result;
+    }
 
+    // Steps are numbered in order; a group's repeat goes right after its last wrapped step
+    private static appendWorkoutSteps(
+        steps: WorkoutStepData[],
+        workout: string,
+        toKg: (value: number) => number,
+        result: WorkoutStep[],
+    ) {
         for (const step of steps) {
             if (WorkoutUtils.isStepGroup(step)) {
                 const begin = result.length;
-                for (const leaf of step.wrapped) {
-                    result.push(
-                        WorkoutUtils.leafToWorkoutStep(
-                            leaf,
-                            workout,
-                            result.length,
-                            toKg,
-                        ),
-                    );
-                }
+                WorkoutUtils.appendWorkoutSteps(
+                    step.wrapped,
+                    workout,
+                    toKg,
+                    result,
+                );
                 result.push({
                     workout,
                     idx: result.length,
@@ -181,8 +197,6 @@ export class WorkoutUtils {
                 );
             }
         }
-
-        return result;
     }
 
     private static leafToWorkoutStep(

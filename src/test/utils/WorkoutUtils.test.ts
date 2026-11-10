@@ -58,4 +58,82 @@ describe("WorkoutUtils", () => {
 
         expect(WorkoutUtils.validateSteps(steps)).toBe(false);
     });
+
+    it("round-trips nested repeats and root-level steps", () => {
+        // warmup, then 3x [ex, 2x [ex, rest] ]
+        const steps: WorkoutStep[] = [
+            exerciseStep({ idx: 0, kind: StepType.Warmup }),
+            exerciseStep({ idx: 1, ex_id: 1 }),
+            exerciseStep({ idx: 2, ex_id: 2 }),
+            exerciseStep({
+                idx: 3,
+                kind: StepType.Rest,
+                ex_cat: null,
+                ex_id: null,
+                weight: null,
+                time: 60,
+            }),
+            exerciseStep({
+                idx: 4,
+                kind: StepType.Repeat,
+                begin_idx: 2,
+                reps: 2,
+                ex_cat: null,
+                ex_id: null,
+                weight: null,
+            }),
+            exerciseStep({
+                idx: 5,
+                kind: StepType.Repeat,
+                begin_idx: 1,
+                reps: 3,
+                ex_cat: null,
+                ex_id: null,
+                weight: null,
+            }),
+        ];
+
+        const parsed = WorkoutUtils.parseWorkoutSteps(steps, (kg) => kg);
+
+        expect(parsed).toHaveLength(2);
+        expect(parsed[0]).toMatchObject({ kind: StepType.Warmup });
+        expect(parsed[1]).toMatchObject({
+            laps: 3,
+            wrapped: [
+                { kind: StepType.Exercise, ex_id: 1 },
+                {
+                    laps: 2,
+                    wrapped: [
+                        { kind: StepType.Exercise, ex_id: 2 },
+                        { kind: StepType.Rest, time: 60 },
+                    ],
+                },
+            ],
+        });
+        expect(WorkoutUtils.validateSteps(parsed)).toBe(true);
+
+        const written = WorkoutUtils.toWorkoutSteps(parsed, "w", (kg) => kg);
+        expect(
+            written.map(({ idx, kind, begin_idx, reps }) => ({
+                idx,
+                kind,
+                begin_idx,
+                reps,
+            })),
+        ).toEqual(
+            steps.map(({ idx, kind, begin_idx, reps }) => ({
+                idx,
+                kind,
+                begin_idx,
+                reps,
+            })),
+        );
+    });
+
+    it("rejects a nested repeat with an invalid step inside", () => {
+        const group = structuredClone(WorkoutUtils.DEFAULT_GROUP);
+        const steps = [{ laps: 2, wrapped: [group] }];
+
+        expect(WorkoutUtils.validateSteps(steps)).toBe(false);
+    });
 });
