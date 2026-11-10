@@ -14,16 +14,16 @@ use tokio::sync::oneshot;
 use crate::{
     connect::ConnectPrompter,
     dto::prompts::{PromptKind, PromptRequest},
-    logic::app::show_main_window,
+    logic::app::helpers::show_main_window,
 };
 
-type Answer = Option<Vec<String>>;
+pub(super) type Answer = Option<Vec<String>>;
 
 /// Prompts sent to the frontend that are still waiting for an answer, by id.
 #[derive(Default)]
 pub struct Prompts {
     next_id: AtomicU32,
-    pending: Mutex<HashMap<u32, oneshot::Sender<Answer>>>,
+    pub(super) pending: Mutex<HashMap<u32, oneshot::Sender<Answer>>>,
 }
 
 /// Asks the frontend for the input described by `kind` and waits for the answer. Returns `None`
@@ -64,19 +64,6 @@ pub async fn request_prompt<R: Runtime>(
         warn!("Prompt #{} cancelled by the user", id);
     }
     answer
-}
-
-/// Resolves the pending prompt `id` with the user's `values`, or `None` if cancelled.
-pub fn answer_prompt(prompts: &Prompts, id: u32, values: Answer) -> Result<(), String> {
-    let tx = prompts
-        .pending
-        .lock()
-        .unwrap()
-        .remove(&id)
-        .ok_or_else(|| format!("No pending prompt #{id}"))?;
-    // The requester may have given up already, nothing left to do then
-    let _ = tx.send(values);
-    Ok(())
 }
 
 /// Asks for the Garmin Connect inputs through the frontend dialogs.

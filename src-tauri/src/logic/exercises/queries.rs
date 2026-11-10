@@ -2,14 +2,12 @@ use std::collections::{HashMap, HashSet};
 
 use rusqlite_orm::{
     dao::Repository,
+    database::DatabasePool,
     errors::DatabaseError,
     types::{order_by::OrderBy, where_clause::Where},
 };
-use tauri::{AppHandle, Runtime};
-use tauri_plugin_log::log::info;
 
 use crate::{
-    ConnectLock, SettingsLock,
     dao::{
         body_metric::{self, BodyMetric, BodyMetricRepository},
         exercise::{self, Exercise, ExerciseRepository, GENERIC_EXERCISE_ID},
@@ -26,155 +24,9 @@ use crate::{
         notifications::{NotificationDefinition, NotificationKind},
         sessions::SessionStepDto,
     },
-    logic::{
-        connect::sync_workouts_connect, devices::push_pending_to_usb,
-        notifications::show_notification, report_error, run_blocking,
-    },
+    logic::notifications::show_notification,
     utils::translations::{Languages, translate},
 };
-
-/// Returns the exercises with a personal record, annotated with it, plus those planned in some
-/// workout step that have none yet.
-pub async fn get_exercises<R: Runtime>(
-    app: &AppHandle<R>,
-    settings: &SettingsLock,
-) -> Result<Vec<ExerciseListItem>, String> {
-    info!("Getting exercises list...");
-    let res = run_blocking(app, move |database| {
-        database.run_in_connection(|conn| {
-            let prs = SessionStepRepository::select()
-                .where_(Where::And(vec![
-                    Where::Eq(session_step::entity::columns::PR, true.into()),
-                    Where::NotNull(session_step::entity::columns::EX_CAT),
-                    Where::NotNull(session_step::entity::columns::EX_ID),
-                ]))
-                .fetch_in(conn)?;
-            let pr_keys: HashSet<(u16, u16)> = prs
-                .iter()
-                .filter_map(|s| Some((s.ex_cat?, s.ex_id?)))
-                .collect();
-
-            let mut planned: Vec<(u16, u16)> = WorkoutStepRepository::select()
-                .where_(Where::And(vec![
-                    Where::NotNull(workout_step::entity::columns::EX_CAT),
-                    Where::NotNull(workout_step::entity::columns::EX_ID),
-                ]))
-                .fetch_in(conn)?
-                .iter()
-                .filter_map(|s| Some((s.ex_cat?, s.ex_id?)))
-                .filter(|key| !pr_keys.contains(key))
-                .collect::<HashSet<_>>()
-                .into_iter()
-                .collect();
-            planned.sort();
-
-            let keys: Vec<_> = pr_keys.iter().chain(planned.iter()).collect();
-            let exercises: HashMap<(u16, u16), Exercise> = if keys.is_empty() {
-                HashMap::new()
-            } else {
-                ExerciseRepository::select()
-                    .where_(Where::InMultiple(
-                        vec![
-                            exercise::entity::columns::CATEGORY,
-                            exercise::entity::columns::ID,
-                        ],
-                        keys.iter().map(|k| vec![k.0.into(), k.1.into()]).collect(),
-                    ))
-                    .fetch_in(conn)?
-                    .into_iter()
-                    .map(|e| ((e.category, e.id), e))
-                    .collect()
-            };
-
-            let mut suggested_progressions = HashSet::new();
-            for (key, exercise) in &exercises {
-                if pr_keys.contains(key) && progression_suggestion_for(conn, exercise)?.is_some() {
-                    suggested_progressions.insert(*key);
-                }
-            }
-
-            let mut items: Vec<_> = prs
-                .iter()
-                .map(|pr| {
-                    let key = (pr.ex_cat.unwrap(), pr.ex_id.unwrap());
-                    let exercise = exercises.get(&key);
-                    ExerciseListItem {
-                        category: key.0,
-                        id: key.1,
-                        reps: pr.reps.unwrap_or_default(),
-                        weight: pr.weight.unwrap_or_default(),
-                        date: pr.session,
-                        unilateral: exercise.is_some_and(|e| e.unilateral),
-                        progression: suggested_progressions.contains(&key),
-                        notes: exercise.and_then(|e| e.notes.clone()),
-                        used: true,
-                    }
-                })
-                .collect();
-
-            // Planned exercises may not have been recorded yet, so they can lack a catalog row
-            items.extend(planned.iter().map(|key| match exercises.get(key) {
-                Some(exercise) => ExerciseListItem::from(exercise),
-                None => ExerciseListItem {
-                    category: key.0,
-                    id: key.1,
-                    reps: 0,
-                    weight: 0.0,
-                    date: 0,
-                    unilateral: false,
-                    progression: false,
-                    notes: None,
-                    used: false,
-                },
-            }));
-
-            Ok(items)
-        })
-    })
-    .await;
-
-    match res {
-        Ok(l) => {
-            info!("Retreived {} exercises", l.len());
-            Ok(l)
-        }
-        Err(e) => Err(report_error(
-            e,
-            settings.read().unwrap().language,
-            "error_exercise_list",
-            "Error getting exercises list",
-        )),
-    }
-}
-
-/// Returns the personal record and full per-session set history for one exercise.
-pub async fn get_exercise_details<R: Runtime>(
-    app: &AppHandle<R>,
-    settings: &SettingsLock,
-    category: u16,
-    id: u16,
-) -> Result<ExerciseDetails, String> {
-    info!(
-        "Getting details for exercise with category {} and id {}...",
-        category, id
-    );
-    let res = run_blocking(app, move |database| {
-        database.run_in_connection(|conn| Ok(fetch_exercise_details(conn, category, id, None)?))
-    })
-    .await;
-    match res {
-        Ok(l) => {
-            info!("Found details for exercise {} - {}", category, id);
-            Ok(l)
-        }
-        Err(e) => Err(report_error(
-            e,
-            settings.read().unwrap().language,
-            "error_exercise_details",
-            "Error getting exercise details",
-        )),
-    }
-}
 
 /// Loads the personal record and full per-session set history for one exercise.
 pub fn fetch_exercise_details(
@@ -319,16 +171,6 @@ pub fn fetch_exercises_muscles(
     Ok(())
 }
 
-pub async fn get_exercises_catalog<R: Runtime>(
-    app: &AppHandle<R>,
-) -> Result<HashMap<u16, Vec<u16>>, String> {
-    run_blocking(app, |db| {
-        db.run_in_connection(|conn| Ok(exercises_catalog(conn)?))
-    })
-    .await
-    .map_err(|e: DatabaseError| e.to_string())
-}
-
 /// Exercises that can be picked, by category. The generic exercise of a category is left out when
 /// the category already has a real exercise with its same name (e.g. `SQUAT` within squats).
 pub fn exercises_catalog(
@@ -453,158 +295,6 @@ pub fn update_prs(
     Ok(())
 }
 
-pub async fn set_exercise_unilateral<R: Runtime>(
-    app: &AppHandle<R>,
-    settings: &SettingsLock,
-    category: u16,
-    id: u16,
-    value: bool,
-) -> Result<(), String> {
-    let res: Result<_, String> = run_blocking(app, move |database| {
-        ExerciseRepository::update()
-            .set(exercise::entity::columns::UNILATERAL, value.into())
-            .where_(Where::And(vec![
-                Where::Eq(exercise::entity::columns::CATEGORY, category.into()),
-                Where::Eq(exercise::entity::columns::ID, id.into()),
-            ]))
-            .execute(database)
-            .map_err(|e| e.to_string())?;
-
-        Ok(())
-    })
-    .await;
-
-    match res {
-        Ok(l) => {
-            info!("Updated unilateral flag for exercise");
-            Ok(l)
-        }
-        Err(e) => Err(report_error(
-            e,
-            settings.read().unwrap().language,
-            "error_updating_exercise",
-            "Error updating unilateral flag for exercise",
-        )),
-    }
-}
-
-pub async fn set_exercise_progression<R: Runtime>(
-    app: &AppHandle<R>,
-    settings: &SettingsLock,
-    category: u16,
-    id: u16,
-    value: bool,
-) -> Result<(), String> {
-    let res: Result<_, String> = run_blocking(app, move |database| {
-        ExerciseRepository::update()
-            .set(exercise::entity::columns::PROGRESSION, value.into())
-            .where_(Where::And(vec![
-                Where::Eq(exercise::entity::columns::CATEGORY, category.into()),
-                Where::Eq(exercise::entity::columns::ID, id.into()),
-            ]))
-            .execute(database)
-            .map_err(|e| e.to_string())?;
-
-        Ok(())
-    })
-    .await;
-
-    match res {
-        Ok(l) => {
-            info!("Updated progression flag for exercise");
-            Ok(l)
-        }
-        Err(e) => Err(report_error(
-            e,
-            settings.read().unwrap().language,
-            "error_updating_exercise",
-            "Error updating progression flag for exercise",
-        )),
-    }
-}
-
-pub async fn set_exercise_progression_parameters<R: Runtime>(
-    app: &AppHandle<R>,
-    settings: &SettingsLock,
-    category: u16,
-    id: u16,
-    reps: &str,
-    weight: f32,
-) -> Result<(), String> {
-    let reps = reps.to_string();
-    let res: Result<_, String> = run_blocking(app, move |database| {
-        ExerciseRepository::update()
-            .set(exercise::entity::columns::REPS, reps.into())
-            .set(exercise::entity::columns::WEIGHT, weight.into())
-            .where_(Where::And(vec![
-                Where::Eq(exercise::entity::columns::CATEGORY, category.into()),
-                Where::Eq(exercise::entity::columns::ID, id.into()),
-            ]))
-            .execute(database)
-            .map_err(|e| e.to_string())?;
-
-        Ok(())
-    })
-    .await;
-
-    match res {
-        Ok(l) => {
-            info!("Updated rep ranges for exercise");
-            Ok(l)
-        }
-        Err(e) => Err(report_error(
-            e,
-            settings.read().unwrap().language,
-            "error_updating_exercise",
-            "Error updating rep ranges for exercise",
-        )),
-    }
-}
-
-pub async fn get_progression_status<R: Runtime>(
-    app: &AppHandle<R>,
-    category: u16,
-    id: u16,
-) -> Result<Option<ProgressionSuggestion>, String> {
-    run_blocking(app, move |database| {
-        Ok(WorkoutStepRepository::select()
-            .columns(&[
-                workout_step::entity::columns::REPS,
-                workout_step::entity::columns::WEIGHT,
-            ])
-            .where_(Where::And(vec![
-                Where::Eq(workout_step::entity::columns::EX_CAT, category.into()),
-                Where::Eq(workout_step::entity::columns::EX_ID, id.into()),
-                exercise_step(),
-            ]))
-            .order_by(OrderBy::Desc(workout_step::entity::columns::WEIGHT))
-            .order_by(OrderBy::Desc(workout_step::entity::columns::REPS))
-            .fetch_one(database)?
-            .map(|r| ProgressionSuggestion {
-                reps: r
-                    .get_u16_nullable(workout_step::entity::columns::REPS.as_ref())
-                    .unwrap_or_default(),
-                weight: r
-                    .get_f32_nullable(workout_step::entity::columns::WEIGHT.as_ref())
-                    .unwrap_or_default(),
-            }))
-    })
-    .await
-    .map_err(|e: DatabaseError| e.to_string())
-}
-
-pub async fn get_progression_suggestion<R: Runtime>(
-    app: &AppHandle<R>,
-    category: u16,
-    id: u16,
-) -> Result<Option<ProgressionSuggestion>, String> {
-    run_blocking(app, move |database| {
-        database.run_in_connection(|conn| Ok(fetch_progression_suggestion(conn, category, id)?))
-    })
-    .await
-    .map_err(|e: DatabaseError| e.to_string())
-}
-
 pub fn fetch_progression_suggestion(
     conn: &rusqlite_orm::rusqlite::Connection,
     category: u16,
@@ -634,7 +324,7 @@ pub fn progression_suggestions(
 
 /// Exercises with progression enabled that could have a suggestion: performed at least once and programmed in an enabled workout.
 /// Prunes the catalog in SQL so the per-exercise checks only run for the handful of exercises actually in use.
-fn progression_candidates() -> Where<Exercise> {
+pub(super) fn progression_candidates() -> Where<Exercise> {
     let performed = SessionStepRepository::select()
         .distinct(&[
             session_step::entity::columns::EX_CAT,
@@ -783,7 +473,7 @@ pub fn progression_suggestion_for(
 }
 
 /// Only exercise steps progress: warm-ups and the like keep their own load.
-fn exercise_step() -> Where<WorkoutStep> {
+pub(super) fn exercise_step() -> Where<WorkoutStep> {
     Where::Eq(
         workout_step::entity::columns::KIND,
         StepType::Exercise.into(),
@@ -791,7 +481,7 @@ fn exercise_step() -> Where<WorkoutStep> {
 }
 
 /// Steps programmed below `suggestion`; steps already at or above it are never lowered.
-fn below_suggestion(suggestion: &ProgressionSuggestion) -> Where<WorkoutStep> {
+pub(super) fn below_suggestion(suggestion: &ProgressionSuggestion) -> Where<WorkoutStep> {
     Where::Or(vec![
         weight_below(suggestion.weight),
         Where::And(vec![
@@ -802,7 +492,7 @@ fn below_suggestion(suggestion: &ProgressionSuggestion) -> Where<WorkoutStep> {
 }
 
 /// Steps loaded below `weight`, a missing load counting as 0.
-fn weight_below(weight: f32) -> Where<WorkoutStep> {
+pub(super) fn weight_below(weight: f32) -> Where<WorkoutStep> {
     let lt = Where::Lt(workout_step::entity::columns::WEIGHT, weight.into());
     if weight > 0.0 {
         Where::Or(vec![Where::Null(workout_step::entity::columns::WEIGHT), lt])
@@ -812,134 +502,13 @@ fn weight_below(weight: f32) -> Where<WorkoutStep> {
 }
 
 /// Steps loaded with exactly `weight`, a missing load counting as 0.
-fn weight_equals(weight: f32) -> Where<WorkoutStep> {
+pub(super) fn weight_equals(weight: f32) -> Where<WorkoutStep> {
     let eq = Where::Eq(workout_step::entity::columns::WEIGHT, weight.into());
     if weight == 0.0 {
         Where::Or(vec![Where::Null(workout_step::entity::columns::WEIGHT), eq])
     } else {
         eq
     }
-}
-
-pub async fn apply_progression_suggestion<R: Runtime>(
-    app: &AppHandle<R>,
-    settings: &SettingsLock,
-    connect: &ConnectLock,
-    category: u16,
-    id: u16,
-    suggestion: ProgressionSuggestion,
-) -> Result<(), String> {
-    let res = run_blocking(app, move |database| {
-        database
-            .run_in_transaction(|tx| {
-                // Reps go first: the weight update would otherwise change which steps are below
-                let mut modified = WorkoutStepRepository::update()
-                    .set(workout_step::entity::columns::REPS, suggestion.reps.into())
-                    .where_(Where::And(vec![
-                        Where::Eq(workout_step::entity::columns::EX_CAT, category.into()),
-                        Where::Eq(workout_step::entity::columns::EX_ID, id.into()),
-                        exercise_step(),
-                        Where::NotNull(workout_step::entity::columns::REPS),
-                        below_suggestion(&suggestion),
-                    ]))
-                    .execute_in(tx)?;
-                modified += WorkoutStepRepository::update()
-                    .set(
-                        workout_step::entity::columns::WEIGHT,
-                        suggestion.weight.into(),
-                    )
-                    .where_(Where::And(vec![
-                        Where::Eq(workout_step::entity::columns::EX_CAT, category.into()),
-                        Where::Eq(workout_step::entity::columns::EX_ID, id.into()),
-                        exercise_step(),
-                        weight_below(suggestion.weight),
-                    ]))
-                    .execute_in(tx)?;
-
-                let mut workouts = Vec::new();
-                if modified > 0 {
-                    workouts = WorkoutStepRepository::select()
-                        .distinct(&[workout_step::entity::columns::WORKOUT])
-                        .where_(Where::And(vec![
-                            Where::Eq(workout_step::entity::columns::EX_CAT, category.into()),
-                            Where::Eq(workout_step::entity::columns::EX_ID, id.into()),
-                            exercise_step(),
-                        ]))
-                        .fetch_in(tx)?
-                        .iter()
-                        .map(|r| r.get_text(workout_step::entity::columns::WORKOUT.as_ref()))
-                        .collect();
-                    WorkoutDeviceRepository::update()
-                        .set(workout_device::entity::columns::PENDING, true.into())
-                        .where_(Where::InSub(
-                            workout_device::entity::columns::WORKOUT,
-                            WorkoutStepRepository::select()
-                                .distinct(&[workout_step::entity::columns::WORKOUT])
-                                .where_(Where::And(vec![
-                                    Where::Eq(
-                                        workout_step::entity::columns::EX_CAT,
-                                        category.into(),
-                                    ),
-                                    Where::Eq(workout_step::entity::columns::EX_ID, id.into()),
-                                    exercise_step(),
-                                ]))
-                                .to_subquery(),
-                        ))
-                        .execute_in(tx)?;
-                }
-
-                Ok((modified > 0, workouts))
-            })
-            .map_err(|e| e.to_string())
-    })
-    .await;
-
-    let lang = settings.read().unwrap().language;
-    match res {
-        Ok((modified, workouts)) => {
-            info!("Applied suggested progression");
-            sync_workouts_connect(app, connect, settings, &workouts).await;
-            if modified {
-                push_pending_to_usb(app).await;
-            }
-            Ok(())
-        }
-        Err(e) => Err(report_error(
-            e,
-            lang,
-            "error_applying_progression",
-            "Error applying progression",
-        )),
-    }
-}
-
-pub async fn save_exercise_notes<R: Runtime>(
-    app: &AppHandle<R>,
-    settings: &SettingsLock,
-    connect: &ConnectLock,
-    category: u16,
-    id: u16,
-    notes: &str,
-) -> Result<(), String> {
-    let notes = if notes.trim().is_empty() {
-        None
-    } else {
-        Some(notes.trim().to_string())
-    };
-
-    let workouts = run_blocking(app, move |database| {
-        database
-            .run_in_transaction(|tx| Ok(update_exercise_notes(tx, category, id, notes.clone())?))
-            .map_err(|e| e.to_string())
-    })
-    .await?;
-
-    if !workouts.is_empty() {
-        sync_workouts_connect(app, connect, settings, &workouts).await;
-        push_pending_to_usb(app).await;
-    }
-
-    Ok(())
 }
 
 /// Stores the exercise notes and queues for upload the workouts inheriting them.
@@ -1013,11 +582,240 @@ pub fn any_progression_suggestion(
         }))
 }
 
-pub async fn available_any_progression_suggestions(app: &AppHandle) -> bool {
-    run_blocking(app, |database| {
-        database
-            .run_in_connection(|conn| Ok(any_progression_suggestion(conn)?))
-            .unwrap_or(false)
-    })
-    .await
+/// The exercises with a personal record, annotated with it, plus those planned in some workout
+/// step that have none yet.
+pub fn exercise_list(
+    conn: &rusqlite_orm::rusqlite::Connection,
+) -> rusqlite_orm::errors::Result<Vec<ExerciseListItem>> {
+    let prs = SessionStepRepository::select()
+        .where_(Where::And(vec![
+            Where::Eq(session_step::entity::columns::PR, true.into()),
+            Where::NotNull(session_step::entity::columns::EX_CAT),
+            Where::NotNull(session_step::entity::columns::EX_ID),
+        ]))
+        .fetch_in(conn)?;
+    let pr_keys: HashSet<(u16, u16)> = prs
+        .iter()
+        .filter_map(|s| Some((s.ex_cat?, s.ex_id?)))
+        .collect();
+
+    let mut planned: Vec<(u16, u16)> = WorkoutStepRepository::select()
+        .where_(Where::And(vec![
+            Where::NotNull(workout_step::entity::columns::EX_CAT),
+            Where::NotNull(workout_step::entity::columns::EX_ID),
+        ]))
+        .fetch_in(conn)?
+        .iter()
+        .filter_map(|s| Some((s.ex_cat?, s.ex_id?)))
+        .filter(|key| !pr_keys.contains(key))
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
+    planned.sort();
+
+    let keys: Vec<_> = pr_keys.iter().chain(planned.iter()).collect();
+    let exercises: HashMap<(u16, u16), Exercise> = if keys.is_empty() {
+        HashMap::new()
+    } else {
+        ExerciseRepository::select()
+            .where_(Where::InMultiple(
+                vec![
+                    exercise::entity::columns::CATEGORY,
+                    exercise::entity::columns::ID,
+                ],
+                keys.iter().map(|k| vec![k.0.into(), k.1.into()]).collect(),
+            ))
+            .fetch_in(conn)?
+            .into_iter()
+            .map(|e| ((e.category, e.id), e))
+            .collect()
+    };
+
+    let mut suggested_progressions = HashSet::new();
+    for (key, exercise) in &exercises {
+        if pr_keys.contains(key) && progression_suggestion_for(conn, exercise)?.is_some() {
+            suggested_progressions.insert(*key);
+        }
+    }
+
+    let mut items: Vec<_> = prs
+        .iter()
+        .map(|pr| {
+            let key = (pr.ex_cat.unwrap(), pr.ex_id.unwrap());
+            let exercise = exercises.get(&key);
+            ExerciseListItem {
+                category: key.0,
+                id: key.1,
+                reps: pr.reps.unwrap_or_default(),
+                weight: pr.weight.unwrap_or_default(),
+                date: pr.session,
+                unilateral: exercise.is_some_and(|e| e.unilateral),
+                progression: suggested_progressions.contains(&key),
+                notes: exercise.and_then(|e| e.notes.clone()),
+                used: true,
+            }
+        })
+        .collect();
+
+    // Planned exercises may not have been recorded yet, so they can lack a catalog row
+    items.extend(planned.iter().map(|key| match exercises.get(key) {
+        Some(exercise) => ExerciseListItem::from(exercise),
+        None => ExerciseListItem {
+            category: key.0,
+            id: key.1,
+            reps: 0,
+            weight: 0.0,
+            date: 0,
+            unilateral: false,
+            progression: false,
+            notes: None,
+            used: false,
+        },
+    }));
+
+    Ok(items)
+}
+
+/// Marks the exercise as performed one side at a time, or not.
+pub fn set_unilateral(
+    database: &DatabasePool,
+    category: u16,
+    id: u16,
+    value: bool,
+) -> rusqlite_orm::errors::Result<()> {
+    ExerciseRepository::update()
+        .set(exercise::entity::columns::UNILATERAL, value.into())
+        .where_(by_key(category, id))
+        .execute(database)?;
+    Ok(())
+}
+
+/// Enables or disables progression suggestions for the exercise.
+pub fn set_progression(
+    database: &DatabasePool,
+    category: u16,
+    id: u16,
+    value: bool,
+) -> rusqlite_orm::errors::Result<()> {
+    ExerciseRepository::update()
+        .set(exercise::entity::columns::PROGRESSION, value.into())
+        .where_(by_key(category, id))
+        .execute(database)?;
+    Ok(())
+}
+
+/// Stores the rep range (e.g. `8-10-12`) and weight increment used to suggest progressions.
+pub fn set_progression_parameters(
+    database: &DatabasePool,
+    category: u16,
+    id: u16,
+    reps: String,
+    weight: f32,
+) -> rusqlite_orm::errors::Result<()> {
+    ExerciseRepository::update()
+        .set(exercise::entity::columns::REPS, reps.into())
+        .set(exercise::entity::columns::WEIGHT, weight.into())
+        .where_(by_key(category, id))
+        .execute(database)?;
+    Ok(())
+}
+
+fn by_key(category: u16, id: u16) -> Where<Exercise> {
+    Where::And(vec![
+        Where::Eq(exercise::entity::columns::CATEGORY, category.into()),
+        Where::Eq(exercise::entity::columns::ID, id.into()),
+    ])
+}
+
+/// Highest load programmed for the exercise across workouts, as reps and weight.
+pub fn progression_status(
+    database: &DatabasePool,
+    category: u16,
+    id: u16,
+) -> rusqlite_orm::errors::Result<Option<ProgressionSuggestion>> {
+    Ok(WorkoutStepRepository::select()
+        .columns(&[
+            workout_step::entity::columns::REPS,
+            workout_step::entity::columns::WEIGHT,
+        ])
+        .where_(Where::And(vec![
+            Where::Eq(workout_step::entity::columns::EX_CAT, category.into()),
+            Where::Eq(workout_step::entity::columns::EX_ID, id.into()),
+            exercise_step(),
+        ]))
+        .order_by(OrderBy::Desc(workout_step::entity::columns::WEIGHT))
+        .order_by(OrderBy::Desc(workout_step::entity::columns::REPS))
+        .fetch_one(database)?
+        .map(|r| ProgressionSuggestion {
+            reps: r
+                .get_u16_nullable(workout_step::entity::columns::REPS.as_ref())
+                .unwrap_or_default(),
+            weight: r
+                .get_f32_nullable(workout_step::entity::columns::WEIGHT.as_ref())
+                .unwrap_or_default(),
+        }))
+}
+
+/// Raises the exercise steps programmed below `suggestion` and queues their workouts for the
+/// devices. Returns whether any step changed and the workouts programming the exercise.
+pub fn apply_progression(
+    tx: &rusqlite_orm::rusqlite::Transaction,
+    category: u16,
+    id: u16,
+    suggestion: &ProgressionSuggestion,
+) -> rusqlite_orm::errors::Result<(bool, Vec<String>)> {
+    // Reps go first: the weight update would otherwise change which steps are below
+    let mut modified = WorkoutStepRepository::update()
+        .set(workout_step::entity::columns::REPS, suggestion.reps.into())
+        .where_(Where::And(vec![
+            Where::Eq(workout_step::entity::columns::EX_CAT, category.into()),
+            Where::Eq(workout_step::entity::columns::EX_ID, id.into()),
+            exercise_step(),
+            Where::NotNull(workout_step::entity::columns::REPS),
+            below_suggestion(suggestion),
+        ]))
+        .execute_in(tx)?;
+    modified += WorkoutStepRepository::update()
+        .set(
+            workout_step::entity::columns::WEIGHT,
+            suggestion.weight.into(),
+        )
+        .where_(Where::And(vec![
+            Where::Eq(workout_step::entity::columns::EX_CAT, category.into()),
+            Where::Eq(workout_step::entity::columns::EX_ID, id.into()),
+            exercise_step(),
+            weight_below(suggestion.weight),
+        ]))
+        .execute_in(tx)?;
+
+    let mut workouts = Vec::new();
+    if modified > 0 {
+        workouts = WorkoutStepRepository::select()
+            .distinct(&[workout_step::entity::columns::WORKOUT])
+            .where_(Where::And(vec![
+                Where::Eq(workout_step::entity::columns::EX_CAT, category.into()),
+                Where::Eq(workout_step::entity::columns::EX_ID, id.into()),
+                exercise_step(),
+            ]))
+            .fetch_in(tx)?
+            .iter()
+            .map(|r| r.get_text(workout_step::entity::columns::WORKOUT.as_ref()))
+            .collect();
+        WorkoutDeviceRepository::update()
+            .set(workout_device::entity::columns::PENDING, true.into())
+            .where_(Where::InSub(
+                workout_device::entity::columns::WORKOUT,
+                WorkoutStepRepository::select()
+                    .distinct(&[workout_step::entity::columns::WORKOUT])
+                    .where_(Where::And(vec![
+                        Where::Eq(workout_step::entity::columns::EX_CAT, category.into()),
+                        Where::Eq(workout_step::entity::columns::EX_ID, id.into()),
+                        exercise_step(),
+                    ]))
+                    .to_subquery(),
+            ))
+            .execute_in(tx)?;
+    }
+
+    Ok((modified > 0, workouts))
 }

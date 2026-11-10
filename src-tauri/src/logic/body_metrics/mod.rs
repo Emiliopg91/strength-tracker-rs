@@ -1,19 +1,17 @@
-use rusqlite_orm::{
-    dao::Repository,
-    errors::DatabaseError,
-    types::{order_by::OrderBy, where_clause::Where},
-};
+pub mod commands;
+pub mod queries;
+
 use tauri::{AppHandle, Runtime};
 use tauri_plugin_log::log::info;
 
+use self::queries::{delete_body_metric_on, fetch_body_measures, insert_body_metric};
 use crate::{
     SettingsLock,
-    dao::body_metric::{self, BodyMetric, BodyMetricRepository},
     dto::{
         body_metrics::BodyMetricListItem,
         notifications::{NotificationDefinition, NotificationKind},
     },
-    logic::{notifications::show_notification, report_error, run_blocking},
+    logic::{notifications::show_notification, report_error, run_blocking, run_blocking_conn},
     utils::translations::translate,
 };
 
@@ -24,10 +22,7 @@ pub async fn get_body_measures<R: Runtime>(
 ) -> Result<Vec<BodyMetricListItem>, String> {
     info!("Getting body measures list...");
 
-    let res = run_blocking(app, move |database| {
-        database.run_in_connection(|conn| Ok(fetch_body_measures(conn, None)?))
-    })
-    .await;
+    let res = run_blocking_conn(app, move |_, conn| fetch_body_measures(conn, None)).await;
 
     match res {
         Ok(res) => {
@@ -43,28 +38,6 @@ pub async fn get_body_measures<R: Runtime>(
     }
 }
 
-/// Lists all body measurements, newest first.
-pub fn fetch_body_measures(
-    conn: &rusqlite_orm::rusqlite::Connection,
-    from_to: Option<(u32, u32)>,
-) -> rusqlite_orm::errors::Result<Vec<BodyMetricListItem>> {
-    let mut query =
-        BodyMetricRepository::select().order_by(OrderBy::Desc(body_metric::entity::columns::DATE));
-
-    if let Some((from, to)) = from_to {
-        query = query.where_(Where::And(vec![
-            Where::Gte(body_metric::entity::columns::DATE, from.into()),
-            Where::Lte(body_metric::entity::columns::DATE, to.into()),
-        ]))
-    }
-
-    Ok(query
-        .fetch_in(conn)?
-        .iter()
-        .map(BodyMetricListItem::from)
-        .collect())
-}
-
 /// Inserts a new body measurement entry.
 pub async fn add_body_measures<R: Runtime>(
     app: &AppHandle<R>,
@@ -73,14 +46,7 @@ pub async fn add_body_measures<R: Runtime>(
 ) -> Result<(), String> {
     info!("Adding body measures list...");
 
-    let res = run_blocking(app, move |database| {
-        let mut item = BodyMetric::try_from(&measures).map_err(DatabaseError::Transaction)?;
-        BodyMetricRepository::insert()
-            .item(&mut item)
-            .execute(database)
-            .map(|_| ())
-    })
-    .await;
+    let res = run_blocking(app, move |database| insert_body_metric(database, &measures)).await;
 
     match res {
         Ok(_) => {
@@ -102,13 +68,7 @@ pub async fn delete_body_metric<R: Runtime>(
     settings: &SettingsLock,
     date: u32,
 ) -> Result<(), String> {
-    let res = run_blocking(app, move |database| {
-        BodyMetricRepository::delete()
-            .where_(Where::Eq(body_metric::entity::columns::DATE, date.into()))
-            .execute(database)
-            .map(|_| ())
-    })
-    .await;
+    let res = run_blocking(app, move |database| delete_body_metric_on(database, date)).await;
 
     let lang = settings.read().unwrap().language;
     match res {

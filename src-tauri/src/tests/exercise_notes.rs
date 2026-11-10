@@ -9,7 +9,7 @@ use crate::{
         workout_device::{WorkoutDevice, WorkoutDeviceRepository},
         workout_step::{WorkoutStep, WorkoutStepRepository},
     },
-    logic::exercises::update_exercise_notes,
+    logic::exercises::queries::update_exercise_notes,
     tests::common,
 };
 

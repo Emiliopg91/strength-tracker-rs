@@ -28,7 +28,10 @@ use crate::{
     fit::parser::FitParser,
     logic::{
         app, body_metrics, connect, devices, exercises,
-        prompts::{self, AppPrompter, Prompts},
+        prompts::{
+            self,
+            helpers::{AppPrompter, Prompts},
+        },
         report, sessions, workouts,
     },
     mtp::MtpClient,
@@ -440,7 +443,7 @@ fn stored_session_is_written_as_fit() {
         std::process::id()
     ));
 
-    block_on(sessions::write_session_fit(
+    block_on(sessions::helpers::write_session_fit(
         app.handle(),
         date,
         path.clone(),
@@ -468,7 +471,7 @@ fn missing_session_fails_to_write_as_fit() {
         std::process::id()
     ));
 
-    let res = block_on(sessions::write_session_fit(
+    let res = block_on(sessions::helpers::write_session_fit(
         app.handle(),
         1,
         path.clone(),
@@ -487,14 +490,17 @@ fn session_file_name_is_date_then_name() {
         .timestamp() as u32;
 
     assert_eq!(
-        sessions::session_file_name(date, "Progresion 1 - Pierna"),
+        sessions::helpers::session_file_name(date, "Progresion 1 - Pierna"),
         "2026-11-04 Progresion 1 - Pierna.fit"
     );
     assert_eq!(
-        sessions::session_file_name(date, "Push/Pull"),
+        sessions::helpers::session_file_name(date, "Push/Pull"),
         "2026-11-04 Push-Pull.fit"
     );
-    assert_eq!(sessions::session_file_name(date, "  "), "2026-11-04.fit");
+    assert_eq!(
+        sessions::helpers::session_file_name(date, "  "),
+        "2026-11-04.fit"
+    );
 }
 
 #[test]
@@ -503,7 +509,7 @@ fn prompt_resolves_with_the_answer() {
     let handle = app.handle().clone();
 
     let pending = tauri::async_runtime::spawn(async move {
-        prompts::request_prompt(&handle, PromptKind::ConnectMfa, None, None).await
+        prompts::helpers::request_prompt(&handle, PromptKind::ConnectMfa, None, None).await
     });
     // The first prompt gets id 0, answered once the request has registered it
     while prompts::answer_prompt(&app.state::<Prompts>(), 0, Some(vec!["123456".into()])).is_err() {
@@ -519,7 +525,7 @@ fn prompt_resolves_to_none_when_cancelled() {
     let handle = app.handle().clone();
 
     let pending = tauri::async_runtime::spawn(async move {
-        prompts::request_prompt(&handle, PromptKind::SudoPassword, None, None).await
+        prompts::helpers::request_prompt(&handle, PromptKind::SudoPassword, None, None).await
     });
     while prompts::answer_prompt(&app.state::<Prompts>(), 0, None).is_err() {
         std::thread::yield_now();

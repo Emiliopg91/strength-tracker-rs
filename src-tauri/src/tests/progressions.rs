@@ -9,7 +9,7 @@ use crate::{
         workout_step::{StepType, WorkoutStep, WorkoutStepRepository},
     },
     dto::exercises::ProgressionSuggestion,
-    logic::exercises::{fetch_progression_suggestion, progression_suggestions},
+    logic::exercises::queries::{fetch_progression_suggestion, progression_suggestions},
     tests::common,
 };
 

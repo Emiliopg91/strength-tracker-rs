@@ -31,28 +31,48 @@ use tauri_plugin_log::{
 };
 
 #[cfg(debug_assertions)]
-use crate::logic::exercises::update_all_prs;
+use crate::logic::exercises::queries::update_all_prs;
 use crate::{
     connect::ConnectClient,
     dao::body_metric::migration_21,
     dto::app::Settings,
     logic::{
-        add_body_measures, answer_prompt,
-        app::{hide_main_window, show_main_window},
-        apply_progression_suggestion, available_any_progression_suggestions, connect_logged_user,
-        connect_login, connect_logout, delete_body_metric, download_session, export_database,
-        get_body_measures, get_environment, get_exercise_details, get_exercises,
-        get_exercises_catalog, get_heatmap_data, get_progression_status,
-        get_progression_suggestion, get_registered_devices, get_report_data, get_session_details,
-        get_sessions, get_settings, get_translations, get_workout_details, get_workout_list,
-        import_from_connect, import_from_device, import_from_files, import_weight_from_connect,
-        load_report, load_workout_page, notify_frontend_ready,
-        prompts::{AppPrompter, Prompts},
-        report_ready, save_exercise_notes, save_session_changes, save_workout, send_to_connect,
-        send_to_device,
-        sessions::_import_from_files,
-        set_exercise_progression, set_exercise_progression_parameters, set_exercise_unilateral,
-        set_workout_status, update_settings_value, upload_to_cloud, workout_print_ready,
+        app::{
+            commands::{
+                get_environment, get_settings, get_translations, notify_frontend_ready,
+                update_settings_value,
+            },
+            helpers::{hide_main_window, show_main_window},
+        },
+        body_metrics::commands::{add_body_measures, delete_body_metric, get_body_measures},
+        connect::commands::{
+            connect_logged_user, connect_login, connect_logout, import_from_connect,
+            import_weight_from_connect, send_to_connect,
+        },
+        devices::commands::{get_registered_devices, import_from_device, send_to_device},
+        exercises::commands::{
+            apply_progression_suggestion, available_any_progression_suggestions,
+            get_exercise_details, get_exercises, get_exercises_catalog, get_progression_status,
+            get_progression_suggestion, save_exercise_notes, set_exercise_progression,
+            set_exercise_progression_parameters, set_exercise_unilateral,
+        },
+        export::commands::{export_database, upload_to_cloud},
+        prompts::{
+            commands::answer_prompt,
+            helpers::{AppPrompter, Prompts},
+        },
+        report::commands::{get_report_data, load_report, report_ready},
+        sessions::{
+            commands::{
+                download_session, get_heatmap_data, get_session_details, get_sessions,
+                import_from_files, save_session_changes,
+            },
+            helpers::_import_from_files,
+        },
+        workouts::commands::{
+            get_workout_details, get_workout_list, load_workout_page, save_workout,
+            set_workout_status, workout_print_ready,
+        },
     },
     mtp::MtpClient,
     udev::UdevManager,
@@ -97,7 +117,7 @@ fn initialize(app: &AppHandle) -> (DatabasePool, Settings, ConnectClient, MtpCli
             )
             .unwrap();
 
-            //crate::logic::sessions::merge_sessions(&database, _, _);
+            //crate::logic::sessions::queries::merge_sessions(&database, _, _);
 
             #[cfg(debug_assertions)]
             let _ = database.run_in_transaction(|tx| Ok(update_all_prs(tx)?));

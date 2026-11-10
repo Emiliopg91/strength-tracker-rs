@@ -3,8 +3,8 @@ use rusqlite_orm::{dao::Repository, database::DatabasePool, types::where_clause:
 use crate::{
     dao::exercise::{self, ExerciseRepository},
     logic::{
-        exercises::fetch_exercises_muscles,
-        sessions::{fetch_session_details, fetch_sessions_details},
+        exercises::queries::fetch_exercises_muscles,
+        sessions::queries::{fetch_session_details, fetch_sessions_details},
     },
     tests::common,
 };

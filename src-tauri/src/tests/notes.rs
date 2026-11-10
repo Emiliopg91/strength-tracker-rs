@@ -2,7 +2,7 @@ use rusqlite_orm::database::DatabasePool;
 
 use crate::{
     dao::session_data::{SessionData, SessionDataRepository},
-    logic::sessions::update_session_notes,
+    logic::sessions::queries::update_session_notes,
     tests::common,
 };
 

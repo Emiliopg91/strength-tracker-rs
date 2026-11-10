@@ -583,7 +583,7 @@ fn step_exercises_are_filled_with_their_category() {
     ];
 
     db.run_in_connection(|conn| {
-        Ok(crate::logic::connect::fetch_step_exercises(
+        Ok(crate::logic::connect::queries::fetch_step_exercises(
             conn, &mut steps,
         )?)
     })

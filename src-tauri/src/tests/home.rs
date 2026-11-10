@@ -1,7 +1,7 @@
 use chrono::{Datelike, Days, Local, TimeZone};
 
 use crate::{
-    logic::sessions::{heatmap_data, session_set_flags},
+    logic::sessions::queries::{heatmap_data, session_set_flags},
     tests::common,
 };
 

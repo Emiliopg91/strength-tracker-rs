@@ -11,37 +11,26 @@ pub mod sessions;
 pub mod workouts;
 
 use std::{
-    collections::HashMap,
     fs,
     path::{Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
 };
 
 use chrono::Local;
-
-use rusqlite_orm::database::DatabasePool;
-use strength_tracker_rs_macros::traced_command;
-use tauri::{AppHandle, Manager, Runtime, State, WebviewWindow};
+use rusqlite_orm::{
+    database::DatabasePool,
+    errors::DatabaseError,
+    rusqlite::{Connection, Transaction},
+};
+use tauri::{AppHandle, Manager, Runtime};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_log::log::{error, warn};
 use tokio::sync::oneshot;
 
 use crate::{
-    ConnectLock, SettingsLock,
-    dao::workout::Workout,
-    dto::{
-        app::{AppEnvironment, Settings},
-        body_metrics::BodyMetricListItem,
-        devices::DeviceListItem,
-        exercises::{ExerciseDetails, ExerciseListItem, ProgressionSuggestion},
-        notifications::{NotificationDefinition, NotificationKind},
-        report::ReportData,
-        sessions::{SessionDetails, SessionListItem, SessionStepsUpdate},
-        workouts::{WorkoutDetails, WorkoutListItem},
-    },
+    dto::notifications::{NotificationDefinition, NotificationKind},
     fit::FitFile,
     logic::notifications::show_notification,
-    rclone::providers::CloudProvider,
     utils::translations::{Languages, translate},
 };
 
@@ -75,6 +64,40 @@ where
     tokio::task::spawn_blocking(move || f(&app.state::<DatabasePool>()))
         .await
         .expect("blocking DB task panicked")
+}
+
+/// Runs `f` on a pooled connection in tokio's blocking thread pool.
+pub async fn run_blocking_conn<R, T, F>(app: &AppHandle<R>, f: F) -> Result<T, DatabaseError>
+where
+    R: Runtime,
+    F: FnOnce(&AppHandle<R>, &Connection) -> Result<T, DatabaseError> + Send + 'static,
+    T: Send + 'static,
+{
+    let app = app.clone();
+    tokio::task::spawn_blocking(move || {
+        let mut f = Some(f);
+        app.state::<DatabasePool>()
+            .run_in_connection(|conn| Ok(f.take().unwrap()(&app, conn)?))
+    })
+    .await
+    .expect("blocking DB task panicked")
+}
+
+/// Runs `f` in a transaction in tokio's blocking thread pool, committing it if `f` succeeds.
+pub async fn run_blocking_tx<R, T, F>(app: &AppHandle<R>, f: F) -> Result<T, DatabaseError>
+where
+    R: Runtime,
+    F: FnOnce(&AppHandle<R>, &mut Transaction) -> Result<T, DatabaseError> + Send + 'static,
+    T: Send + 'static,
+{
+    let app = app.clone();
+    tokio::task::spawn_blocking(move || {
+        let mut f = Some(f);
+        app.state::<DatabasePool>()
+            .run_in_transaction(|tx| Ok(f.take().unwrap()(&app, tx)?))
+    })
+    .await
+    .expect("blocking DB task panicked")
 }
 
 /// Adds `extension` to `path` unless it already ends in it.
@@ -180,437 +203,4 @@ where
             Err(e) => error!("Error storing pending file {}: {e}", dst.display()),
         }
     }
-}
-
-// Tauri commands: thin entry points over the logic of each module, which is what tests call
-
-// Sessions
-
-#[traced_command]
-#[tauri::command]
-pub async fn get_sessions(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
-    limit: Option<i32>,
-) -> Result<Vec<SessionListItem>, String> {
-    sessions::get_sessions(&app, &settings, limit).await
-}
-
-#[traced_command]
-#[tauri::command]
-pub async fn get_session_details(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
-    timestamp: u32,
-) -> Result<SessionDetails, String> {
-    sessions::get_session_details(&app, &settings, timestamp).await
-}
-
-#[traced_command]
-#[tauri::command]
-pub async fn download_session(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
-    timestamp: u32,
-) -> Result<(), String> {
-    sessions::download_session(&app, &settings, timestamp).await
-}
-
-#[traced_command]
-#[tauri::command]
-pub async fn save_session_changes(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
-    details: SessionStepsUpdate,
-) -> Result<(), String> {
-    sessions::save_session_changes(&app, &settings, details).await
-}
-
-#[traced_command]
-#[tauri::command]
-pub async fn import_from_files(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
-) -> Result<usize, String> {
-    sessions::import_from_files(&app, &settings).await
-}
-
-#[traced_command]
-#[tauri::command]
-pub async fn get_heatmap_data(app: AppHandle) -> Result<Vec<Vec<(u32, u16)>>, String> {
-    sessions::get_heatmap_data(&app).await
-}
-
-// Exercises
-
-#[traced_command]
-#[tauri::command]
-pub async fn get_exercises(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
-) -> Result<Vec<ExerciseListItem>, String> {
-    exercises::get_exercises(&app, &settings).await
-}
-
-#[traced_command]
-#[tauri::command]
-pub async fn get_exercise_details(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
-    category: u16,
-    id: u16,
-) -> Result<ExerciseDetails, String> {
-    exercises::get_exercise_details(&app, &settings, category, id).await
-}
-
-#[traced_command]
-#[tauri::command]
-pub async fn get_exercises_catalog(app: AppHandle) -> Result<HashMap<u16, Vec<u16>>, String> {
-    exercises::get_exercises_catalog(&app).await
-}
-
-#[traced_command]
-#[tauri::command]
-pub async fn set_exercise_unilateral(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
-    category: u16,
-    id: u16,
-    value: bool,
-) -> Result<(), String> {
-    exercises::set_exercise_unilateral(&app, &settings, category, id, value).await
-}
-
-#[traced_command]
-#[tauri::command]
-pub async fn set_exercise_progression(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
-    category: u16,
-    id: u16,
-    value: bool,
-) -> Result<(), String> {
-    exercises::set_exercise_progression(&app, &settings, category, id, value).await
-}
-
-#[traced_command]
-#[tauri::command]
-pub async fn set_exercise_progression_parameters(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
-    category: u16,
-    id: u16,
-    reps: &str,
-    weight: f32,
-) -> Result<(), String> {
-    exercises::set_exercise_progression_parameters(&app, &settings, category, id, reps, weight)
-        .await
-}
-
-#[traced_command]
-#[tauri::command]
-pub async fn get_progression_status(
-    app: AppHandle,
-    category: u16,
-    id: u16,
-) -> Result<Option<ProgressionSuggestion>, String> {
-    exercises::get_progression_status(&app, category, id).await
-}
-
-#[traced_command]
-#[tauri::command]
-pub async fn get_progression_suggestion(
-    app: AppHandle,
-    category: u16,
-    id: u16,
-) -> Result<Option<ProgressionSuggestion>, String> {
-    exercises::get_progression_suggestion(&app, category, id).await
-}
-
-#[traced_command]
-#[tauri::command]
-pub async fn available_any_progression_suggestions(app: AppHandle) -> Result<bool, String> {
-    Ok(exercises::available_any_progression_suggestions(&app).await)
-}
-
-#[traced_command]
-#[tauri::command]
-pub async fn apply_progression_suggestion(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
-    connect: State<'_, ConnectLock>,
-    category: u16,
-    id: u16,
-    suggestion: ProgressionSuggestion,
-) -> Result<(), String> {
-    exercises::apply_progression_suggestion(&app, &settings, &connect, category, id, suggestion)
-        .await
-}
-
-#[traced_command]
-#[tauri::command]
-pub async fn save_exercise_notes(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
-    connect: State<'_, ConnectLock>,
-    category: u16,
-    id: u16,
-    notes: &str,
-) -> Result<(), String> {
-    exercises::save_exercise_notes(&app, &settings, &connect, category, id, notes).await
-}
-
-// Workouts
-
-#[traced_command]
-#[tauri::command]
-pub async fn get_workout_list(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
-) -> Result<Vec<WorkoutListItem>, String> {
-    workouts::get_workout_list(&app, &settings).await
-}
-
-#[traced_command]
-#[tauri::command]
-pub async fn get_workout_details(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
-    name: &str,
-) -> Result<WorkoutDetails, String> {
-    workouts::get_workout_details(&app, &settings, name).await
-}
-
-#[traced_command]
-#[tauri::command]
-pub async fn set_workout_status(app: AppHandle, workout: &str, status: bool) -> Result<(), String> {
-    workouts::set_workout_status(&app, workout, status).await
-}
-
-#[traced_command]
-#[tauri::command]
-pub async fn save_workout(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
-    connect: State<'_, ConnectLock>,
-    edit: bool,
-    workout: Workout,
-) -> Result<(), String> {
-    workouts::save_workout(&app, &settings, &connect, edit, workout).await
-}
-
-#[traced_command]
-#[tauri::command]
-pub async fn load_workout_page(app: AppHandle, workout: &str) -> Result<(), String> {
-    workouts::load_workout_page(&app, workout).await
-}
-
-#[traced_command]
-#[tauri::command]
-pub async fn workout_print_ready(window: WebviewWindow, workout: &str) -> Result<(), String> {
-    workouts::workout_print_ready(window, workout).await
-}
-
-// Devices
-
-#[traced_command]
-#[tauri::command]
-pub async fn send_to_device(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
-    workout: &str,
-    serial: &str,
-) -> Result<(), String> {
-    devices::send_to_device(&app, &settings, workout, serial).await
-}
-
-#[traced_command]
-#[tauri::command]
-pub async fn import_from_device(app: AppHandle, serial: &str) -> Result<usize, String> {
-    devices::_import_from_device(&app, serial).await
-}
-
-#[traced_command]
-#[tauri::command]
-pub async fn get_registered_devices(app: AppHandle) -> Result<Vec<DeviceListItem>, String> {
-    devices::get_registered_devices(&app).await
-}
-
-// App
-
-#[traced_command]
-#[tauri::command]
-pub async fn get_settings(settings: State<'_, SettingsLock>) -> Result<Settings, String> {
-    app::get_settings(&settings).await
-}
-
-#[traced_command]
-#[tauri::command]
-pub async fn notify_frontend_ready(app: AppHandle) {
-    app::notify_frontend_ready(&app).await
-}
-
-#[traced_command]
-#[tauri::command]
-pub async fn get_environment() -> AppEnvironment {
-    app::get_environment().await
-}
-
-#[traced_command]
-#[tauri::command]
-pub async fn update_settings_value(app: AppHandle, name: &str, value: &str) -> Result<(), String> {
-    app::update_settings_value(&app, name, value).await
-}
-
-// Prompts
-
-/// @dont_log
-#[traced_command(log_payload = false)]
-#[tauri::command]
-pub async fn answer_prompt(
-    prompts: State<'_, prompts::Prompts>,
-    id: u32,
-    values: Option<Vec<String>>,
-) -> Result<(), String> {
-    prompts::answer_prompt(&prompts, id, values)
-}
-
-#[traced_command(log_payload = false)]
-#[tauri::command]
-pub async fn get_translations(
-    settings: State<'_, SettingsLock>,
-) -> Result<HashMap<String, String>, String> {
-    app::get_translations(&settings).await
-}
-
-// Report
-
-#[traced_command]
-#[tauri::command]
-pub async fn load_report(app: AppHandle, from: u32, to: u32) -> Result<(), String> {
-    report::load_report(&app, from, to).await
-}
-
-#[traced_command]
-#[tauri::command]
-pub async fn report_ready(window: WebviewWindow) -> Result<(), String> {
-    report::report_ready(window).await
-}
-
-#[traced_command(log_payload = false)]
-#[tauri::command]
-pub async fn get_report_data(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
-    from: u32,
-    to: u32,
-) -> Result<ReportData, String> {
-    report::get_report_data(&app, &settings, from, to).await
-}
-
-// Body metrics
-
-#[traced_command]
-#[tauri::command]
-pub async fn get_body_measures(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
-) -> Result<Vec<BodyMetricListItem>, String> {
-    body_metrics::get_body_measures(&app, &settings).await
-}
-
-#[traced_command]
-#[tauri::command]
-pub async fn add_body_measures(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
-    measures: BodyMetricListItem,
-) -> Result<(), String> {
-    body_metrics::add_body_measures(&app, &settings, measures).await
-}
-
-#[traced_command]
-#[tauri::command]
-pub async fn delete_body_metric(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
-    date: u32,
-) -> Result<(), String> {
-    body_metrics::delete_body_metric(&app, &settings, date).await
-}
-
-// Export
-
-#[traced_command]
-#[tauri::command]
-pub async fn upload_to_cloud(
-    settings: State<'_, SettingsLock>,
-    provider: CloudProvider,
-) -> Result<(), String> {
-    export::upload_to_cloud(&settings, provider).await
-}
-
-#[traced_command]
-#[tauri::command]
-pub async fn export_database(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
-) -> Result<(), String> {
-    export::export_database(&app, &settings).await
-}
-
-// Connect
-
-#[traced_command]
-#[tauri::command]
-pub async fn import_from_connect(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
-    connect: State<'_, ConnectLock>,
-) -> Result<usize, String> {
-    connect::import_from_connect(&app, &settings, &connect).await
-}
-
-#[traced_command]
-#[tauri::command]
-pub async fn import_weight_from_connect(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
-    connect: State<'_, ConnectLock>,
-) -> Result<usize, String> {
-    connect::import_weight_from_connect(&app, &settings, &connect).await
-}
-
-#[traced_command]
-#[tauri::command]
-pub async fn connect_logged_user(
-    connect: State<'_, ConnectLock>,
-) -> Result<Option<String>, String> {
-    connect::connect_logged_user(&connect).await
-}
-
-#[traced_command]
-#[tauri::command]
-pub async fn connect_login(
-    app: AppHandle,
-    connect: State<'_, ConnectLock>,
-) -> Result<Option<String>, String> {
-    connect::connect_login(&app, &connect).await
-}
-
-#[traced_command]
-#[tauri::command]
-pub async fn connect_logout(connect: State<'_, ConnectLock>) -> Result<(), String> {
-    connect::connect_logout(&connect).await
-}
-
-#[traced_command]
-#[tauri::command]
-pub async fn send_to_connect(
-    app: AppHandle,
-    settings: State<'_, SettingsLock>,
-    workout: &str,
-    serial: &str,
-) -> Result<(), String> {
-    connect::send_to_connect(&app, &settings, workout, serial).await
 }

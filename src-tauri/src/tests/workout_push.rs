@@ -7,8 +7,8 @@ use crate::{
         workout_device::{WorkoutDevice, WorkoutDeviceRepository},
     },
     logic::{
-        connect::{pending_connect_workouts, set_connect_pending},
-        devices::pending_connect_devices,
+        connect::queries::{pending_connect_workouts, set_connect_pending},
+        devices::queries::pending_connect_devices,
     },
     tests::common,
     utils::constants,

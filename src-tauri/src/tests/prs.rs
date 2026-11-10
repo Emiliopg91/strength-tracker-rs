@@ -8,7 +8,7 @@ use rusqlite_orm::{
 
 use crate::{
     dao::session_step::{self, SessionStep, SessionStepRepository},
-    logic::exercises::update_prs,
+    logic::exercises::queries::update_prs,
     tests::common,
 };
 

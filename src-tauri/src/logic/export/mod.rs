@@ -1,3 +1,5 @@
+pub mod commands;
+
 use std::{fs, io::BufWriter};
 
 use chrono::Local;
