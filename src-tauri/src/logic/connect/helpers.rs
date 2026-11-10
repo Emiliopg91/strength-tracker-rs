@@ -11,6 +11,7 @@ use crate::{
     dao::device::Device,
     dto::{
         connect::{ConnectUpdateSets, ConnectWorkout},
+        devices::DeviceListItem,
         sessions::SessionStepDto,
     },
     logic::{report_error, run_blocking, run_blocking_conn, run_blocking_tx},
@@ -18,7 +19,7 @@ use crate::{
 
 /// Uploads `workout` to Connect, notifying the user if it fails.
 /// The workout is left pending of upload on failure and cleared on success.
-pub async fn send_workout_connect<R: Runtime>(
+pub(super) async fn send_workout_connect<R: Runtime>(
     app: &AppHandle<R>,
     connect: &ConnectLock,
     settings: &SettingsLock,
@@ -39,7 +40,7 @@ pub async fn send_workout_connect<R: Runtime>(
 
 /// Uploads the just modified `workouts` to Connect, or leaves them pending of upload when no
 /// user is logged in.
-pub async fn sync_workouts_connect<R: Runtime>(
+pub(crate) async fn sync_workouts_connect<R: Runtime>(
     app: &AppHandle<R>,
     connect: &ConnectLock,
     settings: &SettingsLock,
@@ -60,7 +61,7 @@ pub async fn sync_workouts_connect<R: Runtime>(
 
 /// Retries the upload of the workouts left pending for Connect, if a user is logged in.
 /// Failures are only logged, as they stay pending for the next attempt.
-pub async fn up_to_date_connect<R: Runtime>(app: &AppHandle<R>) {
+pub(crate) async fn up_to_date_connect<R: Runtime>(app: &AppHandle<R>) {
     let connect = app.state::<ConnectLock>();
     if connect.lock().await.logged_user().is_none() {
         return;
@@ -166,7 +167,7 @@ pub(super) async fn upload_workout_connect<R: Runtime>(
 /// ones, refreshes the Connect-owned fields of known ones and clears the `connect` flag of those
 /// no longer listed. Emits `device_discovered` per added or changed device
 /// Does nothing if the device list cannot be fetched.
-pub async fn get_devices_from_connect<R: Runtime>(app_orig: &AppHandle<R>) {
+pub(crate) async fn get_devices_from_connect<R: Runtime>(app_orig: &AppHandle<R>) {
     let connect = app_orig.state::<ConnectLock>();
     let mut client = connect.lock().await;
     if client.logged_user().is_none() {
@@ -192,7 +193,9 @@ pub async fn get_devices_from_connect<R: Runtime>(app_orig: &AppHandle<R>) {
 
     match res {
         Ok(discovered) => {
-            for payload in discovered {
+            for device in discovered {
+                // Typed binding: the TypeScript generator reads the payload type from it
+                let payload: DeviceListItem = device;
                 let _ = app_orig.emit("device_discovered", payload);
             }
         }
@@ -202,7 +205,7 @@ pub async fn get_devices_from_connect<R: Runtime>(app_orig: &AppHandle<R>) {
 
 /// Queues `workout` in Connect for delivery to the device `serial`, first uploading the workout
 /// to Connect if it has no Connect id yet.
-pub async fn _send_to_connect<R: Runtime>(
+pub(crate) async fn queue_workout_on_connect<R: Runtime>(
     app: &AppHandle<R>,
     workout: &str,
     serial: &str,
@@ -243,7 +246,7 @@ pub async fn _send_to_connect<R: Runtime>(
 
 /// Mirrors the user edits of a session's sets on its Connect activity, if the session is linked to
 /// one and a user is logged in. Runs after the local save, so failures are only logged.
-pub async fn sync_session_sets_connect<R: Runtime>(
+pub(crate) async fn sync_session_sets_connect<R: Runtime>(
     app: &AppHandle<R>,
     timestamp: u32,
     sets: Vec<SessionStepDto>,
@@ -279,7 +282,7 @@ pub async fn sync_session_sets_connect<R: Runtime>(
 
 /// Applies `sets` over the current sets of the Connect activity `id` and sends them back.
 /// Sets are matched by their FIT message index, which is the local set index.
-pub async fn update_session_sets(
+pub(super) async fn update_session_sets(
     connect: &mut ConnectClient,
     id: u64,
     sets: Vec<ConnectUpdateSets>,

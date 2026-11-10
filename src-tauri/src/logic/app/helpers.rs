@@ -16,7 +16,7 @@ use crate::{
     utils::translations::{translate, translate_and_replace},
 };
 
-pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
+pub(crate) fn show_main_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     if let Some(w) = app.get_webview_window("main") {
         w.show()?;
         w.unminimize()?;
@@ -40,7 +40,7 @@ pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     Ok(())
 }
 
-pub fn hide_main_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
+pub(crate) fn hide_main_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     if let Some(w) = app.get_webview_window("main") {
         w.hide()?;
         return Ok(());
@@ -50,7 +50,7 @@ pub fn hide_main_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
 
 /// Writes the udev rules, asking for the sudo password through the frontend unless already root.
 /// A rejected password is asked again; fails if the user cancels.
-pub async fn install_udev_rules<R: Runtime>(
+pub(super) async fn install_udev_rules<R: Runtime>(
     app: &AppHandle<R>,
     auto_run: bool,
 ) -> Result<(), String> {

@@ -7,7 +7,8 @@ use tauri::{AppHandle, Emitter, Runtime};
 use tauri_plugin_log::log::info;
 
 use self::helpers::{
-    _import_from_files, retrieve_session_connect_id, session_file_name, write_session_fit,
+    import_file_paths, notify_new_prs, notify_progression_available, retrieve_session_connect_id,
+    session_file_name, write_session_fit,
 };
 use self::queries::{
     apply_session_changes, fetch_session_details, fetch_sessions, heatmap_data, session_name,
@@ -163,10 +164,10 @@ pub async fn save_session_changes<R: Runtime>(
     let lang = settings.read().unwrap().language;
     let (timestamp, sets) = (details.timestamp, details.sets.clone());
 
-    let res = run_blocking_tx(app, move |_, tx| apply_session_changes(tx, &details, lang)).await;
+    let res = run_blocking_tx(app, move |_, tx| apply_session_changes(tx, &details)).await;
 
     match res {
-        Ok((newly_suggested, any_progression)) => {
+        Ok(changes) => {
             info!("Session updated succesfully");
             show_notification(NotificationDefinition {
                 title: translate("ok_update_session", lang),
@@ -174,14 +175,14 @@ pub async fn save_session_changes<R: Runtime>(
                 kind: NotificationKind::Temporal,
             });
 
-            if newly_suggested {
-                show_notification(NotificationDefinition {
-                    title: translate("progression_available", lang),
-                    body: translate("progression_available_msg", lang),
-                    kind: NotificationKind::Temporal,
-                });
+            if changes.new_prs {
+                notify_new_prs(lang);
             }
-            let payload: bool = any_progression;
+            if changes.newly_suggested {
+                notify_progression_available(lang);
+            }
+            // Typed binding: the TypeScript generator reads the payload type from it
+            let payload: bool = changes.any_progression;
             let _ = app.emit("progressions_available", payload);
 
             let app_cl = app.clone();
@@ -210,7 +211,7 @@ pub async fn import_from_files<R: Runtime>(
 
     if !files.is_empty() {
         let app = app.clone();
-        let res = tokio::task::spawn_blocking(move || _import_from_files(&app, files.as_slice()))
+        let res = tokio::task::spawn_blocking(move || import_file_paths(&app, files.as_slice()))
             .await
             .map_err(|e| e.to_string())
             .flatten();

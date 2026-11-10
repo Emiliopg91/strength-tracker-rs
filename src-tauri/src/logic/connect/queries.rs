@@ -22,7 +22,7 @@ use crate::{
 };
 
 /// Workouts that still have to be uploaded to Connect.
-pub fn pending_connect_workouts(
+pub(crate) fn pending_connect_workouts(
     conn: &rusqlite_orm::rusqlite::Connection,
 ) -> rusqlite_orm::errors::Result<Vec<String>> {
     Ok(WorkoutDeviceRepository::select()
@@ -42,7 +42,7 @@ pub fn pending_connect_workouts(
 
 /// Records in `workout_device` whether each of `workouts` still has to be uploaded to Connect.
 /// The upserts are idempotent, so a partial run (several statements for a huge list) is harmless.
-pub fn set_connect_pending(
+pub(crate) fn set_connect_pending(
     conn: &rusqlite_orm::rusqlite::Connection,
     workouts: &[String],
     pending: bool,
@@ -65,7 +65,7 @@ pub fn set_connect_pending(
 
 /// Fills the exercise, with its category, of every exercise step in two queries, instead of
 /// two per step as the relationship fetchers would.
-pub fn fetch_step_exercises(
+pub(crate) fn fetch_step_exercises(
     conn: &rusqlite_orm::rusqlite::Connection,
     steps: &mut [WorkoutStep],
 ) -> rusqlite_orm::errors::Result<()> {
@@ -121,7 +121,7 @@ pub(super) fn fetch_exercises_with_category(
 }
 
 /// The workout with its steps in order and their exercises, `None` if it doesn't exist.
-pub fn workout_with_exercises(
+pub(super) fn workout_with_exercises(
     conn: &rusqlite_orm::rusqlite::Connection,
     id: &str,
 ) -> rusqlite_orm::errors::Result<Option<Workout>> {
@@ -136,7 +136,7 @@ pub fn workout_with_exercises(
 
 /// Connect activity id of the session and the edited `sets` named as Connect expects, `None` if
 /// the session isn't linked to an activity.
-pub fn session_sets_for_connect(
+pub(super) fn session_sets_for_connect(
     conn: &rusqlite_orm::rusqlite::Connection,
     timestamp: u32,
     sets: &[SessionStepDto],
@@ -178,7 +178,7 @@ pub fn session_sets_for_connect(
 /// Enrolls the workout-capable Connect devices in `listed`, refreshes the Connect-owned fields of
 /// known ones and clears the `connect` flag of those no longer listed. Returns the added or changed
 /// devices, to be announced.
-pub fn sync_connect_devices(
+pub(super) fn sync_connect_devices(
     tx: &rusqlite_orm::rusqlite::Transaction,
     listed: &[Device],
 ) -> rusqlite_orm::errors::Result<Vec<DeviceListItem>> {
@@ -233,7 +233,7 @@ pub fn sync_connect_devices(
 }
 
 /// The Connect pseudo-device and the dates of every stored session, to import only new activities.
-pub fn connect_import_state(
+pub(super) fn connect_import_state(
     database: &DatabasePool,
 ) -> rusqlite_orm::errors::Result<(Device, BTreeSet<u32>)> {
     let device = DeviceRepository::select()
@@ -255,7 +255,7 @@ pub fn connect_import_state(
 }
 
 /// Dates of the stored body measurements, newest first.
-pub fn body_metric_dates(database: &DatabasePool) -> rusqlite_orm::errors::Result<Vec<u32>> {
+pub(super) fn body_metric_dates(database: &DatabasePool) -> rusqlite_orm::errors::Result<Vec<u32>> {
     Ok(BodyMetricRepository::select()
         .columns(&[body_metric::entity::columns::DATE])
         .order_by(OrderBy::Desc(body_metric::entity::columns::DATE))
@@ -266,7 +266,7 @@ pub fn body_metric_dates(database: &DatabasePool) -> rusqlite_orm::errors::Resul
 }
 
 /// Stores the `entries` not logged yet (by date); returns how many were added.
-pub fn insert_new_body_metrics(
+pub(super) fn insert_new_body_metrics(
     database: &DatabasePool,
     entries: &mut [BodyMetric],
     existing: &[u32],
@@ -282,7 +282,7 @@ pub fn insert_new_body_metrics(
 }
 
 /// Connect id of the workout, `None` if it doesn't exist or hasn't been uploaded.
-pub fn workout_connect_id(
+pub(super) fn workout_connect_id(
     database: &DatabasePool,
     name: &str,
 ) -> rusqlite_orm::errors::Result<Option<String>> {

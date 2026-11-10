@@ -3,6 +3,8 @@ use tauri::{AppHandle, State};
 
 use crate::{SettingsLock, dto::body_metrics::BodyMetricListItem};
 
+/// Every logged body measurement, newest first. On failure, shows a persistent error notification
+/// and rejects with the message.
 #[traced_command]
 #[tauri::command]
 pub async fn get_body_measures(
@@ -12,6 +14,8 @@ pub async fn get_body_measures(
     super::get_body_measures(&app, &settings).await
 }
 
+/// Stores a new body measurement entry. On failure, shows a persistent error notification and
+/// rejects with the message.
 #[traced_command]
 #[tauri::command]
 pub async fn add_body_measures(
@@ -22,6 +26,8 @@ pub async fn add_body_measures(
     super::add_body_measures(&app, &settings, measures).await
 }
 
+/// Deletes the body measurement logged at `date` (Unix seconds), notifying on success. On failure,
+/// shows a persistent error notification and rejects with the message.
 #[traced_command]
 #[tauri::command]
 pub async fn delete_body_metric(

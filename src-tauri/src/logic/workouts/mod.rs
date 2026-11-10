@@ -1,11 +1,9 @@
 pub mod commands;
-pub mod helpers;
 pub mod queries;
 
 use tauri::{AppHandle, Runtime, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_log::log::info;
 
-use self::helpers::print_to_pdf;
 use self::queries::{set_workout_enabled, store_workout, workout_details, workout_list};
 use crate::{
     ConnectLock, SettingsLock,
@@ -21,7 +19,7 @@ use crate::{
             send_enabled_workout_to_connect_devices,
         },
         notifications::show_notification,
-        report_error, run_blocking_conn, run_blocking_tx,
+        print_to_pdf, report_error, run_blocking_conn, run_blocking_tx,
     },
     utils::translations::translate,
 };
@@ -138,7 +136,7 @@ pub async fn load_workout_page<R: Runtime>(
         .windows
         .iter()
         .find(|w| w.label == "workout")
-        .expect("no hay ventana 'workout' en tauri.conf.json")
+        .expect("no 'workout' window in tauri.conf.json")
         .clone();
 
     config.url = tauri::WebviewUrl::App(format!("{}?workout={workout}", config.url).into());
@@ -151,13 +149,8 @@ pub async fn load_workout_page<R: Runtime>(
     Ok(())
 }
 
-/// Called by the report window once everything is rendered and painted: prints it to PDF.
+/// Called by the workout window once everything is rendered and painted: prints it to PDF.
 pub async fn workout_print_ready(window: WebviewWindow, workout: &str) -> Result<(), String> {
-    info!("Report ready, printing");
-    let res = print_to_pdf(window.clone(), workout).await;
-    // On success the window is closed once the print operation ends
-    if res.is_err() {
-        let _ = window.close();
-    }
-    res
+    info!("Workout ready, printing");
+    print_to_pdf(window, workout).await
 }

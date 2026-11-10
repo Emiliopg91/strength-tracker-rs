@@ -113,7 +113,7 @@ pub async fn send_to_device<R: Runtime>(
 }
 
 /// Downloads new activity files from the given device since its last sync and imports them.
-pub async fn _import_from_device<R: Runtime>(
+pub async fn import_from_device<R: Runtime>(
     app: &AppHandle<R>,
     serial: &str,
 ) -> Result<usize, String> {

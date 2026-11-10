@@ -5,7 +5,6 @@ use rusqlite_orm::{
     types::{order_by::OrderBy, where_clause::Where},
 };
 
-use super::helpers::{STRENGTH_SPORT, STRENGTH_SUB_SPORT};
 use crate::{
     dao::session::{self, SessionRepository},
     dto::report::ReportData,
@@ -13,16 +12,18 @@ use crate::{
         body_metrics::queries::fetch_body_measures, exercises::queries::exercise_details,
         sessions::queries::fetch_sessions_details,
     },
-    utils::translations::{Languages, translate},
 };
+
+const STRENGTH_SPORT: u8 = 10;
+
+const STRENGTH_SUB_SPORT: u8 = 20;
 
 /// Strength sessions between `from` and `to`, with the history of every exercise trained in them
 /// and the body measurements of the period.
-pub fn report_data(
+pub(super) fn report_data(
     conn: &rusqlite_orm::rusqlite::Connection,
     from: u32,
     to: u32,
-    lang: Languages,
 ) -> rusqlite_orm::errors::Result<ReportData> {
     let timestamps: Vec<u32> = SessionRepository::select()
         .columns(&[session::entity::columns::DATE])
@@ -51,7 +52,7 @@ pub fn report_data(
 
     // Loaded once, by the first exercise needing them, and shared by the rest
     let mut all_body_metrics = None;
-    let mut exercises: Vec<_> = trained
+    let exercises: Vec<_> = trained
         .into_iter()
         .filter_map(|(category, id)| {
             if let Ok(mut details) =
@@ -64,7 +65,6 @@ pub fn report_data(
             }
         })
         .collect();
-    exercises.sort_by_key(|e| translate(&format!("exercise_{}_{}", e.category, e.id), lang));
 
     let mut body_metrics = fetch_body_measures(conn, Some((from, to)))?;
     body_metrics.reverse();

@@ -21,7 +21,7 @@ use crate::{
 };
 
 /// Every workout with its session stats (count, average time and load, latest date), by name.
-pub fn workout_list(
+pub(super) fn workout_list(
     conn: &rusqlite_orm::rusqlite::Connection,
 ) -> rusqlite_orm::errors::Result<Vec<WorkoutListItem>> {
     let workouts: Vec<_> = WorkoutRepository::select()
@@ -94,7 +94,7 @@ pub fn workout_list(
 }
 
 /// The workout with its steps, worked muscles and every session with its volume.
-pub fn workout_details(
+pub(super) fn workout_details(
     conn: &rusqlite_orm::rusqlite::Connection,
     name: &str,
 ) -> rusqlite_orm::errors::Result<WorkoutDetails> {
@@ -218,7 +218,7 @@ pub fn workout_details(
 }
 
 /// Enables or disables the workout and queues the change for the devices that have it.
-pub fn set_workout_enabled(
+pub(super) fn set_workout_enabled(
     tx: &rusqlite_orm::rusqlite::Transaction,
     workout: &str,
     status: bool,
@@ -250,7 +250,7 @@ pub fn set_workout_enabled(
 
 /// Inserts the workout, or replaces the notes and steps of an existing one when editing, and
 /// queues it for the devices that already have it.
-pub fn store_workout(
+pub(super) fn store_workout(
     tx: &rusqlite_orm::rusqlite::Transaction,
     workout: &Workout,
     edit: bool,

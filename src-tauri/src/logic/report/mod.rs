@@ -1,16 +1,15 @@
 pub mod commands;
-pub mod helpers;
 pub mod queries;
 
-use tauri::{AppHandle, Runtime, WebviewWindow, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager, Runtime, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_log::log::info;
 
-use self::helpers::print_to_pdf;
 use self::queries::report_data;
 use crate::{
     SettingsLock,
     dto::report::ReportData,
-    logic::{report_error, run_blocking_conn},
+    logic::{print_to_pdf, report_error, run_blocking_conn},
+    utils::translations::translate,
 };
 
 /// Called by the report window once everything is rendered and painted: prints it to PDF.
@@ -21,7 +20,7 @@ pub async fn load_report<R: Runtime>(app: &AppHandle<R>, from: u32, to: u32) -> 
         .windows
         .iter()
         .find(|w| w.label == "report")
-        .expect("no hay ventana 'report' en tauri.conf.json")
+        .expect("no 'report' window in tauri.conf.json")
         .clone();
 
     config.url = tauri::WebviewUrl::App(format!("{}?from={from}&to={to}", config.url).into());
@@ -38,12 +37,8 @@ pub async fn load_report<R: Runtime>(app: &AppHandle<R>, from: u32, to: u32) -> 
 /// Called by the report window once everything is rendered and painted: prints it to PDF.
 pub async fn report_ready(window: WebviewWindow) -> Result<(), String> {
     info!("Report ready, printing");
-    let res = print_to_pdf(window.clone()).await;
-    // On success the window is closed once the print operation ends
-    if res.is_err() {
-        let _ = window.close();
-    }
-    res
+    let lang = window.state::<SettingsLock>().read().unwrap().language;
+    print_to_pdf(window, &translate("progression_report", lang)).await
 }
 
 /// Gathers everything the report needs for the `[from, to]` range, reusing the commands' DB logic on one connection.
@@ -56,7 +51,14 @@ pub async fn get_report_data<R: Runtime>(
     info!("Getting report data...");
     let lang = settings.read().unwrap().language;
 
-    let res = run_blocking_conn(app, move |_, conn| report_data(conn, from, to, lang)).await;
+    let res = run_blocking_conn(app, move |_, conn| report_data(conn, from, to))
+        .await
+        .map(|mut data| {
+            // Listed by name, which depends on the language
+            data.exercises
+                .sort_by_key(|e| translate(&format!("exercise_{}_{}", e.category, e.id), lang));
+            data
+        });
 
     match res {
         Ok(data) => {

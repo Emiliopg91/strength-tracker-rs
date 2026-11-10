@@ -7,7 +7,7 @@ use rusqlite_orm::{database::DatabasePool, errors::DatabaseError};
 use tauri::{AppHandle, Manager, Runtime};
 use tauri_plugin_log::log::info;
 
-use self::helpers::{_send_to_connect, get_devices_from_connect, up_to_date_connect};
+use self::helpers::{get_devices_from_connect, queue_workout_on_connect, up_to_date_connect};
 use self::queries::{body_metric_dates, connect_import_state, insert_new_body_metrics};
 use crate::{
     ConnectLock, SettingsLock,
@@ -179,7 +179,7 @@ pub async fn send_to_connect<R: Runtime>(
     serial: &str,
 ) -> Result<(), String> {
     let res: Result<_, Box<dyn std::error::Error>> = async {
-        _send_to_connect(app, workout, serial).await?;
+        queue_workout_on_connect(app, workout, serial).await?;
 
         // Register the pair so later changes (e.g. progressions) get re-sent once plugged by USB
         let mut entry = WorkoutDevice {

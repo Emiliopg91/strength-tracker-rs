@@ -21,14 +21,14 @@ pub(super) type Answer = Option<Vec<String>>;
 
 /// Prompts sent to the frontend that are still waiting for an answer, by id.
 #[derive(Default)]
-pub struct Prompts {
+pub(crate) struct Prompts {
     next_id: AtomicU32,
     pub(super) pending: Mutex<HashMap<u32, oneshot::Sender<Answer>>>,
 }
 
 /// Asks the frontend for the input described by `kind` and waits for the answer. Returns `None`
 /// if the user cancels or the prompt could not be shown.
-pub async fn request_prompt<R: Runtime>(
+pub(crate) async fn request_prompt<R: Runtime>(
     app: &AppHandle<R>,
     kind: PromptKind,
     prefill: Option<String>,
@@ -67,7 +67,7 @@ pub async fn request_prompt<R: Runtime>(
 }
 
 /// Asks for the Garmin Connect inputs through the frontend dialogs.
-pub struct AppPrompter<R: Runtime>(pub AppHandle<R>);
+pub(crate) struct AppPrompter<R: Runtime>(pub AppHandle<R>);
 
 impl<R: Runtime> ConnectPrompter for AppPrompter<R> {
     fn credentials(

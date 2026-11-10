@@ -11,7 +11,7 @@ use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tauri_plugin_log::log::{error, info};
 
 use super::queries::{
-    full_session, import_device_files, import_file_list, pending_geolocation,
+    ImportedFiles, full_session, import_device_files, import_file_list, pending_geolocation,
     set_session_connect_id, set_session_name,
 };
 use crate::{
@@ -28,7 +28,7 @@ use crate::{
     },
     utils::{
         constants,
-        translations::{Languages, translate_and_replace},
+        translations::{Languages, translate, translate_and_replace},
     },
 };
 
@@ -47,7 +47,7 @@ pub(super) async fn retrieve_session_connect_id<R: Runtime>(app: &AppHandle<R>, 
 
 /// Loads one session with its sets (sorted), device, additional data and laps (sorted).
 /// File name for an exported session: its local date followed by its name.
-pub fn session_file_name(timestamp: u32, name: &str) -> String {
+pub(crate) fn session_file_name(timestamp: u32, name: &str) -> String {
     let date = Local
         .timestamp_opt(timestamp as i64, 0)
         .unwrap()
@@ -62,7 +62,7 @@ pub fn session_file_name(timestamp: u32, name: &str) -> String {
 }
 
 /// Encodes the stored session as a FIT file at `path`.
-pub async fn write_session_fit<R: Runtime>(
+pub(crate) async fn write_session_fit<R: Runtime>(
     app: &AppHandle<R>,
     timestamp: u32,
     path: PathBuf,
@@ -83,7 +83,7 @@ pub async fn write_session_fit<R: Runtime>(
     .await
 }
 
-pub fn _import_from_files<R: Runtime>(
+pub(crate) fn import_file_paths<R: Runtime>(
     app: &AppHandle<R>,
     files: &[PathBuf],
 ) -> Result<usize, String> {
@@ -101,18 +101,13 @@ pub fn _import_from_files<R: Runtime>(
         .collect();
     let database = app.state::<DatabasePool>();
     let res = database
-        .run_in_transaction(|tx| {
-            let imported = import_file_list(tx, &files, lang)?;
-            Ok((imported.sessions, imported.any_progression))
-        })
+        .run_in_transaction(|tx| Ok(import_file_list(tx, &files)?))
         .map_err(|e| e.to_string());
 
     match res {
-        Ok((res, any_progression)) => {
-            if let Some(any_progression) = any_progression {
-                let payload: bool = any_progression;
-                let _ = app.emit("progressions_available", payload);
-            }
+        Ok(imported) => {
+            notify_import(app, &imported, lang);
+            let res = imported.sessions;
             if !res.is_empty() {
                 let app = app.clone();
                 std::thread::spawn(move || {
@@ -134,7 +129,7 @@ pub fn _import_from_files<R: Runtime>(
 /// Imports as sessions of `device` the `.fit` files fetched from it. Those that fail to parse, or
 /// all of them if the transaction is rolled back, are stored as pending. With `sync_mark`, the
 /// device's last activity sync is moved to it in the same transaction.
-pub fn import_pending_sessions<R: Runtime>(
+pub(crate) fn import_pending_sessions<R: Runtime>(
     app: &AppHandle<R>,
     db: &DatabasePool,
     files: &[FitFile],
@@ -142,17 +137,17 @@ pub fn import_pending_sessions<R: Runtime>(
     lang: Languages,
     sync_mark: Option<u32>,
 ) -> Result<Vec<u32>, DatabaseError> {
-    let res =
-        db.run_in_transaction(|tx| Ok(import_device_files(tx, files, device, lang, sync_mark)?));
+    let res = db.run_in_transaction(|tx| Ok(import_device_files(tx, files, device, sync_mark)?));
 
     let pending_dir = &constants::PENDING_DOWNLOAD_SESSIONS_FOLDER;
     match &res {
         Ok(imported) => {
-            if let Some(any_progression) = imported.any_progression {
-                let payload: bool = any_progression;
-                let _ = app.emit("progressions_available", payload);
-            }
-            store_pending_files(pending_dir, &device.serial, imported.failed.iter().copied());
+            notify_import(app, imported, lang);
+            store_pending_files(
+                pending_dir,
+                &device.serial,
+                imported.failed.iter().map(|(file, _)| *file),
+            );
         }
         Err(_) => store_pending_files(pending_dir, &device.serial, files),
     }
@@ -160,8 +155,59 @@ pub fn import_pending_sessions<R: Runtime>(
     res.map(|imported| imported.sessions)
 }
 
+/// Tells the user, once the import is committed, how it went: files that failed to parse,
+/// sessions imported, new records and progressions. Also lets the frontend know whether any
+/// progression is pending.
+fn notify_import<R: Runtime>(app: &AppHandle<R>, imported: &ImportedFiles, lang: Languages) {
+    for (file, e) in &imported.failed {
+        notify_parse_error(&file.name, e, lang);
+    }
+
+    if !imported.sessions.is_empty() {
+        show_notification(NotificationDefinition {
+            title: translate("ok_import_sessions", lang),
+            body: translate_and_replace(
+                "imported_n_sessions",
+                &[&imported.sessions.len().to_string()],
+                lang,
+            ),
+            kind: NotificationKind::Temporal,
+        });
+    }
+    if imported.new_prs {
+        notify_new_prs(lang);
+    }
+    if imported.imported_progression {
+        notify_progression_available(lang);
+    }
+
+    if let Some(any_progression) = imported.any_progression {
+        // Typed binding: the TypeScript generator reads the payload type from it
+        let payload: bool = any_progression;
+        let _ = app.emit("progressions_available", payload);
+    }
+}
+
+/// Congratulates the user on a new personal record.
+pub(super) fn notify_new_prs(lang: Languages) {
+    show_notification(NotificationDefinition {
+        title: translate("new_record", lang),
+        body: translate("contratulations_pr", lang),
+        kind: NotificationKind::Temporal,
+    });
+}
+
+/// Tells the user some exercise is ready to progress.
+pub(super) fn notify_progression_available(lang: Languages) {
+    show_notification(NotificationDefinition {
+        title: translate("progression_available", lang),
+        body: translate("progression_available_msg", lang),
+        kind: NotificationKind::Temporal,
+    });
+}
+
 /// Shows the notification of a session file that could not be read or parsed.
-pub(super) fn notify_parse_error(name: &str, error: &str, lang: Languages) {
+fn notify_parse_error(name: &str, error: &str, lang: Languages) {
     let title = Path::new(name)
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
@@ -176,7 +222,7 @@ pub(super) fn notify_parse_error(name: &str, error: &str, lang: Languages) {
 pub(super) static GELOCATION_MUTEX: Mutex<bool> = Mutex::new(false);
 
 /// Recover all pending workouts pending on geolocation
-pub fn update_pending_geolocation<R: Runtime>(app: &AppHandle<R>, db: &DatabasePool) {
+pub(crate) fn update_pending_geolocation<R: Runtime>(app: &AppHandle<R>, db: &DatabasePool) {
     let _lock = GELOCATION_MUTEX.lock().unwrap();
     info!("Looking for pending geocode workouts...");
     let pending = pending_geolocation(db);

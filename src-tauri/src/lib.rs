@@ -67,7 +67,7 @@ use crate::{
                 download_session, get_heatmap_data, get_session_details, get_sessions,
                 import_from_files, save_session_changes,
             },
-            helpers::_import_from_files,
+            helpers::import_file_paths,
         },
         workouts::commands::{
             get_workout_details, get_workout_list, load_workout_page, save_workout,
@@ -277,7 +277,7 @@ pub fn run(log_level: LevelFilter) {
 
                         let app_handle = app_handle.clone();
                         tauri::async_runtime::spawn_blocking(move || {
-                            let _ = _import_from_files(&app_handle, paths.as_slice());
+                            let _ = import_file_paths(&app_handle, paths.as_slice());
                         });
                     }
                 });

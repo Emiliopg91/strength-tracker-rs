@@ -10,7 +10,6 @@ use rusqlite_orm::{
 };
 use tauri_plugin_log::log::{error, info, warn};
 
-use super::helpers::notify_parse_error;
 use crate::{
     dao::{
         device::{self, Device, DeviceRepository},
@@ -22,23 +21,15 @@ use crate::{
         workout::{self, Workout, WorkoutRepository},
         workout_step::WorkoutStepRepository,
     },
-    dto::{
-        notifications::{NotificationDefinition, NotificationKind},
-        sessions::{SessionDetails, SessionListItem, SessionStepsUpdate},
-    },
+    dto::sessions::{SessionDetails, SessionListItem, SessionStepsUpdate},
     fit::{FitFile, parser::FitParser},
-    logic::{
-        exercises::queries::{
-            fetch_exercises_muscles, fetch_progression_suggestion, progression_suggestions,
-            update_prs,
-        },
-        notifications::show_notification,
+    logic::exercises::queries::{
+        fetch_exercises_muscles, fetch_progression_suggestion, progression_suggestions, update_prs,
     },
-    utils::translations::{Languages, translate, translate_and_replace},
 };
 
 /// Lists sessions newest first (from `min_date` on, if given), flagged with whether they have sets and records.
-pub fn fetch_sessions(
+pub(super) fn fetch_sessions(
     conn: &rusqlite_orm::rusqlite::Connection,
     from: Option<i32>,
     to: Option<i32>,
@@ -90,7 +81,7 @@ pub fn fetch_sessions(
 }
 
 /// Maps every session that has sets (within `[min_date, max_date]`, each bound optional) to whether any of them is a personal record.
-pub fn session_set_flags(
+pub(crate) fn session_set_flags(
     conn: &rusqlite_orm::rusqlite::Connection,
     min_date: Option<i32>,
     max_date: Option<i32>,
@@ -127,7 +118,7 @@ pub fn session_set_flags(
     Ok(flags)
 }
 
-pub fn fetch_session_details(
+pub(crate) fn fetch_session_details(
     conn: &rusqlite_orm::rusqlite::Connection,
     timestamp: u32,
     with_add_data: bool,
@@ -145,7 +136,7 @@ pub fn fetch_session_details(
 ///
 /// # Panics
 /// If any of the sessions doesn't exist.
-pub fn fetch_sessions_details(
+pub(crate) fn fetch_sessions_details(
     conn: &rusqlite_orm::rusqlite::Connection,
     timestamps: &[u32],
     with_add_data: bool,
@@ -272,10 +263,9 @@ pub fn fetch_sessions_details(
 }
 
 /// Parses a batch of `.FIT` files in parallel and inserts each new session (plus its exercises/series/heart rate/GPS/speeds) in the given transaction, then refreshes personal records.
-pub fn import_file_list<'a>(
+pub(crate) fn import_file_list<'a>(
     tx: &mut rusqlite_orm::rusqlite::Transaction,
     files: &'a [FitFile],
-    lang: Languages,
 ) -> Result<ImportedFiles<'a>, DatabaseError> {
     let mut success = Vec::new();
     let mut handled_exercises: HashSet<(u16, u16)> = HashSet::new();
@@ -292,8 +282,7 @@ pub fn import_file_list<'a>(
             }
             Err(e) => {
                 error!("Error parsing session file {}: {}", file.name, e);
-                notify_parse_error(&file.name, &e.to_string(), lang);
-                Either::Right(file)
+                Either::Right((file, e.to_string()))
             }
         }
     });
@@ -328,75 +317,46 @@ pub fn import_file_list<'a>(
 
     for session in &mut sessions {
         let formatted_time = match Local.timestamp_opt(session.date as i64, 0) {
-            LocalResult::Single(fecha) => fecha.format("%H:%M:%S %d/%m/%Y").to_string(),
+            LocalResult::Single(date) => date.format("%H:%M:%S %d/%m/%Y").to_string(),
             _ => "".to_string(),
         };
-
-        let res: Result<bool, String> = {
-            info!("Importing session {} - {}...", session.name, formatted_time);
-            let added = if existing_sessions.contains(&session.date) {
-                let msg = format!("Session with date {} already exists", session.date);
-                warn!("{}", msg);
-                false
-            } else {
-                // The serial recorded in the file may belong to a device that isn't registered
-                session.device = session.device.take().filter(|s| known_devices.contains(s));
-                insert_session(tx, session, &mut handled_workouts)?;
-
-                for serie in &session.steps {
-                    if let Some(cat) = serie.ex_cat
-                        && let Some(id) = serie.ex_id
-                    {
-                        handled_exercises.insert((cat, id));
-                    }
-                }
-
-                let date = session.date;
-                existing_sessions.insert(date);
-                success.push(date);
-
-                true
-            };
-
-            Ok(added)
-        };
-
-        if let Err(e) = res {
-            error!("  {}", e);
-
-            show_notification(NotificationDefinition {
-                title: formatted_time,
-                body: e,
-                kind: NotificationKind::Persistant,
-            });
+        info!("Importing session {} - {}...", session.name, formatted_time);
+        if existing_sessions.contains(&session.date) {
+            warn!("Session with date {} already exists", session.date);
+            continue;
         }
+
+        // The serial recorded in the file may belong to a device that isn't registered
+        session.device = session.device.take().filter(|s| known_devices.contains(s));
+        insert_session(tx, session, &mut handled_workouts)?;
+
+        handled_exercises.extend(
+            session
+                .steps
+                .iter()
+                .filter_map(|serie| serie.ex_cat.zip(serie.ex_id)),
+        );
+        existing_sessions.insert(session.date);
+        success.push(session.date);
     }
 
+    let mut new_prs = false;
+    let mut imported_progression = false;
     let mut any_progression = None;
     if !success.is_empty() {
-        show_notification(NotificationDefinition {
-            title: translate("ok_import_sessions", lang),
-            body: translate_and_replace("imported_n_sessions", &[&success.len().to_string()], lang),
-            kind: NotificationKind::Temporal,
-        });
-        update_prs(tx, &handled_exercises, &success, Some(lang))?;
+        new_prs = update_prs(tx, &handled_exercises, &success)?;
 
         // Evaluated once: tells both whether the imported exercises progress and whether any does
         let suggested = progression_suggestions(tx)?;
-        if handled_exercises.iter().any(|e| suggested.contains(e)) {
-            show_notification(NotificationDefinition {
-                title: translate("progression_available", lang),
-                body: translate("progression_available_msg", lang),
-                kind: NotificationKind::Temporal,
-            });
-        }
-
+        imported_progression = handled_exercises.iter().any(|e| suggested.contains(e));
         any_progression = Some(!suggested.is_empty());
     }
 
     Ok(ImportedFiles {
         sessions: success,
         failed,
+        new_prs,
+        imported_progression,
         any_progression,
     })
 }
@@ -405,7 +365,7 @@ pub fn import_file_list<'a>(
 /// Inserts a session with its sets, laps and additional data, creating its
 /// workout (and steps, if missing) when the session references one.
 /// Child collections are restored on the session after insertion.
-pub fn insert_session(
+pub(super) fn insert_session(
     tx: &mut rusqlite_orm::rusqlite::Transaction,
     session: &mut Session,
     handled_workouts: &mut HashSet<String>,
@@ -482,7 +442,7 @@ pub fn insert_session(
     Ok(())
 }
 
-pub fn update_session_notes(
+pub(crate) fn update_session_notes(
     tx: &rusqlite_orm::rusqlite::Transaction,
     session: u32,
     notes: Option<&str>,
@@ -508,7 +468,7 @@ pub fn update_session_notes(
     Ok(())
 }
 
-pub fn heatmap_data(database: &DatabasePool) -> Result<Vec<Vec<(u32, u16)>>, String> {
+pub(crate) fn heatmap_data(database: &DatabasePool) -> Result<Vec<Vec<(u32, u16)>>, String> {
     let today = Local::now().date_naive();
     let a_year_ago = today
         .checked_sub_months(Months::new(12))
@@ -565,7 +525,7 @@ pub fn heatmap_data(database: &DatabasePool) -> Result<Vec<Vec<(u32, u16)>>, Str
 }
 
 #[allow(dead_code)]
-pub fn merge_sessions(
+pub(super) fn merge_sessions(
     database: &DatabasePool,
     to_date: u32,
     from_date: u32,
@@ -673,20 +633,28 @@ pub fn merge_sessions(
                 }
             })
             .collect();
-        update_prs(tx, &handled_exercises, &[to.date], None)?;
+        update_prs(tx, &handled_exercises, &[to.date])?;
 
         Ok(())
     })
 }
 
+/// Outcome of `apply_session_changes`.
+pub(crate) struct AppliedSessionChanges {
+    /// Whether the edited session now holds a new personal record.
+    pub new_prs: bool,
+    /// Whether some exercise of the session got a new progression suggestion.
+    pub newly_suggested: bool,
+    /// Whether any exercise has a progression suggestion pending.
+    pub any_progression: bool,
+}
+
 /// Stores the edited notes and sets of a session and recomputes the records of the exercises
-/// involved. Returns whether some exercise got a new progression suggestion and whether any
-/// exercise has one.
-pub fn apply_session_changes(
+/// involved.
+pub(super) fn apply_session_changes(
     tx: &rusqlite_orm::rusqlite::Transaction,
     details: &SessionStepsUpdate,
-    lang: Languages,
-) -> rusqlite_orm::errors::Result<(bool, bool)> {
+) -> rusqlite_orm::errors::Result<AppliedSessionChanges> {
     update_session_notes(tx, details.timestamp, details.notes.as_deref())?;
 
     let mut exercises = HashSet::new();
@@ -743,18 +711,22 @@ pub fn apply_session_changes(
             .execute_in(tx)?;
     }
 
-    update_prs(tx, &exercises, &[details.timestamp], Some(lang))?;
+    let new_prs = update_prs(tx, &exercises, &[details.timestamp])?;
 
     // Evaluated once: tells both which exercises now progress and whether any does
     let suggested_after = progression_suggestions(tx)?;
     let newly_suggested = exercises
         .iter()
         .any(|ex| !suggested_before.contains(ex) && suggested_after.contains(ex));
-    Ok((newly_suggested, !suggested_after.is_empty()))
+    Ok(AppliedSessionChanges {
+        new_prs,
+        newly_suggested,
+        any_progression: !suggested_after.is_empty(),
+    })
 }
 
 /// Name of the session, `None` if it doesn't exist.
-pub fn session_name(
+pub(super) fn session_name(
     database: &DatabasePool,
     timestamp: u32,
 ) -> rusqlite_orm::errors::Result<Option<String>> {
@@ -762,7 +734,7 @@ pub fn session_name(
 }
 
 /// Links the session to its Garmin Connect activity.
-pub fn set_session_connect_id(
+pub(super) fn set_session_connect_id(
     database: &DatabasePool,
     timestamp: u32,
     id: u64,
@@ -774,7 +746,7 @@ pub fn set_session_connect_id(
 }
 
 /// The session with its sets, laps, additional data and workout, `None` if it doesn't exist.
-pub fn full_session(
+pub(super) fn full_session(
     conn: &rusqlite_orm::rusqlite::Connection,
     timestamp: u32,
 ) -> rusqlite_orm::errors::Result<Option<Session>> {
@@ -792,7 +764,9 @@ pub fn full_session(
 
 /// Coordinates of the unnamed sessions recorded with GPS, newest first, to name them after their
 /// location.
-pub fn pending_geolocation(db: &DatabasePool) -> rusqlite_orm::errors::Result<Vec<SessionData>> {
+pub(super) fn pending_geolocation(
+    db: &DatabasePool,
+) -> rusqlite_orm::errors::Result<Vec<SessionData>> {
     let unnamed_sessions = SessionRepository::select()
         .columns(&[session::entity::columns::DATE])
         .where_(Where::Eq(session::entity::columns::NAME, "".into()))
@@ -824,7 +798,7 @@ pub fn pending_geolocation(db: &DatabasePool) -> rusqlite_orm::errors::Result<Ve
 }
 
 /// Renames the session; returns the number of rows changed.
-pub fn set_session_name(
+pub(super) fn set_session_name(
     db: &DatabasePool,
     session: u32,
     name: &str,
@@ -837,11 +811,15 @@ pub fn set_session_name(
 
 /// Outcome of `import_file_list`.
 #[derive(Default)]
-pub struct ImportedFiles<'a> {
+pub(crate) struct ImportedFiles<'a> {
     /// Dates of the sessions inserted.
     pub sessions: Vec<u32>,
-    /// Files that could not be parsed.
-    pub failed: Vec<&'a FitFile>,
+    /// Files that could not be parsed, with the parse error.
+    pub failed: Vec<(&'a FitFile, String)>,
+    /// Whether any of the inserted sessions holds a new personal record.
+    pub new_prs: bool,
+    /// Whether some exercise of the inserted sessions has a progression suggestion pending.
+    pub imported_progression: bool,
     /// Whether any exercise has a progression suggestion pending, checked only when sessions
     /// were inserted (otherwise it cannot have changed).
     pub any_progression: Option<bool>,
@@ -849,16 +827,15 @@ pub struct ImportedFiles<'a> {
 
 /// Imports the `.fit` files fetched from `device` and, with `sync_mark`, moves its last activity
 /// sync to it.
-pub fn import_device_files<'a>(
+pub(super) fn import_device_files<'a>(
     tx: &mut rusqlite_orm::rusqlite::Transaction,
     files: &'a [FitFile],
     device: &mut Device,
-    lang: Languages,
     sync_mark: Option<u32>,
 ) -> Result<ImportedFiles<'a>, DatabaseError> {
     let res = if !files.is_empty() {
         info!("Fetched {} activity files", files.len());
-        import_file_list(tx, files, lang)?
+        import_file_list(tx, files)?
     } else {
         ImportedFiles::default()
     };

@@ -39,7 +39,7 @@ fn insert_and_update(db: &DatabasePool, sessions: Vec<(u32, Vec<SessionStep>)>) 
             session.steps = sets.clone();
             common::insert_session(tx, session);
         }
-        update_prs(tx, &exercises, &[], None)?;
+        update_prs(tx, &exercises, &[])?;
         Ok(())
     })
     .unwrap();

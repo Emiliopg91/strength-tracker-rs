@@ -21,15 +21,12 @@ use crate::{
     },
     dto::{
         exercises::{ExerciseDetails, ExerciseListItem, ProgressionSuggestion},
-        notifications::{NotificationDefinition, NotificationKind},
         sessions::SessionStepDto,
     },
-    logic::notifications::show_notification,
-    utils::translations::{Languages, translate},
 };
 
 /// Loads the personal record and full per-session set history for one exercise.
-pub fn fetch_exercise_details(
+pub(super) fn fetch_exercise_details(
     conn: &rusqlite_orm::rusqlite::Connection,
     category: u16,
     id: u16,
@@ -40,7 +37,7 @@ pub fn fetch_exercise_details(
 
 /// Same as [`fetch_exercise_details`], taking the body metrics (newest first) from `body_metrics`,
 /// which is loaded on first need so several calls share a single query.
-pub fn exercise_details(
+pub(crate) fn exercise_details(
     conn: &rusqlite_orm::rusqlite::Connection,
     category: u16,
     id: u16,
@@ -135,7 +132,7 @@ pub fn exercise_details(
 
 /// Fills the muscles of every exercise in a single query, instead of one per exercise as the
 /// relationship fetcher would.
-pub fn fetch_exercises_muscles(
+pub(crate) fn fetch_exercises_muscles(
     conn: &rusqlite_orm::rusqlite::Connection,
     exercises: &mut [Exercise],
 ) -> rusqlite_orm::errors::Result<()> {
@@ -173,7 +170,7 @@ pub fn fetch_exercises_muscles(
 
 /// Exercises that can be picked, by category. The generic exercise of a category is left out when
 /// the category already has a real exercise with its same name (e.g. `SQUAT` within squats).
-pub fn exercises_catalog(
+pub(crate) fn exercises_catalog(
     conn: &rusqlite_orm::rusqlite::Connection,
 ) -> Result<HashMap<u16, Vec<u16>>, DatabaseError> {
     let category_names: HashMap<u16, String> = ExerciseCategoryRepository::select()
@@ -204,7 +201,7 @@ pub fn exercises_catalog(
 }
 
 #[cfg(debug_assertions)]
-pub fn update_all_prs(
+pub(crate) fn update_all_prs(
     tx: &rusqlite_orm::rusqlite::Transaction,
 ) -> rusqlite_orm::errors::Result<()> {
     let mut exercises = HashSet::new();
@@ -222,16 +219,16 @@ pub fn update_all_prs(
         .for_each(|e| {
             exercises.insert(e);
         });
-    update_prs(tx, &exercises, &[], None)
+    update_prs(tx, &exercises, &[]).map(|_| ())
 }
 
-/// Recomputes the `pr` flag for each affected exercise and notifies if any of the just-imported/edited sessions set a new record.
-pub fn update_prs(
+/// Recomputes the `pr` flag for each affected exercise. Returns whether any of `sessions` holds a
+/// new record.
+pub(crate) fn update_prs(
     tx: &rusqlite_orm::rusqlite::Transaction,
     exercises: &HashSet<(u16, u16)>,
     sessions: &[u32],
-    lang: Option<Languages>,
-) -> rusqlite_orm::errors::Result<()> {
+) -> rusqlite_orm::errors::Result<bool> {
     let mut new_prs = false;
 
     let sessions = sessions.to_vec();
@@ -284,18 +281,10 @@ pub fn update_prs(
             .execute_in(tx)?;
     }
 
-    if new_prs && let Some(lang) = lang {
-        show_notification(NotificationDefinition {
-            title: translate("new_record", lang),
-            body: translate("contratulations_pr", lang),
-            kind: NotificationKind::Temporal,
-        });
-    }
-
-    Ok(())
+    Ok(new_prs)
 }
 
-pub fn fetch_progression_suggestion(
+pub(crate) fn fetch_progression_suggestion(
     conn: &rusqlite_orm::rusqlite::Connection,
     category: u16,
     id: u16,
@@ -307,7 +296,7 @@ pub fn fetch_progression_suggestion(
 }
 
 /// Exercises with progression enabled that currently have a suggestion.
-pub fn progression_suggestions(
+pub(crate) fn progression_suggestions(
     conn: &rusqlite_orm::rusqlite::Connection,
 ) -> rusqlite_orm::errors::Result<HashSet<(u16, u16)>> {
     let mut suggested = HashSet::new();
@@ -365,7 +354,7 @@ pub(super) fn progression_candidates() -> Where<Exercise> {
 }
 
 /// Suggestion for an already loaded `exercise`, `None` if it has progression disabled.
-pub fn progression_suggestion_for(
+pub(super) fn progression_suggestion_for(
     conn: &rusqlite_orm::rusqlite::Connection,
     exercise: &Exercise,
 ) -> rusqlite_orm::errors::Result<Option<ProgressionSuggestion>> {
@@ -513,7 +502,7 @@ pub(super) fn weight_equals(weight: f32) -> Where<WorkoutStep> {
 
 /// Stores the exercise notes and queues for upload the workouts inheriting them.
 /// Returns every workout inheriting the notes.
-pub fn update_exercise_notes(
+pub(crate) fn update_exercise_notes(
     tx: &rusqlite_orm::rusqlite::Transaction,
     category: u16,
     id: u16,
@@ -566,7 +555,7 @@ pub fn update_exercise_notes(
 }
 
 /// Whether any exercise with progression enabled currently has a suggestion pending.
-pub fn any_progression_suggestion(
+pub(super) fn any_progression_suggestion(
     conn: &rusqlite_orm::rusqlite::Connection,
 ) -> rusqlite_orm::errors::Result<bool> {
     // Stops at the first suggestion; an exercise failing to evaluate counts as none
@@ -584,7 +573,7 @@ pub fn any_progression_suggestion(
 
 /// The exercises with a personal record, annotated with it, plus those planned in some workout
 /// step that have none yet.
-pub fn exercise_list(
+pub(super) fn exercise_list(
     conn: &rusqlite_orm::rusqlite::Connection,
 ) -> rusqlite_orm::errors::Result<Vec<ExerciseListItem>> {
     let prs = SessionStepRepository::select()
@@ -677,7 +666,7 @@ pub fn exercise_list(
 }
 
 /// Marks the exercise as performed one side at a time, or not.
-pub fn set_unilateral(
+pub(super) fn set_unilateral(
     database: &DatabasePool,
     category: u16,
     id: u16,
@@ -691,7 +680,7 @@ pub fn set_unilateral(
 }
 
 /// Enables or disables progression suggestions for the exercise.
-pub fn set_progression(
+pub(super) fn set_progression(
     database: &DatabasePool,
     category: u16,
     id: u16,
@@ -705,7 +694,7 @@ pub fn set_progression(
 }
 
 /// Stores the rep range (e.g. `8-10-12`) and weight increment used to suggest progressions.
-pub fn set_progression_parameters(
+pub(super) fn set_progression_parameters(
     database: &DatabasePool,
     category: u16,
     id: u16,
@@ -728,7 +717,7 @@ fn by_key(category: u16, id: u16) -> Where<Exercise> {
 }
 
 /// Highest load programmed for the exercise across workouts, as reps and weight.
-pub fn progression_status(
+pub(super) fn progression_status(
     database: &DatabasePool,
     category: u16,
     id: u16,
@@ -758,7 +747,7 @@ pub fn progression_status(
 
 /// Raises the exercise steps programmed below `suggestion` and queues their workouts for the
 /// devices. Returns whether any step changed and the workouts programming the exercise.
-pub fn apply_progression(
+pub(super) fn apply_progression(
     tx: &rusqlite_orm::rusqlite::Transaction,
     category: u16,
     id: u16,

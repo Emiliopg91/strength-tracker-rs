@@ -8,7 +8,6 @@ use crate::{
     fit::{FitFile, parser::FitParser},
     logic::sessions::queries::import_file_list,
     tests::common,
-    utils::translations::Languages,
 };
 
 /// Serial of the watch that recorded the fixtures, `3000000001` in hexadecimal.
@@ -49,7 +48,7 @@ fn register_device(db: &DatabasePool, serial: &str) {
 fn import(db: &DatabasePool, fixture: &str) -> Option<String> {
     let files = [FitFile::read(fixture_path(fixture)).unwrap()];
     let imported = db
-        .run_in_transaction(|tx| Ok(import_file_list(tx, &files, Languages::English)?))
+        .run_in_transaction(|tx| Ok(import_file_list(tx, &files)?))
         .unwrap();
     assert_eq!(imported.sessions.len(), 1);
 
@@ -91,7 +90,7 @@ fn unknown_device_is_cleared() {
 fn import_connect_id(db: &DatabasePool, file: FitFile) -> Option<String> {
     let files = [file];
     let imported = db
-        .run_in_transaction(|tx| Ok(import_file_list(tx, &files, Languages::English)?))
+        .run_in_transaction(|tx| Ok(import_file_list(tx, &files)?))
         .unwrap();
     assert_eq!(imported.sessions.len(), 1);
 

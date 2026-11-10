@@ -6,7 +6,7 @@ use rusqlite_orm::{database::DatabasePool, errors::DatabaseError};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tauri_plugin_log::log::{error, info};
 
-use super::_import_from_device;
+use super::import_from_device;
 use super::queries::{
     clear_pending, enrol_usb_device, pending_connect_devices, pending_queue, store_workout_steps,
     workout_for_device, workouts_without_steps,
@@ -20,8 +20,9 @@ use crate::{
     },
     fit::{FitFile, parser::FitParser, writer::FitWriter},
     logic::{
-        connect::helpers::_send_to_connect, new_pending_dir, notifications::show_notification,
-        run_blocking, run_blocking_conn, run_blocking_tx, store_pending_files,
+        connect::helpers::queue_workout_on_connect, new_pending_dir,
+        notifications::show_notification, run_blocking, run_blocking_conn, run_blocking_tx,
+        store_pending_files,
     },
     utils::{
         constants,
@@ -30,7 +31,7 @@ use crate::{
 };
 
 /// Spawns a background task that watches USB hotplug events and keeps the device list/DB/frontend in sync.
-pub fn start_device_watcher<R: Runtime>(app: &AppHandle<R>) {
+pub(crate) fn start_device_watcher<R: Runtime>(app: &AppHandle<R>) {
     info!("Starting device monitor...");
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
@@ -143,7 +144,7 @@ pub(super) async fn on_device_connected<R: Runtime>(
 
     let serial = &device.serial;
     with_loading(app, async {
-        let imported = _import_from_device(app, serial).await.unwrap_or(0);
+        let imported = import_from_device(app, serial).await.unwrap_or(0);
 
         download_pending_workouts(app, serial).await;
         delete_pending_workouts(app, serial).await;
@@ -170,7 +171,7 @@ pub(super) async fn with_loading<R: Runtime>(
 
 /// Uploads the pending workouts of every device plugged in by USB. The rest keep them pending for
 /// the next plug: Connect only gets the workout itself, never a delivery to a device.
-pub async fn push_pending_to_usb<R: Runtime>(app: &AppHandle<R>) {
+pub(crate) async fn push_pending_to_usb<R: Runtime>(app: &AppHandle<R>) {
     let mtp_client = app.state::<MtpLock>();
     // Bound in its own statement so the MTP lock is released before pushing
     let connected = mtp_client.lock().await.get_connected_devices().await;
@@ -186,7 +187,7 @@ pub async fn push_pending_to_usb<R: Runtime>(app: &AppHandle<R>) {
 
 /// Delivers a just enabled `workout` through Connect to the linked devices still waiting for it,
 /// so call it after `push_pending_to_usb` for USB to take precedence.
-pub async fn send_enabled_workout_to_connect_devices<R: Runtime>(
+pub(crate) async fn send_enabled_workout_to_connect_devices<R: Runtime>(
     app: &AppHandle<R>,
     workout: &str,
 ) {
@@ -214,7 +215,7 @@ pub async fn send_enabled_workout_to_connect_devices<R: Runtime>(
 
     let lang = app.state::<SettingsLock>().read().unwrap().language;
     for serial in serials {
-        if let Err(e) = _send_to_connect(app, workout, &serial).await {
+        if let Err(e) = queue_workout_on_connect(app, workout, &serial).await {
             error!("Error pushing pending workout '{workout}' to {serial}: {e}");
             continue;
         }
@@ -223,7 +224,7 @@ pub async fn send_enabled_workout_to_connect_devices<R: Runtime>(
 }
 
 /// Delete the pending workouts of every currently connected device.
-pub async fn delete_pending_from_connected<R: Runtime>(app: &AppHandle<R>) {
+pub(crate) async fn delete_pending_from_connected<R: Runtime>(app: &AppHandle<R>) {
     let mtp_client = app.state::<MtpLock>();
     // Bound in its own statement so the MTP lock is released before pushing
     let connected = mtp_client.lock().await.get_connected_devices().await;

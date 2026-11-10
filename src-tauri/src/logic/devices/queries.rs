@@ -16,7 +16,7 @@ use crate::dao::{
 };
 
 /// Devices linked to the Connect account where `workout` is still pending.
-pub fn pending_connect_devices(
+pub(crate) fn pending_connect_devices(
     conn: &rusqlite_orm::rusqlite::Connection,
     workout: &str,
 ) -> rusqlite_orm::errors::Result<Vec<String>> {
@@ -40,7 +40,7 @@ pub fn pending_connect_devices(
 }
 
 /// Registers a device plugged by USB, or flags a known one as reachable by USB.
-pub fn enrol_usb_device(
+pub(super) fn enrol_usb_device(
     tx: &rusqlite_orm::rusqlite::Transaction,
     device: &mut Device,
 ) -> rusqlite_orm::errors::Result<()> {
@@ -65,7 +65,7 @@ pub fn enrol_usb_device(
 }
 
 /// Stores the notes and steps of a workout downloaded from a device.
-pub fn store_workout_steps(
+pub(super) fn store_workout_steps(
     tx: &rusqlite_orm::rusqlite::Transaction,
     workout: &mut Workout,
 ) -> rusqlite_orm::errors::Result<()> {
@@ -91,7 +91,7 @@ pub fn store_workout_steps(
 }
 
 /// The workout with its steps, those without notes of their own inheriting the exercise notes.
-pub fn workout_for_device(
+pub(super) fn workout_for_device(
     conn: &rusqlite_orm::rusqlite::Connection,
     name: &str,
 ) -> rusqlite_orm::errors::Result<Workout> {
@@ -143,7 +143,7 @@ pub fn workout_for_device(
 }
 
 /// Records that the device has the workout, keeping the entry if it was already there.
-pub fn add_workout_device(
+pub(super) fn add_workout_device(
     database: &DatabasePool,
     entry: &mut WorkoutDevice,
 ) -> rusqlite_orm::errors::Result<usize> {
@@ -154,7 +154,7 @@ pub fn add_workout_device(
 }
 
 /// Records the workout for the device, replacing the entry (and its `pending` flag) if any.
-pub fn queue_workout_device(
+pub(crate) fn queue_workout_device(
     database: &DatabasePool,
     entry: &mut WorkoutDevice,
 ) -> rusqlite_orm::errors::Result<usize> {
@@ -168,7 +168,7 @@ pub fn queue_workout_device(
 ///
 /// # Panics
 /// If the device isn't registered.
-pub fn device_by_serial(
+pub(super) fn device_by_serial(
     database: &DatabasePool,
     serial: &str,
 ) -> rusqlite_orm::errors::Result<Device> {
@@ -176,13 +176,13 @@ pub fn device_by_serial(
 }
 
 /// Every registered device, the Connect pseudo-device included.
-pub fn all_devices(database: &DatabasePool) -> rusqlite_orm::errors::Result<Vec<Device>> {
+pub(super) fn all_devices(database: &DatabasePool) -> rusqlite_orm::errors::Result<Vec<Device>> {
     DeviceRepository::select().fetch(database)
 }
 
 /// Workouts queued for the device `serial`, by name: the enabled ones to upload, or the disabled
 /// ones to delete from it.
-pub fn pending_queue(
+pub(super) fn pending_queue(
     db: &DatabasePool,
     serial: &str,
     enabled: bool,
@@ -210,7 +210,7 @@ pub fn pending_queue(
 }
 
 /// Takes the workout off the queue of the device.
-pub fn clear_pending(
+pub(super) fn clear_pending(
     db: &DatabasePool,
     workout: &str,
     device: &str,
@@ -225,7 +225,7 @@ pub fn clear_pending(
 }
 
 /// Workouts recorded in sessions of the device `serial` that have no steps stored yet.
-pub fn workouts_without_steps(
+pub(super) fn workouts_without_steps(
     db: &DatabasePool,
     serial: &str,
 ) -> rusqlite_orm::errors::Result<Vec<String>> {
