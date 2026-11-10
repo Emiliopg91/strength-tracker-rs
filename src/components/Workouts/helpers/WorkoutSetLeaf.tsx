@@ -75,7 +75,14 @@ export function WorkoutSetLeaf({
             : undefined;
 
     const onTypeChange = (e: SelectChangeEvent<string>) => {
-        onChange(WorkoutUtils.getDefaultLeaf(e.target.value as StepType));
+        const kind = e.target.value as StepType;
+        const next = WorkoutUtils.getDefaultLeaf(kind);
+        // Rests have no exercise; any other kind keeps the one already picked
+        onChange(
+            kind == StepType.Rest
+                ? next
+                : { ...next, ex_cat: leaf.ex_cat, ex_id: leaf.ex_id },
+        );
     };
 
     const onLimitChange = (e: SelectChangeEvent<number>) => {
@@ -137,7 +144,7 @@ export function WorkoutSetLeaf({
     };
 
     const typeSelect = (
-        <FormControl size="small" sx={{ width: 120 }}>
+        <FormControl size="small" sx={{ width: 160 }}>
             <InputLabel id={typeLabelId}>{translate("step_type")}</InputLabel>
             <Select
                 labelId={typeLabelId}
@@ -342,7 +349,7 @@ export function WorkoutSetLeaf({
                                       })
                                 : undefined
                         }
-                        sx={{ flex: 1, minWidth: 300 }}
+                        sx={{ width: 370 }}
                     />
                 )}
                 {actions}
