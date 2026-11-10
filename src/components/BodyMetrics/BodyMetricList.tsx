@@ -53,7 +53,7 @@ export function BodyMetricList() {
 
     return (
         <>
-            <div id="list-layer">
+            <div className="list-layer">
                 {bodyMetrics.length > 1 && (
                     <BodyMetricsChart metrics={bodyMetrics} />
                 )}

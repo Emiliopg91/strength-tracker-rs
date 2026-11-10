@@ -3,7 +3,7 @@
   flex-direction: column;
   height: 100vh;
 
-  #list-layer {
+  .list-layer {
     padding: 5px;
     flex: 1;
     overflow-y: auto;

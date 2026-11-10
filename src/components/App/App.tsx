@@ -143,7 +143,7 @@ export function App(): JSX.Element {
                             rightItems={rightNavBarItems}
                         />
 
-                        <div id="list-layer">
+                        <div className="list-layer">
                             <Suspense fallback={null}>
                                 {tab == Tabs.HOME && <Home />}
                                 {tab == Tabs.SESSIONS && <SessionsList />}

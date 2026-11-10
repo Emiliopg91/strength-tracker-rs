@@ -330,7 +330,7 @@ export function Home() {
                     <div className="dashboard-box">
                         <fieldset>
                             <legend>{translate("last_session")}</legend>
-                            <div id="list-layer">
+                            <div className="list-layer">
                                 <table>
                                     <thead>
                                         <tr>
@@ -406,7 +406,7 @@ export function Home() {
                                 </div>
                             )}
                             {!rest && workout && (
-                                <div id="list-layer">
+                                <div className="list-layer">
                                     <table>
                                         <thead>
                                             <tr>

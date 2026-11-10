@@ -113,7 +113,7 @@ export function SessionsList() {
     return (
         <>
             {filter}
-            <div id="list-layer">
+            <div className="list-layer">
                 <table>
                     <thead>
                         <tr>
