@@ -11,9 +11,7 @@ pub mod sessions;
 pub mod workouts;
 
 use std::{
-    fs,
     path::{Path, PathBuf},
-    process::Command,
     sync::atomic::{AtomicU64, Ordering},
 };
 
@@ -140,10 +138,7 @@ pub(crate) fn new_pending_dir(root: &Path, serial: &str) -> PathBuf {
 
 /// Stores under `root/<serial>` the fetched `files` whose parse or import failed, so they are kept
 /// for a later look instead of being lost. A file with the same name is replaced.
-pub(crate) fn store_pending_files<'a, I>(root: &Path, serial: &str, files: I)
-where
-    I: IntoIterator<Item = &'a FitFile>,
-{
+pub(crate) async fn store_pending_files(root: &Path, serial: &str, files: &[&FitFile]) {
     let dir = root.join(serial);
     for file in files {
         // Names come from the device or a Connect archive, so only the last component is kept
@@ -152,7 +147,10 @@ where
             continue;
         };
         let dst = dir.join(name);
-        let res = fs::create_dir_all(&dir).and_then(|_| fs::write(&dst, &file.data));
+        let res = match tokio::fs::create_dir_all(&dir).await {
+            Ok(()) => tokio::fs::write(&dst, &file.data).await,
+            Err(e) => Err(e),
+        };
         match res {
             Ok(()) => warn!("Stored pending file {}", dst.display()),
             Err(e) => error!("Error storing pending file {}: {e}", dst.display()),
@@ -226,7 +224,14 @@ async fn start_pdf_print<R: Runtime>(
             // Emitted after `failed` too, so the hidden window is always released here
             op.connect_finished(move |_| {
                 info!("PDF printed to {uri}");
-                let _ = Command::new("xdg-open").arg(&uri).status();
+                // Runs on the GTK main thread, so the viewer is launched without waiting for it
+                let uri = uri.clone();
+                tauri::async_runtime::spawn(async move {
+                    let _ = tokio::process::Command::new("xdg-open")
+                        .arg(&uri)
+                        .status()
+                        .await;
+                });
                 let _ = w.close();
             });
             op.print();

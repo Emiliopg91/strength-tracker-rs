@@ -61,7 +61,7 @@ pub async fn notify_frontend_ready<R: Runtime>(app: &AppHandle<R>) {
     spawn_geolocation_update(app);
 
     let app_cl = app.clone();
-    std::thread::spawn(move || check_for_update(&app_cl));
+    tauri::async_runtime::spawn(async move { check_for_update(&app_cl).await });
 }
 
 /// Reports whether this is a debug or release build.

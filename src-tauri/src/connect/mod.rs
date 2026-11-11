@@ -128,12 +128,12 @@ impl ConnectClient {
         self.email.clone()
     }
 
-    pub fn disconnect(&mut self) -> Result<()> {
-        Self::delete_keyring(KEYRING_OAUTH2)?;
+    pub async fn disconnect(&mut self) -> Result<()> {
+        Self::delete_keyring(KEYRING_OAUTH2).await?;
         self.oauth2 = None;
-        Self::delete_keyring(KEYRING_OAUTH1)?;
+        Self::delete_keyring(KEYRING_OAUTH1).await?;
         self.oauth1 = None;
-        Self::delete_keyring(KEYRING_EMAIL)?;
+        Self::delete_keyring(KEYRING_EMAIL).await?;
         self.email = None;
 
         (self.on_user_change)(None);
@@ -165,9 +165,9 @@ impl ConnectClient {
                 e => log_error("Error logging in", ConnectError::Login(e)),
             })?;
 
-        Self::write_keyring(KEYRING_EMAIL, &email.to_string())?;
-        Self::write_keyring(KEYRING_OAUTH1, &oauth1)?;
-        Self::write_keyring(KEYRING_OAUTH2, &oauth2)?;
+        Self::write_keyring(KEYRING_EMAIL, &email.to_string()).await?;
+        Self::write_keyring(KEYRING_OAUTH1, &oauth1).await?;
+        Self::write_keyring(KEYRING_OAUTH2, &oauth2).await?;
         self.email = Some(email.to_string());
         self.oauth1 = Some(oauth1);
         self.oauth2 = Some(oauth2);
@@ -222,7 +222,7 @@ impl ConnectClient {
             })?;
             match with_retry(|| sso.refresh_oauth2(oauth1)).await {
                 Ok(oauth2) => {
-                    Self::write_keyring(KEYRING_OAUTH2, &oauth2)?;
+                    Self::write_keyring(KEYRING_OAUTH2, &oauth2).await?;
                     self.oauth2 = Some(oauth2);
 
                     info!("Token refreshed successfully");
@@ -822,7 +822,9 @@ impl ConnectClient {
         }
     }
 
-    fn write_keyring<T: Serialize>(key: &str, value: &T) -> Result<()> {
+    /// Keyring calls go through D-Bus and can wait on the user unlocking it, so they run on the
+    /// blocking thread pool.
+    async fn write_keyring<T: Serialize>(key: &'static str, value: &T) -> Result<()> {
         if cfg!(test) {
             return Ok(());
         }
@@ -833,26 +835,34 @@ impl ConnectClient {
                 ConnectError::Serialization(e),
             )
         })?;
-        Self::keyring_entry(key)?.set_password(&json).map_err(|e| {
-            log_error(
-                &format!("Error writing key '{}' to keyring", key),
-                ConnectError::Keyring(e),
-            )
+        tokio::task::spawn_blocking(move || {
+            Self::keyring_entry(key)?.set_password(&json).map_err(|e| {
+                log_error(
+                    &format!("Error writing key '{}' to keyring", key),
+                    ConnectError::Keyring(e),
+                )
+            })
         })
+        .await
+        .expect("Keyring task panicked")
     }
 
-    fn delete_keyring(key: &str) -> Result<()> {
+    async fn delete_keyring(key: &'static str) -> Result<()> {
         if cfg!(test) {
             return Ok(());
         }
 
-        match Self::keyring_entry(key)?.delete_credential() {
-            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-            Err(e) => Err(log_error(
-                &format!("Error deleting key '{}' from keyring", key),
-                ConnectError::Keyring(e),
-            )),
-        }
+        tokio::task::spawn_blocking(
+            move || match Self::keyring_entry(key)?.delete_credential() {
+                Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+                Err(e) => Err(log_error(
+                    &format!("Error deleting key '{}' from keyring", key),
+                    ConnectError::Keyring(e),
+                )),
+            },
+        )
+        .await
+        .expect("Keyring task panicked")
     }
 
     fn keyring_entry(key: &str) -> Result<keyring::Entry> {

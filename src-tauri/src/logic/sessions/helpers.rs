@@ -154,12 +154,22 @@ pub(crate) async fn import_pending_sessions<R: Runtime>(
             store_pending_files(
                 pending_dir,
                 &device.serial,
-                imported.failed.iter().map(|(file, _)| file),
-            );
+                &imported
+                    .failed
+                    .iter()
+                    .map(|(file, _)| file)
+                    .collect::<Vec<_>>(),
+            )
+            .await;
             Ok(imported.sessions)
         }
         Err(e) => {
-            store_pending_files(pending_dir, &device.serial, files.iter());
+            store_pending_files(
+                pending_dir,
+                &device.serial,
+                &files.iter().collect::<Vec<_>>(),
+            )
+            .await;
             Err(e)
         }
     }

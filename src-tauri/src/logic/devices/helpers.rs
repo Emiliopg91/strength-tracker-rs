@@ -363,8 +363,18 @@ pub(super) async fn store_pending_workouts<R: Runtime>(
     // Every workout on the device gets downloaded; those not pending are just discarded
     let mut failed = Vec::new();
     let mut workouts_to_insert = Vec::new();
-    for file in files {
-        match Workout::try_from(FitParser::from_fit_file(file.clone())) {
+    // Parsing is CPU-bound and grows with the workouts on the device
+    let to_parse = files.to_vec();
+    let parsed = tokio::task::spawn_blocking(move || {
+        to_parse
+            .into_iter()
+            .map(|file| Workout::try_from(FitParser::from_fit_file(file)))
+            .collect::<Vec<_>>()
+    })
+    .await
+    .expect("FIT parsing task panicked");
+    for (file, parsed) in files.iter().zip(parsed) {
+        match parsed {
             Ok(workout)
                 if !workout.steps.is_empty() && pending_workouts.contains(&workout.name) =>
             {
@@ -393,7 +403,12 @@ pub(super) async fn store_pending_workouts<R: Runtime>(
         }
     }
 
-    store_pending_files(&constants::PENDING_DOWNLOAD_WORKOUTS_FOLDER, serial, failed);
+    store_pending_files(
+        &constants::PENDING_DOWNLOAD_WORKOUTS_FOLDER,
+        serial,
+        &failed,
+    )
+    .await;
 
     if !workout_names.is_empty() {
         let _ = app.emit("added_workout_steps", workout_names);
@@ -446,9 +461,18 @@ pub(super) async fn send_workout_to_device<R: Runtime>(
         .map_err(|e| e.to_string())?;
     // File name is kept as-is since it becomes the workout file name on the device
     let path = dir.join(workout.get_workout_file_name());
-    if let Err(e) = FitWriter::from(&workout).write(path.clone(), lang, weight_unit) {
+    // Encoding and writing the file is blocking work
+    let fit_path = path.clone();
+    let written = tokio::task::spawn_blocking(move || {
+        FitWriter::from(&workout)
+            .write(fit_path, lang, weight_unit)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .expect("FIT writing task panicked");
+    if let Err(e) = written {
         let _ = tokio::fs::remove_dir_all(&dir).await;
-        return Err(e.to_string());
+        return Err(e);
     }
 
     let mtp_client = app.state::<MtpLock>();

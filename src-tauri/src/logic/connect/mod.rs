@@ -150,7 +150,12 @@ pub async fn connect_login<R: Runtime>(
 }
 
 pub async fn connect_logout(connect: &ConnectLock) -> Result<(), String> {
-    connect.lock().await.disconnect().map_err(|e| e.to_string())
+    connect
+        .lock()
+        .await
+        .disconnect()
+        .await
+        .map_err(|e| e.to_string())
 }
 
 pub async fn send_to_connect<R: Runtime>(

@@ -1,4 +1,4 @@
-use std::{thread, time::Duration};
+use std::time::Duration;
 
 use semver::Version;
 use serde_json::Value;
@@ -91,67 +91,51 @@ pub(super) async fn install_udev_rules<R: Runtime>(
     }
 }
 
-pub(super) fn check_for_update<R: Runtime>(app: &AppHandle<R>) {
-    thread::sleep(Duration::from_secs(5));
+pub(super) async fn check_for_update<R: Runtime>(app: &AppHandle<R>) {
+    tokio::time::sleep(Duration::from_secs(5)).await;
 
     loop {
         info!("Looking for updates...");
+        match latest_version().await {
+            Ok(version) if version > *constants::APP_SEM_VERSION => {
+                info!("Update {} found!", version);
+                let lang = app.state::<SettingsLock>().read().unwrap().language;
+                show_notification(NotificationDefinition {
+                    title: translate("new_update_title", lang),
+                    body: translate_and_replace("new_update_body", &[&version.to_string()], lang),
+                    kind: NotificationKind::Persistant,
+                });
+                break;
+            }
+            Ok(_) => info!("No update found"),
+            Err(e) => debug!("{e}"),
+        }
+        tokio::time::sleep(Duration::from_hours(1)).await;
+    }
+}
 
-        let result = curl_rest::Client::with_user_agent("strength-tracker-rs")
+/// Latest version published on GitHub.
+async fn latest_version() -> Result<Version, String> {
+    let response = tokio::task::spawn_blocking(|| {
+        curl_rest::Client::with_user_agent("strength-tracker-rs")
             .get()
             .header(curl_rest::Header::Accept(
                 "application/vnd.github+json".into(),
             ))
-            .send(constants::URL);
-
-        match result {
-            Ok(response) => {
-                if response.status == curl_rest::StatusCode::Ok {
-                    match serde_json::from_slice::<Value>(&response.body) {
-                        Ok(response_json) => match response_json
-                            .get("tag_name")
-                            .and_then(Value::as_str)
-                        {
-                            Some(tag_name) => match Version::parse(tag_name) {
-                                Ok(version) => {
-                                    if version > *constants::APP_SEM_VERSION {
-                                        info!("Update {} found!", version);
-                                        let lang =
-                                            app.state::<SettingsLock>().read().unwrap().language;
-                                        show_notification(NotificationDefinition {
-                                            title: translate("new_update_title", lang),
-                                            body: translate_and_replace(
-                                                "new_update_body",
-                                                &[&version.to_string()],
-                                                lang,
-                                            ),
-                                            kind: NotificationKind::Persistant,
-                                        });
-                                        break;
-                                    } else {
-                                        info!("No update found");
-                                    }
-                                }
-                                Err(e) => {
-                                    debug!("Error parsing version: {}", e)
-                                }
-                            },
-                            None => {
-                                debug!("No tag name found")
-                            }
-                        },
-                        Err(e) => {
-                            debug!("Invalid parsing response: {}", e)
-                        }
-                    }
-                } else {
-                    debug!("Invalid response status: {}", response.status)
-                }
-            }
-            Err(e) => {
-                debug!("Error sending request to GitHub: {}", e)
-            }
-        }
-        thread::sleep(Duration::from_hours(1));
+            .send(constants::URL)
+    })
+    .await
+    .expect("Update check task panicked")
+    .map_err(|e| format!("Error sending request to GitHub: {e}"))?;
+    if response.status != curl_rest::StatusCode::Ok {
+        return Err(format!("Invalid response status: {}", response.status));
     }
+
+    let json: Value = serde_json::from_slice(&response.body)
+        .map_err(|e| format!("Invalid parsing response: {e}"))?;
+    let tag_name = json
+        .get("tag_name")
+        .and_then(Value::as_str)
+        .ok_or("No tag name found")?;
+    Version::parse(tag_name).map_err(|e| format!("Error parsing version: {e}"))
 }
