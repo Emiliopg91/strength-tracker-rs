@@ -12,8 +12,8 @@ use crate::{
     tests::common,
 };
 
-#[test]
-fn migration_29_moves_hyperextensions_to_the_generic() {
+#[tokio::test]
+async fn migration_29_moves_hyperextensions_to_the_generic() {
     let db = DatabaseConnectionBuilder::default()
         .enable_foreign_keys()
         .build("test")
@@ -22,9 +22,9 @@ fn migration_29_moves_hyperextensions_to_the_generic() {
         .into_iter()
         .filter(|d| d.version < 29)
         .collect();
-    db.create_schema(&before).unwrap();
+    db.create_schema(&before).await.unwrap();
 
-    db.run_in_transaction(|tx| {
+    db.run_in_transaction(move |tx| {
         let mut session = common::session(1);
         session.steps = vec![
             common::set(1, 0, (13, 1), 15, 10.0),
@@ -41,11 +41,12 @@ fn migration_29_moves_hyperextensions_to_the_generic() {
         )?;
         Ok(())
     })
+    .await
     .unwrap();
 
-    db.create_schema(&schema_ddls()).unwrap();
+    db.create_schema(&schema_ddls()).await.unwrap();
 
-    let mut sets = SessionStepRepository::select().fetch(&db).unwrap();
+    let mut sets = SessionStepRepository::select().fetch(&db).await.unwrap();
     sets.sort_by_key(|s| s.idx);
     let sets: Vec<_> = sets.iter().map(|s| (s.ex_cat, s.ex_id)).collect();
     assert_eq!(
@@ -53,7 +54,7 @@ fn migration_29_moves_hyperextensions_to_the_generic() {
         [(Some(13), Some(GENERIC_EXERCISE_ID)), (Some(13), Some(0))]
     );
 
-    let mut steps = WorkoutStepRepository::select().fetch(&db).unwrap();
+    let mut steps = WorkoutStepRepository::select().fetch(&db).await.unwrap();
     steps.sort_by(|a, b| a.workout.cmp(&b.workout));
     let steps: Vec<_> = steps.iter().map(|s| (s.ex_cat, s.ex_id)).collect();
     assert_eq!(
@@ -62,6 +63,7 @@ fn migration_29_moves_hyperextensions_to_the_generic() {
     );
 
     let generic = ExerciseRepository::select_by_id(&db, 13, GENERIC_EXERCISE_ID)
+        .await
         .unwrap()
         .unwrap();
     assert_eq!(
@@ -74,7 +76,7 @@ fn migration_29_moves_hyperextensions_to_the_generic() {
     );
 
     let pending: Vec<(String, bool)> = db
-        .run_in_connection(|conn| {
+        .run_in_connection(move |conn| {
             let mut stmt =
                 conn.prepare("SELECT workout, pending FROM WORKOUT_DEVICE ORDER BY workout")?;
             let rows = stmt
@@ -82,6 +84,7 @@ fn migration_29_moves_hyperextensions_to_the_generic() {
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(rows)
         })
+        .await
         .unwrap();
     assert_eq!(
         pending,
@@ -89,14 +92,18 @@ fn migration_29_moves_hyperextensions_to_the_generic() {
     );
 }
 
-#[test]
-fn every_category_has_a_generic_exercise() {
-    let db = common::test_db();
-    let categories = ExerciseCategoryRepository::select().fetch(&db).unwrap();
+#[tokio::test]
+async fn every_category_has_a_generic_exercise() {
+    let db = common::test_db().await;
+    let categories = ExerciseCategoryRepository::select()
+        .fetch(&db)
+        .await
+        .unwrap();
 
     for category in categories {
         assert!(
             ExerciseRepository::select_by_id(&db, category.id, GENERIC_EXERCISE_ID)
+                .await
                 .unwrap()
                 .is_some(),
             "{}",
@@ -105,11 +112,12 @@ fn every_category_has_a_generic_exercise() {
     }
 }
 
-#[test]
-fn catalog_skips_generics_with_a_real_exercise_of_the_same_name() {
-    let db = common::test_db();
+#[tokio::test]
+async fn catalog_skips_generics_with_a_real_exercise_of_the_same_name() {
+    let db = common::test_db().await;
     let catalog = db
-        .run_in_connection(|conn| Ok(exercises_catalog(conn)?))
+        .run_in_connection(move |conn| Ok(exercises_catalog(conn)?))
+        .await
         .unwrap();
 
     // Squats have a real SQUAT exercise; hyperextensions only the generic one

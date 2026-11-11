@@ -14,7 +14,7 @@ use crate::{
         devices::DeviceListItem,
         sessions::SessionStepDto,
     },
-    logic::{report_error, run_blocking, run_blocking_conn, run_blocking_tx},
+    logic::{pool, report_error},
 };
 
 /// Uploads `workout` to Connect, notifying the user if it fails.
@@ -67,7 +67,9 @@ pub(crate) async fn up_to_date_connect<R: Runtime>(app: &AppHandle<R>) {
         return;
     }
 
-    let pending = match run_blocking_conn(app, move |_, conn| pending_connect_workouts(conn)).await
+    let pending = match pool(app)
+        .run_in_connection(move |conn| Ok(pending_connect_workouts(conn)?))
+        .await
     {
         Ok(pending) => pending,
         Err(e) => {
@@ -96,10 +98,9 @@ pub(super) async fn mark_connect_pending<R: Runtime>(
     pending: bool,
 ) {
     let workouts = workouts.to_vec();
-    let res = run_blocking_conn(app, move |_, conn| {
-        set_connect_pending(conn, &workouts, pending)
-    })
-    .await;
+    let res = pool(app)
+        .run_in_connection(move |conn| Ok(set_connect_pending(conn, &workouts, pending)?))
+        .await;
 
     if let Err(e) = res {
         error!("Error updating Connect upload status: {e}");
@@ -115,7 +116,8 @@ pub(super) async fn upload_workout_connect<R: Runtime>(
     let weight_unit = settings.read().unwrap().weight_unit;
 
     let id = workout.to_string();
-    let mut workout = run_blocking_conn(app, move |_, conn| workout_with_exercises(conn, &id))
+    let mut workout = pool(app)
+        .run_in_connection(move |conn| Ok(workout_with_exercises(conn, &id)?))
         .await
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("Workout {workout} not found"))?;
@@ -155,7 +157,8 @@ pub(super) async fn upload_workout_connect<R: Runtime>(
     drop(client);
 
     if workout.connect_id != original_id {
-        run_blocking(app, move |database| workout.update_by_id(database))
+        workout
+            .update_by_id(&pool(app))
             .await
             .map_err(|e| e.to_string())?;
     }
@@ -189,7 +192,9 @@ pub(crate) async fn get_devices_from_connect<R: Runtime>(app_orig: &AppHandle<R>
         .map(Device::from)
         .collect();
 
-    let res = run_blocking_tx(app_orig, move |_, tx| sync_connect_devices(tx, &listed)).await;
+    let res = pool(app_orig)
+        .run_in_transaction(move |tx| Ok(sync_connect_devices(tx, &listed)?))
+        .await;
 
     match res {
         Ok(discovered) => {
@@ -210,10 +215,7 @@ pub(crate) async fn queue_workout_on_connect<R: Runtime>(
     workout: &str,
     serial: &str,
 ) -> Result<(), String> {
-    let fetch_connect_id = || {
-        let name = workout.to_string();
-        run_blocking(app, move |database| workout_connect_id(database, &name))
-    };
+    let fetch_connect_id = async || workout_connect_id(&pool(app), workout).await;
 
     let connect_id = match fetch_connect_id().await.map_err(|e| e.to_string())? {
         Some(id) => id,
@@ -251,10 +253,9 @@ pub(crate) async fn sync_session_sets_connect<R: Runtime>(
     timestamp: u32,
     sets: Vec<SessionStepDto>,
 ) {
-    let res = run_blocking_conn(app, move |_, conn| {
-        session_sets_for_connect(conn, timestamp, &sets)
-    })
-    .await;
+    let res = pool(app)
+        .run_in_connection(move |conn| Ok(session_sets_for_connect(conn, timestamp, &sets)?))
+        .await;
 
     let (connect_id, updates) = match res {
         Ok(Some((connect_id, updates))) if !updates.is_empty() => (connect_id, updates),

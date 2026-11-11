@@ -1,14 +1,15 @@
 use std::{
     path::{Path, PathBuf},
-    sync::Mutex,
+    sync::Arc,
     time::Duration,
 };
 
 use chrono::{Local, TimeZone};
 use curl_rest::StatusCode;
-use rusqlite_orm::{database::DatabasePool, errors::DatabaseError};
+use rusqlite_orm::errors::DatabaseError;
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tauri_plugin_log::log::{error, info};
+use tokio::sync::Mutex;
 
 use super::queries::{
     ImportedFiles, full_session, import_device_files, import_file_list, pending_geolocation,
@@ -22,10 +23,7 @@ use crate::{
         sessions::SessionLocation,
     },
     fit::{FitFile, writer::FitWriter},
-    logic::{
-        notifications::show_notification, report_error, run_blocking, run_blocking_conn,
-        store_pending_files,
-    },
+    logic::{notifications::show_notification, pool, report_error, store_pending_files},
     utils::{
         constants,
         translations::{Languages, translate, translate_and_replace},
@@ -38,10 +36,7 @@ pub(super) async fn retrieve_session_connect_id<R: Runtime>(app: &AppHandle<R>, 
     if connect.logged_user().is_some()
         && let Ok(Some(id)) = connect.find_session_activity(timestamp).await
     {
-        let _ = run_blocking(app, move |database| {
-            set_session_connect_id(database, timestamp, id)
-        })
-        .await;
+        let _ = set_session_connect_id(&pool(app), timestamp, id).await;
     }
 }
 
@@ -69,39 +64,47 @@ pub(crate) async fn write_session_fit<R: Runtime>(
     lang: Languages,
     weight_unit: WeightUnit,
 ) -> Result<(), String> {
-    let session = run_blocking_conn(app, move |_, conn| full_session(conn, timestamp))
+    let session = pool(app)
+        .run_in_connection(move |conn| Ok(full_session(conn, timestamp)?))
         .await
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("Session {timestamp} not found"))?;
 
     // Encoding and writing the file is blocking work too
-    run_blocking(app, move |_| {
+    tokio::task::spawn_blocking(move || {
         FitWriter::from(&session)
             .write(path, lang, weight_unit)
             .map_err(|e| e.to_string())
     })
     .await
+    .expect("FIT writing task panicked")
 }
 
-pub(crate) fn import_file_paths<R: Runtime>(
+pub(crate) async fn import_file_paths<R: Runtime>(
     app: &AppHandle<R>,
-    files: &[PathBuf],
+    files: Vec<PathBuf>,
 ) -> Result<usize, String> {
     let lang = app.state::<SettingsLock>().read().unwrap().language;
-    let files: Vec<FitFile> = files
-        .iter()
-        .filter_map(|path| match FitFile::read(path) {
-            Ok(file) => Some(file),
-            Err(e) => {
-                error!("Error reading session file {}: {}", path.display(), e);
-                notify_parse_error(&path.display().to_string(), &e.to_string(), lang);
-                None
-            }
-        })
-        .collect();
-    let database = app.state::<DatabasePool>();
-    let res = database
-        .run_in_transaction(|tx| Ok(import_file_list(tx, &files)?))
+    // Reading the files is blocking work
+    let files: Vec<FitFile> = tokio::task::spawn_blocking(move || {
+        files
+            .iter()
+            .filter_map(|path| match FitFile::read(path) {
+                Ok(file) => Some(file),
+                Err(e) => {
+                    error!("Error reading session file {}: {}", path.display(), e);
+                    notify_parse_error(&path.display().to_string(), &e.to_string(), lang);
+                    None
+                }
+            })
+            .collect()
+    })
+    .await
+    .expect("FIT reading task panicked");
+
+    let res = pool(app)
+        .run_in_transaction(move |tx| Ok(import_file_list(tx, &files)?))
+        .await
         .map_err(|e| e.to_string());
 
     match res {
@@ -109,11 +112,7 @@ pub(crate) fn import_file_paths<R: Runtime>(
             notify_import(app, &imported, lang);
             let res = imported.sessions;
             if !res.is_empty() {
-                let app = app.clone();
-                std::thread::spawn(move || {
-                    let db = app.state::<DatabasePool>();
-                    update_pending_geolocation(&app, &db);
-                });
+                spawn_geolocation_update(app);
             }
             Ok(res.len())
         }
@@ -129,30 +128,47 @@ pub(crate) fn import_file_paths<R: Runtime>(
 /// Imports as sessions of `device` the `.fit` files fetched from it. Those that fail to parse, or
 /// all of them if the transaction is rolled back, are stored as pending. With `sync_mark`, the
 /// device's last activity sync is moved to it in the same transaction.
-pub(crate) fn import_pending_sessions<R: Runtime>(
+pub(crate) async fn import_pending_sessions<R: Runtime>(
     app: &AppHandle<R>,
-    db: &DatabasePool,
-    files: &[FitFile],
+    files: Vec<FitFile>,
     device: &mut Device,
     lang: Languages,
     sync_mark: Option<u32>,
 ) -> Result<Vec<u32>, DatabaseError> {
-    let res = db.run_in_transaction(|tx| Ok(import_device_files(tx, files, device, sync_mark)?));
+    // Shared with the transaction, as they are still needed to store them as pending if it fails
+    let files = Arc::new(files);
+    let tx_files = Arc::clone(&files);
+    let mut tx_device = device.clone();
+    let res = pool(app)
+        .run_in_transaction(move |tx| {
+            let imported = import_device_files(tx, &tx_files, &mut tx_device, sync_mark)?;
+            Ok((imported, tx_device))
+        })
+        .await;
 
     let pending_dir = &constants::PENDING_DOWNLOAD_SESSIONS_FOLDER;
-    match &res {
-        Ok(imported) => {
-            notify_import(app, imported, lang);
+    match res {
+        Ok((imported, updated_device)) => {
+            *device = updated_device;
+            notify_import(app, &imported, lang);
             store_pending_files(
                 pending_dir,
                 &device.serial,
-                imported.failed.iter().map(|(file, _)| *file),
+                imported.failed.iter().map(|(file, _)| file),
             );
+            Ok(imported.sessions)
         }
-        Err(_) => store_pending_files(pending_dir, &device.serial, files),
+        Err(e) => {
+            store_pending_files(pending_dir, &device.serial, files.iter());
+            Err(e)
+        }
     }
+}
 
-    res.map(|imported| imported.sessions)
+/// Looks up the place names of the sessions pending geolocation in the background.
+pub(crate) fn spawn_geolocation_update<R: Runtime>(app: &AppHandle<R>) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move { update_pending_geolocation(&app).await });
 }
 
 /// Tells the user, once the import is committed, how it went: files that failed to parse,
@@ -219,13 +235,14 @@ fn notify_parse_error(name: &str, error: &str, lang: Languages) {
     });
 }
 
-pub(super) static GELOCATION_MUTEX: Mutex<bool> = Mutex::new(false);
+pub(super) static GELOCATION_MUTEX: Mutex<()> = Mutex::const_new(());
 
 /// Recover all pending workouts pending on geolocation
-pub(crate) fn update_pending_geolocation<R: Runtime>(app: &AppHandle<R>, db: &DatabasePool) {
-    let _lock = GELOCATION_MUTEX.lock().unwrap();
+pub(crate) async fn update_pending_geolocation<R: Runtime>(app: &AppHandle<R>) {
+    let _lock = GELOCATION_MUTEX.lock().await;
+    let db = &pool(app);
     info!("Looking for pending geocode workouts...");
-    let pending = pending_geolocation(db);
+    let pending = pending_geolocation(db).await;
     match pending {
         Ok(pendings) => {
             info!("Found {} pending sessions", pendings.len());
@@ -243,10 +260,14 @@ pub(crate) fn update_pending_geolocation<R: Runtime>(app: &AppHandle<R>, db: &Da
                     first.0, first.1
                 );
                 //
-                let resp = curl_rest::Client::with_user_agent("strength-tracker-rs")
-                    .get()
-                    .header(curl_rest::Header::Accept("application/json".into()))
-                    .send(&url);
+                let resp = tokio::task::spawn_blocking(move || {
+                    curl_rest::Client::with_user_agent("strength-tracker-rs")
+                        .get()
+                        .header(curl_rest::Header::Accept("application/json".into()))
+                        .send(&url)
+                })
+                .await
+                .expect("geocode request task panicked");
 
                 match resp {
                     Ok(response) => {
@@ -262,7 +283,9 @@ pub(crate) fn update_pending_geolocation<R: Runtime>(app: &AppHandle<R>, db: &Da
                                                     db,
                                                     pending.session,
                                                     &location,
-                                                ) {
+                                                )
+                                                .await
+                                                {
                                                     Ok(1) => {
                                                         info!(
                                                             "Updated location for session @ {}",
@@ -310,7 +333,8 @@ pub(crate) fn update_pending_geolocation<R: Runtime>(app: &AppHandle<R>, db: &Da
                     }
                 }
 
-                std::thread::sleep(Duration::from_secs(1));
+                // Nominatim allows one request per second
+                tokio::time::sleep(Duration::from_secs(1)).await;
             }
         }
         Err(e) => {

@@ -32,8 +32,11 @@ pub struct Export {
 
 impl Export {
     /// Loads every table from the database and assembles a full export snapshot.
-    pub fn from_database(db: &DatabasePool, lang: Languages) -> rusqlite_orm::errors::Result<Self> {
-        db.run_in_connection(|conn| {
+    pub async fn from_database(
+        db: &DatabasePool,
+        lang: Languages,
+    ) -> rusqlite_orm::errors::Result<Self> {
+        db.run_in_connection(move |conn| {
             let body_metrics = BodyMetricRepository::select().fetch_in(conn)?;
             let mut workouts = WorkoutRepository::select().fetch_in(conn)?;
             let mut steps: HashMap<String, Vec<WorkoutStep>> = HashMap::new();
@@ -109,6 +112,7 @@ impl Export {
                 laps,
             })
         })
+        .await
     }
 
     /// Serializes the export snapshot as JSON straight into `writer`, avoiding a full in-memory copy.

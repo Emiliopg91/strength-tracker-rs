@@ -11,7 +11,7 @@ use crate::{
         body_metrics::BodyMetricListItem,
         notifications::{NotificationDefinition, NotificationKind},
     },
-    logic::{notifications::show_notification, report_error, run_blocking, run_blocking_conn},
+    logic::{notifications::show_notification, pool, report_error},
     utils::translations::translate,
 };
 
@@ -22,7 +22,9 @@ pub async fn get_body_measures<R: Runtime>(
 ) -> Result<Vec<BodyMetricListItem>, String> {
     info!("Getting body measures list...");
 
-    let res = run_blocking_conn(app, move |_, conn| fetch_body_measures(conn, None)).await;
+    let res = pool(app)
+        .run_in_connection(move |conn| Ok(fetch_body_measures(conn, None)?))
+        .await;
 
     match res {
         Ok(res) => {
@@ -46,7 +48,7 @@ pub async fn add_body_measures<R: Runtime>(
 ) -> Result<(), String> {
     info!("Adding body measures list...");
 
-    let res = run_blocking(app, move |database| insert_body_metric(database, &measures)).await;
+    let res = insert_body_metric(&pool(app), &measures).await;
 
     match res {
         Ok(_) => {
@@ -68,7 +70,7 @@ pub async fn delete_body_metric<R: Runtime>(
     settings: &SettingsLock,
     date: u32,
 ) -> Result<(), String> {
-    let res = run_blocking(app, move |database| delete_body_metric_on(database, date)).await;
+    let res = delete_body_metric_on(&pool(app), date).await;
 
     let lang = settings.read().unwrap().language;
     match res {

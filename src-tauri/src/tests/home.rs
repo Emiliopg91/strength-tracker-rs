@@ -20,9 +20,9 @@ fn timestamp_days_ago(days_ago: u64) -> u32 {
         .timestamp() as u32
 }
 
-#[test]
-fn heatmap_totals_and_record_flags_match_inserted_sessions() {
-    let db = common::test_db();
+#[tokio::test]
+async fn heatmap_totals_and_record_flags_match_inserted_sessions() {
+    let db = common::test_db().await;
 
     // 20 sessions spread over the last year, far enough apart that each lands on its
     // own calendar day (no two sessions share a month/day cell).
@@ -32,8 +32,9 @@ fn heatmap_totals_and_record_flags_match_inserted_sessions() {
     // A subset of those sessions also set a personal record.
     let record_indices: [usize; 6] = [1, 4, 7, 10, 13, 17];
 
-    db.run_in_transaction(|tx| {
-        for (i, &days) in days_ago.iter().enumerate() {
+    let tx_days_ago = days_ago.clone();
+    db.run_in_transaction(move |tx| {
+        for (i, &days) in tx_days_ago.iter().enumerate() {
             let date = timestamp_days_ago(days);
             let mut session = common::session(date);
             session.training_load = 40 + (i as u16) * 7;
@@ -48,9 +49,10 @@ fn heatmap_totals_and_record_flags_match_inserted_sessions() {
         }
         Ok(())
     })
+    .await
     .unwrap();
 
-    let heatmap = heatmap_data(&db).unwrap();
+    let heatmap = heatmap_data(&db).await.unwrap();
 
     for (i, &days) in days_ago.iter().enumerate() {
         let date = Local::now()
@@ -74,11 +76,11 @@ fn heatmap_totals_and_record_flags_match_inserted_sessions() {
     }
 }
 
-#[test]
-fn session_set_flags_report_sets_and_records_per_session() {
-    let db = common::test_db();
+#[tokio::test]
+async fn session_set_flags_report_sets_and_records_per_session() {
+    let db = common::test_db().await;
 
-    db.run_in_transaction(|tx| {
+    db.run_in_transaction(move |tx| {
         // No sets at all.
         common::insert_session(tx, common::session(1_000));
 
@@ -96,10 +98,12 @@ fn session_set_flags_report_sets_and_records_per_session() {
 
         Ok(())
     })
+    .await
     .unwrap();
 
     let all = db
-        .run_in_connection(|conn| Ok(session_set_flags(conn, None, None)?))
+        .run_in_connection(move |conn| Ok(session_set_flags(conn, None, None)?))
+        .await
         .unwrap();
     assert_eq!(all.len(), 2);
     assert_eq!(all.get(&2_000), Some(&false));
@@ -107,19 +111,22 @@ fn session_set_flags_report_sets_and_records_per_session() {
     assert!(!all.contains_key(&1_000));
 
     let recent = db
-        .run_in_connection(|conn| Ok(session_set_flags(conn, Some(2_500), None)?))
+        .run_in_connection(move |conn| Ok(session_set_flags(conn, Some(2_500), None)?))
+        .await
         .unwrap();
     assert_eq!(recent.len(), 1);
     assert_eq!(recent.get(&3_000), Some(&true));
 
     let bounded = db
-        .run_in_connection(|conn| Ok(session_set_flags(conn, Some(2_500), Some(3_500))?))
+        .run_in_connection(move |conn| Ok(session_set_flags(conn, Some(2_500), Some(3_500))?))
+        .await
         .unwrap();
     assert_eq!(bounded.len(), 1);
     assert_eq!(bounded.get(&3_000), Some(&true));
 
     let upto = db
-        .run_in_connection(|conn| Ok(session_set_flags(conn, None, Some(2_500))?))
+        .run_in_connection(move |conn| Ok(session_set_flags(conn, None, Some(2_500))?))
+        .await
         .unwrap();
     assert_eq!(upto.len(), 1);
     assert_eq!(upto.get(&2_000), Some(&false));

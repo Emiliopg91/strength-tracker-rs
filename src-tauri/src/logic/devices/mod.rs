@@ -3,7 +3,7 @@ pub mod helpers;
 pub mod queries;
 
 use chrono::{Datelike, Local, TimeZone, Timelike};
-use rusqlite_orm::{database::DatabasePool, errors::DatabaseError};
+use rusqlite_orm::errors::DatabaseError;
 use tauri::{AppHandle, Manager, Runtime};
 use tauri_plugin_log::log::{error, info};
 
@@ -18,8 +18,8 @@ use crate::{
     },
     logic::{
         notifications::show_notification,
-        report_error, run_blocking,
-        sessions::helpers::{import_pending_sessions, update_pending_geolocation},
+        pool, report_error,
+        sessions::helpers::{import_pending_sessions, spawn_geolocation_update},
     },
     utils::{constants, translations::translate},
 };
@@ -53,11 +53,7 @@ pub async fn send_to_device<R: Runtime>(
                     pending: false,
                 };
 
-                if let Err(e) = run_blocking(app, move |database| {
-                    add_workout_device(database, &mut entry)
-                })
-                .await
-                {
+                if let Err(e) = add_workout_device(&pool(app), &mut entry).await {
                     error!("Error registering workout '{workout}' for device {serial}: {e}");
                 }
 
@@ -72,11 +68,9 @@ pub async fn send_to_device<R: Runtime>(
             pending: true,
         };
 
-        run_blocking(app, move |database| {
-            queue_workout_device(database, &mut entry)
-        })
-        .await
-        .map_err(|e| e.to_string())?;
+        queue_workout_device(&pool(app), &mut entry)
+            .await
+            .map_err(|e| e.to_string())?;
 
         Ok(false)
     };
@@ -120,17 +114,9 @@ pub async fn import_from_device<R: Runtime>(
     info!("Starting import from device with S/N {}", serial);
     let mut latest_date = "1970-01-01-00-00-00".to_string();
     let lang = app.state::<SettingsLock>().read().unwrap().language;
-    let mut device = {
-        let app = app.clone();
-        let serial = serial.to_string();
-        tokio::task::spawn_blocking(move || {
-            let db = app.state::<DatabasePool>();
-            device_by_serial(&db, &serial)
-        })
+    let mut device = device_by_serial(&pool(app), serial)
         .await
-        .map_err(|e| e.to_string())?
-        .map_err(|e| e.to_string())
-    }?;
+        .map_err(|e| e.to_string())?;
 
     if let Some(latest) = device.last_activity_sync {
         let latest = Local.timestamp_opt(latest as i64, 0).unwrap();
@@ -158,24 +144,14 @@ pub async fn import_from_device<R: Runtime>(
         .await
     {
         drop(mtp_client);
-        let app_cpy = app.clone();
-        res = tokio::task::spawn_blocking(move || {
-            let db = app_cpy.state::<DatabasePool>();
-            let now = Local::now().timestamp() as u32;
-            import_pending_sessions(&app_cpy, &db, &files, &mut device, lang, Some(now))
-        })
-        .await
-        .expect("blocking DB task panicked");
+        let now = Local::now().timestamp() as u32;
+        res = import_pending_sessions(app, files, &mut device, lang, Some(now)).await;
     }
 
     match res {
         Ok(res) => {
             if !res.is_empty() {
-                let app = app.clone();
-                std::thread::spawn(move || {
-                    let db = app.state::<DatabasePool>();
-                    update_pending_geolocation(&app, &db);
-                });
+                spawn_geolocation_update(app);
             }
             Ok(res.len())
         }
@@ -191,7 +167,7 @@ pub async fn import_from_device<R: Runtime>(
 pub async fn get_registered_devices<R: Runtime>(
     app: &AppHandle<R>,
 ) -> Result<Vec<DeviceListItem>, String> {
-    Ok(run_blocking(app, all_devices)
+    Ok(all_devices(&pool(app))
         .await
         .map_err(|e| e.to_string())?
         .iter()

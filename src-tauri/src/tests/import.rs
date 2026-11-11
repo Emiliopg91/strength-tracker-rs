@@ -26,8 +26,9 @@ fn parse_fixture(name: &str) -> Session {
         .unwrap_or_else(|e| panic!("{name}: {e:?}"))
 }
 
-fn register_device(db: &DatabasePool, serial: &str) {
-    db.run_in_transaction(|tx| {
+async fn register_device(db: &DatabasePool, serial: &str) {
+    let serial = serial.to_string();
+    db.run_in_transaction(move |tx| {
         DeviceRepository::insert()
             .item(&mut Device {
                 serial: serial.to_string(),
@@ -41,18 +42,21 @@ fn register_device(db: &DatabasePool, serial: &str) {
             .execute_in(tx)?;
         Ok(())
     })
+    .await
     .unwrap();
 }
 
 /// Imports the fixture and returns the device stored in its session.
-fn import(db: &DatabasePool, fixture: &str) -> Option<String> {
+async fn import(db: &DatabasePool, fixture: &str) -> Option<String> {
     let files = [FitFile::read(fixture_path(fixture)).unwrap()];
     let imported = db
-        .run_in_transaction(|tx| Ok(import_file_list(tx, &files)?))
+        .run_in_transaction(move |tx| Ok(import_file_list(tx, &files)?))
+        .await
         .unwrap();
     assert_eq!(imported.sessions.len(), 1);
 
     SessionRepository::select_by_id(db, imported.sessions[0])
+        .await
         .unwrap()
         .unwrap()
         .device
@@ -70,50 +74,58 @@ fn parser_reads_the_serial_of_the_creator_device() {
     }
 }
 
-#[test]
-fn registered_device_is_kept() {
-    let db = common::test_db();
-    register_device(&db, FIXTURE_SERIAL);
+#[tokio::test]
+async fn registered_device_is_kept() {
+    let db = common::test_db().await;
+    register_device(&db, FIXTURE_SERIAL).await;
 
-    assert_eq!(import(&db, "strength_1").as_deref(), Some(FIXTURE_SERIAL));
+    assert_eq!(
+        import(&db, "strength_1").await.as_deref(),
+        Some(FIXTURE_SERIAL)
+    );
 }
 
-#[test]
-fn unknown_device_is_cleared() {
-    let db = common::test_db();
-    register_device(&db, "another");
+#[tokio::test]
+async fn unknown_device_is_cleared() {
+    let db = common::test_db().await;
+    register_device(&db, "another").await;
 
-    assert_eq!(import(&db, "strength_1"), None);
+    assert_eq!(import(&db, "strength_1").await, None);
 }
 
 /// Imports the given files and returns the Connect id stored in the single session created.
-fn import_connect_id(db: &DatabasePool, file: FitFile) -> Option<String> {
+async fn import_connect_id(db: &DatabasePool, file: FitFile) -> Option<String> {
     let files = [file];
     let imported = db
-        .run_in_transaction(|tx| Ok(import_file_list(tx, &files)?))
+        .run_in_transaction(move |tx| Ok(import_file_list(tx, &files)?))
+        .await
         .unwrap();
     assert_eq!(imported.sessions.len(), 1);
 
     SessionRepository::select_by_id(db, imported.sessions[0])
+        .await
         .unwrap()
         .unwrap()
         .connect_id
 }
 
-#[test]
-fn connect_activity_id_is_stored() {
-    let db = common::test_db();
+#[tokio::test]
+async fn connect_activity_id_is_stored() {
+    let db = common::test_db().await;
     let file = FitFile::read(fixture_path("strength_1"))
         .unwrap()
         .with_activity_id(25017923159);
 
-    assert_eq!(import_connect_id(&db, file).as_deref(), Some("25017923159"));
+    assert_eq!(
+        import_connect_id(&db, file).await.as_deref(),
+        Some("25017923159")
+    );
 }
 
-#[test]
-fn local_file_has_no_connect_id() {
-    let db = common::test_db();
+#[tokio::test]
+async fn local_file_has_no_connect_id() {
+    let db = common::test_db().await;
     let file = FitFile::read(fixture_path("strength_1")).unwrap();
 
-    assert_eq!(import_connect_id(&db, file), None);
+    assert_eq!(import_connect_id(&db, file).await, None);
 }

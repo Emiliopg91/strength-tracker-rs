@@ -21,8 +21,7 @@ use crate::{
     },
     logic::{
         ask_open_paths, ask_save_path, connect::helpers::sync_session_sets_connect,
-        notifications::show_notification, report_error, run_blocking, run_blocking_conn,
-        run_blocking_tx,
+        notifications::show_notification, pool, report_error,
     },
     utils::{
         constants,
@@ -37,10 +36,9 @@ pub async fn get_sessions<R: Runtime>(
     limit: Option<i32>,
 ) -> Result<Vec<SessionListItem>, String> {
     info!("Getting sessions list...");
-    let res = run_blocking_conn(app, move |_, conn| {
-        fetch_sessions(conn, limit, None, None, None)
-    })
-    .await;
+    let res = pool(app)
+        .run_in_connection(move |conn| Ok(fetch_sessions(conn, limit, None, None, None)?))
+        .await;
 
     match res {
         Ok(l) => {
@@ -70,10 +68,9 @@ pub async fn get_session_details<R: Runtime>(
             .to_rfc3339()
     );
 
-    let res = run_blocking_conn(app, move |_, conn| {
-        fetch_session_details(conn, timestamp, true, true)
-    })
-    .await;
+    let res = pool(app)
+        .run_in_connection(move |conn| Ok(fetch_session_details(conn, timestamp, true, true)?))
+        .await;
 
     match res {
         Ok(details) => {
@@ -108,11 +105,11 @@ pub async fn download_session<R: Runtime>(
     };
 
     // Without a name the file is just named after the date; a failure surfaces when writing the file
-    let name = run_blocking(app, move |database| {
-        session_name(database, timestamp).ok().flatten()
-    })
-    .await
-    .unwrap_or_default();
+    let name = session_name(&pool(app), timestamp)
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_default();
     let default_file = constants::HOME_DIR.join(session_file_name(timestamp, &name));
     let Some(file) = ask_save_path(
         app,
@@ -164,7 +161,9 @@ pub async fn save_session_changes<R: Runtime>(
     let lang = settings.read().unwrap().language;
     let (timestamp, sets) = (details.timestamp, details.sets.clone());
 
-    let res = run_blocking_tx(app, move |_, tx| apply_session_changes(tx, &details)).await;
+    let res = pool(app)
+        .run_in_transaction(move |tx| Ok(apply_session_changes(tx, &details)?))
+        .await;
 
     match res {
         Ok(changes) => {
@@ -210,12 +209,7 @@ pub async fn import_from_files<R: Runtime>(
     let files = ask_open_paths(app, "FIT", "fit", &translate("select_files_import", lang)).await?;
 
     if !files.is_empty() {
-        let app = app.clone();
-        let res = tokio::task::spawn_blocking(move || import_file_paths(&app, files.as_slice()))
-            .await
-            .map_err(|e| e.to_string())
-            .flatten();
-        return res;
+        return import_file_paths(app, files).await;
     }
 
     Ok(0)
@@ -224,5 +218,5 @@ pub async fn import_from_files<R: Runtime>(
 pub async fn get_heatmap_data<R: Runtime>(
     app: &AppHandle<R>,
 ) -> Result<Vec<Vec<(u32, u16)>>, String> {
-    run_blocking(app, heatmap_data).await
+    heatmap_data(&pool(app)).await
 }

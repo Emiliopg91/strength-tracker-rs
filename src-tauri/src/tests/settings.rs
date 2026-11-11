@@ -23,45 +23,59 @@ fn units_parse_and_display_roundtrip() {
     assert!(WeightUnit::try_from("kilograms").is_err());
 }
 
-#[test]
-fn seeded_defaults() {
-    let db = common::test_db();
+#[tokio::test]
+async fn seeded_defaults() {
+    let db = common::test_db().await;
 
-    assert!(!Settings::get_start_on_boot(&db));
-    assert!(!Settings::get_on_device_connect(&db));
+    assert!(!Settings::get_start_on_boot(&db).await);
+    assert!(!Settings::get_on_device_connect(&db).await);
     assert!(matches!(
-        Settings::get_weight_unit(&db),
+        Settings::get_weight_unit(&db).await,
         WeightUnit::Kilograms
     ));
     assert!(matches!(
-        Settings::get_distance_unit(&db),
+        Settings::get_distance_unit(&db).await,
         DistanceUnit::Kilometers
     ));
-    assert_eq!(Settings::get_version(&db), Version::new(0, 1, 0));
+    assert_eq!(Settings::get_version(&db).await, Version::new(0, 1, 0));
 }
 
-#[test]
-fn setters_roundtrip() {
-    let db = common::test_db();
+#[tokio::test]
+async fn setters_roundtrip() {
+    let db = common::test_db().await;
 
-    Settings::set_start_on_boot(&db, true).unwrap();
-    Settings::set_on_device_connect(&db, true).unwrap();
-    Settings::set_weight_unit(&db, &WeightUnit::Pounds).unwrap();
-    Settings::set_distance_unit(&db, &DistanceUnit::Miles).unwrap();
-    Settings::set_language(&db, &Languages::Spanish).unwrap();
-    Settings::set_version(&db, &Version::new(2, 5, 0)).unwrap();
+    Settings::set_start_on_boot(&db, true).await.unwrap();
+    Settings::set_on_device_connect(&db, true).await.unwrap();
+    Settings::set_weight_unit(&db, &WeightUnit::Pounds)
+        .await
+        .unwrap();
+    Settings::set_distance_unit(&db, &DistanceUnit::Miles)
+        .await
+        .unwrap();
+    Settings::set_language(&db, &Languages::Spanish)
+        .await
+        .unwrap();
+    Settings::set_version(&db, &Version::new(2, 5, 0))
+        .await
+        .unwrap();
 
-    assert!(Settings::get_start_on_boot(&db));
-    assert!(Settings::get_on_device_connect(&db));
-    assert!(matches!(Settings::get_weight_unit(&db), WeightUnit::Pounds));
+    assert!(Settings::get_start_on_boot(&db).await);
+    assert!(Settings::get_on_device_connect(&db).await);
     assert!(matches!(
-        Settings::get_distance_unit(&db),
+        Settings::get_weight_unit(&db).await,
+        WeightUnit::Pounds
+    ));
+    assert!(matches!(
+        Settings::get_distance_unit(&db).await,
         DistanceUnit::Miles
     ));
-    assert!(matches!(Settings::get_language(&db), Languages::Spanish));
-    assert_eq!(Settings::get_version(&db), Version::new(2, 5, 0));
+    assert!(matches!(
+        Settings::get_language(&db).await,
+        Languages::Spanish
+    ));
+    assert_eq!(Settings::get_version(&db).await, Version::new(2, 5, 0));
 
-    let settings = app::Settings::from(&db);
+    let settings = app::Settings::load(&db).await;
     assert!(settings.start_boot);
     assert!(settings.on_device_connect);
     assert!(matches!(settings.weight_unit, WeightUnit::Pounds));
@@ -69,9 +83,9 @@ fn setters_roundtrip() {
     assert!(matches!(settings.language, Languages::Spanish));
 }
 
-#[test]
-fn invalid_stored_values_fall_back_to_defaults() {
-    let db = common::test_db();
+#[tokio::test]
+async fn invalid_stored_values_fall_back_to_defaults() {
+    let db = common::test_db().await;
 
     for (name, value) in [
         (settings_keys::WEIGHT_UNIT, "Stones"),
@@ -85,16 +99,17 @@ fn invalid_stored_values_fall_back_to_defaults() {
                 value: value.to_string(),
             })
             .execute(&db)
+            .await
             .unwrap();
     }
 
     assert!(matches!(
-        Settings::get_weight_unit(&db),
+        Settings::get_weight_unit(&db).await,
         WeightUnit::Kilograms
     ));
     assert!(matches!(
-        Settings::get_distance_unit(&db),
+        Settings::get_distance_unit(&db).await,
         DistanceUnit::Kilometers
     ));
-    assert_eq!(Settings::get_version(&db), Version::new(0, 1, 0));
+    assert_eq!(Settings::get_version(&db).await, Version::new(0, 1, 0));
 }

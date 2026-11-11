@@ -11,9 +11,9 @@ const WITHOUT_DATA: u32 = 2;
 const OTHER: u32 = 3;
 
 /// Inserts a session with an additional data row (`WITH_DATA`, `OTHER`) and one without it (`WITHOUT_DATA`).
-fn setup() -> DatabasePool {
-    let db = common::test_db();
-    db.run_in_transaction(|tx| {
+async fn setup() -> DatabasePool {
+    let db = common::test_db().await;
+    db.run_in_transaction(move |tx| {
         for date in [WITH_DATA, OTHER] {
             let mut session = common::session(date);
             let mut add_data = common::additional_data(date);
@@ -24,86 +24,93 @@ fn setup() -> DatabasePool {
         common::insert_session(tx, common::session(WITHOUT_DATA));
         Ok(())
     })
+    .await
     .unwrap();
     db
 }
 
-fn save_notes(db: &DatabasePool, session: u32, notes: Option<&str>) {
-    db.run_in_transaction(|tx| Ok(update_session_notes(tx, session, notes)?))
+async fn save_notes(db: &DatabasePool, session: u32, notes: Option<&str>) {
+    let notes = notes.map(str::to_string);
+    db.run_in_transaction(move |tx| Ok(update_session_notes(tx, session, notes.as_deref())?))
+        .await
         .unwrap();
 }
 
-fn additional_data(db: &DatabasePool, session: u32) -> Option<SessionData> {
-    SessionDataRepository::select_by_id(db, session).unwrap()
+async fn additional_data(db: &DatabasePool, session: u32) -> Option<SessionData> {
+    SessionDataRepository::select_by_id(db, session)
+        .await
+        .unwrap()
 }
 
-fn notes(db: &DatabasePool, session: u32) -> Option<String> {
-    additional_data(db, session).and_then(|a| a.notes)
+async fn notes(db: &DatabasePool, session: u32) -> Option<String> {
+    additional_data(db, session).await.and_then(|a| a.notes)
 }
 
-#[test]
-fn updating_notes_does_not_touch_other_sessions() {
-    let db = setup();
+#[tokio::test]
+async fn updating_notes_does_not_touch_other_sessions() {
+    let db = setup().await;
 
-    save_notes(&db, WITH_DATA, Some("Updated"));
+    save_notes(&db, WITH_DATA, Some("Updated")).await;
 
-    assert_eq!(notes(&db, WITH_DATA).as_deref(), Some("Updated"));
-    assert_eq!(notes(&db, OTHER).as_deref(), Some("Notes 3"));
+    assert_eq!(notes(&db, WITH_DATA).await.as_deref(), Some("Updated"));
+    assert_eq!(notes(&db, OTHER).await.as_deref(), Some("Notes 3"));
 }
 
-#[test]
-fn clearing_notes_does_not_touch_other_sessions() {
-    let db = setup();
+#[tokio::test]
+async fn clearing_notes_does_not_touch_other_sessions() {
+    let db = setup().await;
 
-    save_notes(&db, WITH_DATA, None);
+    save_notes(&db, WITH_DATA, None).await;
 
-    assert_eq!(notes(&db, WITH_DATA), None);
-    assert_eq!(notes(&db, OTHER).as_deref(), Some("Notes 3"));
+    assert_eq!(notes(&db, WITH_DATA).await, None);
+    assert_eq!(notes(&db, OTHER).await.as_deref(), Some("Notes 3"));
 }
 
-#[test]
-fn notes_on_session_without_additional_data_are_stored() {
-    let db = setup();
+#[tokio::test]
+async fn notes_on_session_without_additional_data_are_stored() {
+    let db = setup().await;
 
-    save_notes(&db, WITHOUT_DATA, Some("New notes"));
+    save_notes(&db, WITHOUT_DATA, Some("New notes")).await;
 
-    assert_eq!(notes(&db, WITHOUT_DATA).as_deref(), Some("New notes"));
-    assert_eq!(notes(&db, WITH_DATA).as_deref(), Some("Notes 1"));
-    assert_eq!(notes(&db, OTHER).as_deref(), Some("Notes 3"));
+    assert_eq!(notes(&db, WITHOUT_DATA).await.as_deref(), Some("New notes"));
+    assert_eq!(notes(&db, WITH_DATA).await.as_deref(), Some("Notes 1"));
+    assert_eq!(notes(&db, OTHER).await.as_deref(), Some("Notes 3"));
 }
 
-#[test]
-fn blank_notes_are_stored_as_null() {
-    let db = setup();
+#[tokio::test]
+async fn blank_notes_are_stored_as_null() {
+    let db = setup().await;
 
-    save_notes(&db, WITH_DATA, Some("   \n\t"));
+    save_notes(&db, WITH_DATA, Some("   \n\t")).await;
 
-    assert!(additional_data(&db, WITH_DATA).is_some());
-    assert_eq!(notes(&db, WITH_DATA), None);
+    assert!(additional_data(&db, WITH_DATA).await.is_some());
+    assert_eq!(notes(&db, WITH_DATA).await, None);
 }
 
-#[test]
-fn blank_notes_on_session_without_additional_data_create_no_row() {
-    let db = setup();
+#[tokio::test]
+async fn blank_notes_on_session_without_additional_data_create_no_row() {
+    let db = setup().await;
 
-    save_notes(&db, WITHOUT_DATA, Some("  "));
-    save_notes(&db, WITHOUT_DATA, None);
+    save_notes(&db, WITHOUT_DATA, Some("  ")).await;
+    save_notes(&db, WITHOUT_DATA, None).await;
 
-    assert!(additional_data(&db, WITHOUT_DATA).is_none());
+    assert!(additional_data(&db, WITHOUT_DATA).await.is_none());
 }
 
-#[test]
-fn updating_notes_keeps_other_additional_data() {
-    let db = setup();
-    let mut before = additional_data(&db, WITH_DATA).unwrap();
+#[tokio::test]
+async fn updating_notes_keeps_other_additional_data() {
+    let db = setup().await;
+    let mut before = additional_data(&db, WITH_DATA).await.unwrap();
     before.heart_rates = Some(vec![120, 130, 140]);
     before.distance = Some(1234.5);
-    db.run_in_transaction(|tx| Ok(before.update_by_id_in(tx)?))
+    let updated = before.clone();
+    db.run_in_transaction(move |tx| Ok(updated.update_by_id_in(tx)?))
+        .await
         .unwrap();
 
-    save_notes(&db, WITH_DATA, Some("Updated"));
+    save_notes(&db, WITH_DATA, Some("Updated")).await;
 
-    let after = additional_data(&db, WITH_DATA).unwrap();
+    let after = additional_data(&db, WITH_DATA).await.unwrap();
     assert_eq!(after.heart_rates, before.heart_rates);
     assert_eq!(after.distance, before.distance);
 }

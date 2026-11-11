@@ -3769,10 +3769,9 @@ dependencies = [
 
 [[package]]
 name = "rusqlite_orm"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "41395d7d343e28e1acec86f8ebab6f278f0db4f00e53823999dd82c0a0ec132f"
+version = "2.0.0"
 dependencies = [
+ "blocking",
  "log",
  "r2d2",
  "r2d2_sqlite",
@@ -3784,9 +3783,7 @@ dependencies = [
 
 [[package]]
 name = "rusqlite_orm_macros"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5509786fbf0b1108ac246ddd517ec4e96303d3edd88f8d3cff255ee788618f54"
+version = "2.0.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5010,7 +5007,19 @@ dependencies = [
  "pin-project-lite",
  "signal-hook-registry",
  "socket2",
+ "tokio-macros",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "tokio-macros"
+version = "2.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "78773a2a397f451582ce068015985c33193cf6dea8b74d2a639fe457b2f07b0e"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 3.0.9",
 ]
 
 [[package]]

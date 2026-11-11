@@ -103,30 +103,39 @@ fn initialize(app: &AppHandle) -> (DatabasePool, Settings, ConnectClient, MtpCli
         .journal_mode(JournalMode::Delete);
     match builder.build("gtrs") {
         Ok(database) => {
-            if let Err(e) = database.create_schema(&schema_ddls()) {
-                error!("Could not initialize database: {}", e);
-                exit(constants::ExitCodes::DbError.into())
-            }
-            // Keeps the planner statistics current, analyzing only the tables that need it
-            if let Err(e) =
-                database.run_in_connection(|conn| Ok(conn.execute_batch("PRAGMA optimize;")?))
-            {
-                warn!("Could not optimize database: {}", e);
-            }
+            // `setup` is synchronous and runs outside the async runtime, so it can wait here
+            let settings = tauri::async_runtime::block_on(async {
+                if let Err(e) = database.create_schema(&schema_ddls()).await {
+                    error!("Could not initialize database: {}", e);
+                    exit(constants::ExitCodes::DbError.into())
+                }
+                // Keeps the planner statistics current, analyzing only the tables that need it
+                if let Err(e) = database
+                    .run_in_connection(|conn| Ok(conn.execute_batch("PRAGMA optimize;")?))
+                    .await
+                {
+                    warn!("Could not optimize database: {}", e);
+                }
 
-            debug!("Loading settings...");
-            let settings = Settings::from(&database);
+                debug!("Loading settings...");
+                let settings = Settings::load(&database).await;
 
-            crate::dao::settings::Settings::set_version(
-                &database,
-                &constants::APP_SEM_VERSION.clone(),
-            )
-            .unwrap();
+                crate::dao::settings::Settings::set_version(
+                    &database,
+                    &constants::APP_SEM_VERSION.clone(),
+                )
+                .await
+                .unwrap();
 
-            //crate::logic::sessions::queries::merge_sessions(&database, _, _);
+                //crate::logic::sessions::queries::merge_sessions(&database, _, _);
 
-            #[cfg(debug_assertions)]
-            let _ = database.run_in_transaction(|tx| Ok(update_all_prs(tx)?));
+                #[cfg(debug_assertions)]
+                let _ = database
+                    .run_in_transaction(|tx| Ok(update_all_prs(tx)?))
+                    .await;
+
+                settings
+            });
 
             (
                 database,
@@ -282,8 +291,8 @@ pub fn run(log_level: LevelFilter) {
                         info!("Dropped {} .fit files: {:?}", paths.len(), paths);
 
                         let app_handle = app_handle.clone();
-                        tauri::async_runtime::spawn_blocking(move || {
-                            let _ = import_file_paths(&app_handle, paths.as_slice());
+                        tauri::async_runtime::spawn(async move {
+                            let _ = import_file_paths(&app_handle, paths).await;
                         });
                     }
                 });

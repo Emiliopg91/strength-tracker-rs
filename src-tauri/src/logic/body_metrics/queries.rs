@@ -33,7 +33,7 @@ pub(crate) fn fetch_body_measures(
 }
 
 /// Stores a new body measurement entry.
-pub(super) fn insert_body_metric(
+pub(super) async fn insert_body_metric(
     database: &DatabasePool,
     measures: &BodyMetricListItem,
 ) -> rusqlite_orm::errors::Result<()> {
@@ -41,16 +41,18 @@ pub(super) fn insert_body_metric(
     BodyMetricRepository::insert()
         .item(&mut item)
         .execute(database)
+        .await
         .map(|_| ())
 }
 
 /// Deletes the body measurement logged on `date`, if any.
-pub(super) fn delete_body_metric_on(
+pub(super) async fn delete_body_metric_on(
     database: &DatabasePool,
     date: u32,
 ) -> rusqlite_orm::errors::Result<()> {
     BodyMetricRepository::delete()
         .where_(Where::Eq(body_metric::entity::columns::DATE, date.into()))
         .execute(database)
+        .await
         .map(|_| ())
 }

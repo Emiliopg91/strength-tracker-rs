@@ -16,8 +16,8 @@ use crate::{
     ConnectLock, SettingsLock,
     dto::exercises::{ExerciseDetails, ExerciseListItem, ProgressionSuggestion},
     logic::{
-        connect::helpers::sync_workouts_connect, devices::helpers::push_pending_to_usb,
-        report_error, run_blocking, run_blocking_conn, run_blocking_tx,
+        connect::helpers::sync_workouts_connect, devices::helpers::push_pending_to_usb, pool,
+        report_error,
     },
 };
 
@@ -28,7 +28,9 @@ pub async fn get_exercises<R: Runtime>(
     settings: &SettingsLock,
 ) -> Result<Vec<ExerciseListItem>, String> {
     info!("Getting exercises list...");
-    let res = run_blocking_conn(app, move |_, conn| exercise_list(conn)).await;
+    let res = pool(app)
+        .run_in_connection(move |conn| Ok(exercise_list(conn)?))
+        .await;
 
     match res {
         Ok(l) => {
@@ -55,10 +57,9 @@ pub async fn get_exercise_details<R: Runtime>(
         "Getting details for exercise with category {} and id {}...",
         category, id
     );
-    let res = run_blocking_conn(app, move |_, conn| {
-        fetch_exercise_details(conn, category, id, None)
-    })
-    .await;
+    let res = pool(app)
+        .run_in_connection(move |conn| Ok(fetch_exercise_details(conn, category, id, None)?))
+        .await;
     match res {
         Ok(l) => {
             info!("Found details for exercise {} - {}", category, id);
@@ -76,7 +77,8 @@ pub async fn get_exercise_details<R: Runtime>(
 pub async fn get_exercises_catalog<R: Runtime>(
     app: &AppHandle<R>,
 ) -> Result<HashMap<u16, Vec<u16>>, String> {
-    run_blocking_conn(app, move |_, conn| exercises_catalog(conn))
+    pool(app)
+        .run_in_connection(move |conn| Ok(exercises_catalog(conn)?))
         .await
         .map_err(|e: DatabaseError| e.to_string())
 }
@@ -88,10 +90,7 @@ pub async fn set_exercise_unilateral<R: Runtime>(
     id: u16,
     value: bool,
 ) -> Result<(), String> {
-    let res = run_blocking(app, move |database| {
-        set_unilateral(database, category, id, value)
-    })
-    .await;
+    let res = set_unilateral(&pool(app), category, id, value).await;
 
     match res {
         Ok(l) => {
@@ -114,10 +113,7 @@ pub async fn set_exercise_progression<R: Runtime>(
     id: u16,
     value: bool,
 ) -> Result<(), String> {
-    let res = run_blocking(app, move |database| {
-        set_progression(database, category, id, value)
-    })
-    .await;
+    let res = set_progression(&pool(app), category, id, value).await;
 
     match res {
         Ok(l) => {
@@ -142,10 +138,7 @@ pub async fn set_exercise_progression_parameters<R: Runtime>(
     weight: f32,
 ) -> Result<(), String> {
     let reps = reps.to_string();
-    let res = run_blocking(app, move |database| {
-        set_progression_parameters(database, category, id, reps, weight)
-    })
-    .await;
+    let res = set_progression_parameters(&pool(app), category, id, reps, weight).await;
 
     match res {
         Ok(l) => {
@@ -166,11 +159,9 @@ pub async fn get_progression_status<R: Runtime>(
     category: u16,
     id: u16,
 ) -> Result<Option<ProgressionSuggestion>, String> {
-    run_blocking(app, move |database| {
-        progression_status(database, category, id)
-    })
-    .await
-    .map_err(|e: DatabaseError| e.to_string())
+    progression_status(&pool(app), category, id)
+        .await
+        .map_err(|e: DatabaseError| e.to_string())
 }
 
 pub async fn get_progression_suggestion<R: Runtime>(
@@ -178,11 +169,10 @@ pub async fn get_progression_suggestion<R: Runtime>(
     category: u16,
     id: u16,
 ) -> Result<Option<ProgressionSuggestion>, String> {
-    run_blocking_conn(app, move |_, conn| {
-        fetch_progression_suggestion(conn, category, id)
-    })
-    .await
-    .map_err(|e: DatabaseError| e.to_string())
+    pool(app)
+        .run_in_connection(move |conn| Ok(fetch_progression_suggestion(conn, category, id)?))
+        .await
+        .map_err(|e: DatabaseError| e.to_string())
 }
 
 pub async fn apply_progression_suggestion<R: Runtime>(
@@ -193,11 +183,10 @@ pub async fn apply_progression_suggestion<R: Runtime>(
     id: u16,
     suggestion: ProgressionSuggestion,
 ) -> Result<(), String> {
-    let res = run_blocking_tx(app, move |_, tx| {
-        apply_progression(tx, category, id, &suggestion)
-    })
-    .await
-    .map_err(|e| e.to_string());
+    let res = pool(app)
+        .run_in_transaction(move |tx| Ok(apply_progression(tx, category, id, &suggestion)?))
+        .await
+        .map_err(|e| e.to_string());
 
     let lang = settings.read().unwrap().language;
     match res {
@@ -232,11 +221,10 @@ pub async fn save_exercise_notes<R: Runtime>(
         Some(notes.trim().to_string())
     };
 
-    let workouts = run_blocking_tx(app, move |_, tx| {
-        update_exercise_notes(tx, category, id, notes.clone())
-    })
-    .await
-    .map_err(|e| e.to_string())?;
+    let workouts = pool(app)
+        .run_in_transaction(move |tx| Ok(update_exercise_notes(tx, category, id, notes.clone())?))
+        .await
+        .map_err(|e| e.to_string())?;
 
     if !workouts.is_empty() {
         sync_workouts_connect(app, connect, settings, &workouts).await;
@@ -247,7 +235,8 @@ pub async fn save_exercise_notes<R: Runtime>(
 }
 
 pub async fn available_any_progression_suggestions(app: &AppHandle) -> bool {
-    run_blocking_conn(app, move |_, conn| any_progression_suggestion(conn))
+    pool(app)
+        .run_in_connection(move |conn| Ok(any_progression_suggestion(conn)?))
         .await
         .unwrap_or(false)
 }

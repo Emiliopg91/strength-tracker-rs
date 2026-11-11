@@ -20,7 +20,7 @@ pub const STRENGTH_SPORT: u8 = 10;
 pub const STRENGTH_SUB_SPORT: u8 = 20;
 
 /// Builds an in-memory database with the full schema applied, mirroring `initialize()` in `lib.rs`.
-pub fn test_db() -> DatabasePool {
+pub async fn test_db() -> DatabasePool {
     let database = DatabaseConnectionBuilder::default()
         .enable_foreign_keys()
         .build("test")
@@ -28,6 +28,7 @@ pub fn test_db() -> DatabasePool {
 
     database
         .create_schema(&schema_ddls())
+        .await
         .expect("schema creation");
 
     database

@@ -2,9 +2,8 @@ pub mod commands;
 pub mod helpers;
 pub mod queries;
 
-use futures_util::TryFutureExt;
-use rusqlite_orm::{database::DatabasePool, errors::DatabaseError};
-use tauri::{AppHandle, Manager, Runtime};
+use rusqlite_orm::errors::DatabaseError;
+use tauri::{AppHandle, Runtime};
 use tauri_plugin_log::log::info;
 
 use self::helpers::{get_devices_from_connect, queue_workout_on_connect, up_to_date_connect};
@@ -17,8 +16,8 @@ use crate::{
     logic::{
         devices::queries::queue_workout_device,
         notifications::show_notification,
-        report_error, run_blocking,
-        sessions::helpers::{import_pending_sessions, update_pending_geolocation},
+        pool, report_error,
+        sessions::helpers::{import_pending_sessions, spawn_geolocation_update},
     },
     utils::translations::translate,
 };
@@ -29,13 +28,11 @@ pub async fn import_from_connect<R: Runtime>(
     connect: &ConnectLock,
 ) -> Result<usize, String> {
     let lang = settings.read().unwrap().language;
-    let lang_cl = lang;
 
-    let app_cpy = app.clone();
     let res: Result<_, String> = async {
-        let (mut device, existing) = run_blocking(app, connect_import_state)
-            .map_err(|e: DatabaseError| e.to_string())
-            .await?;
+        let (mut device, existing) = connect_import_state(&pool(app))
+            .await
+            .map_err(|e: DatabaseError| e.to_string())?;
 
         let mut connect = connect.lock().await;
 
@@ -64,13 +61,9 @@ pub async fn import_from_connect<R: Runtime>(
             .map_err(|e| e.to_string())?;
 
         // The mark only follows what Connect has listed, so activities uploaded late are not missed
-        let imported_sessions = tokio::task::spawn_blocking(move || {
-            let db = app_cpy.state::<DatabasePool>();
-            import_pending_sessions(&app_cpy, &db, &files, &mut device, lang_cl, None)
-        })
-        .await
-        .expect("blocking DB task panicked")
-        .map_err(|e: DatabaseError| e.to_string())?;
+        let imported_sessions = import_pending_sessions(app, files, &mut device, lang, None)
+            .await
+            .map_err(|e: DatabaseError| e.to_string())?;
 
         Ok(imported_sessions)
     }
@@ -79,11 +72,7 @@ pub async fn import_from_connect<R: Runtime>(
     match res {
         Ok(res) => {
             if !res.is_empty() {
-                let app = app.clone();
-                std::thread::spawn(move || {
-                    let db = app.state::<DatabasePool>();
-                    update_pending_geolocation(&app, &db);
-                });
+                spawn_geolocation_update(app);
             }
             Ok(res.len())
         }
@@ -103,12 +92,10 @@ pub async fn import_weight_from_connect<R: Runtime>(
 ) -> Result<usize, String> {
     let lang = settings.read().unwrap().language;
 
-    let app_cpy = app.clone();
-
     let res: Result<usize, String> = async {
-        let existing = run_blocking(app, body_metric_dates)
-            .map_err(|e: DatabaseError| e.to_string())
-            .await?;
+        let existing = body_metric_dates(&pool(app))
+            .await
+            .map_err(|e: DatabaseError| e.to_string())?;
 
         let mut entries = connect
             .lock()
@@ -117,13 +104,9 @@ pub async fn import_weight_from_connect<R: Runtime>(
             .await
             .map_err(|e| e.to_string())?;
 
-        tokio::task::spawn_blocking(move || {
-            let db = app_cpy.state::<DatabasePool>();
-            insert_new_body_metrics(&db, &mut entries, &existing)
-        })
-        .await
-        .expect("blocking DB task panicked")
-        .map_err(|e: DatabaseError| e.to_string())
+        insert_new_body_metrics(&pool(app), &mut entries, &existing)
+            .await
+            .map_err(|e: DatabaseError| e.to_string())
     }
     .await;
 
@@ -187,10 +170,7 @@ pub async fn send_to_connect<R: Runtime>(
             workout: workout.to_string(),
             pending: false,
         };
-        run_blocking(app, move |database| {
-            queue_workout_device(database, &mut entry)
-        })
-        .await?;
+        queue_workout_device(&pool(app), &mut entry).await?;
 
         Ok(())
     }

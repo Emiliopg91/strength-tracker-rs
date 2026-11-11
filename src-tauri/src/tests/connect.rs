@@ -565,9 +565,9 @@ fn calendar_page_keeps_only_its_month_inside_the_window() {
     assert_eq!(kept(2026, 11), [4]);
 }
 
-#[test]
-fn step_exercises_are_filled_with_their_category() {
-    let db = crate::tests::common::test_db();
+#[tokio::test]
+async fn step_exercises_are_filled_with_their_category() {
+    let db = crate::tests::common::test_db().await;
     let mut steps = vec![
         WorkoutStep {
             ex_cat: Some(0),
@@ -582,12 +582,13 @@ fn step_exercises_are_filled_with_their_category() {
         },
     ];
 
-    db.run_in_connection(|conn| {
-        Ok(crate::logic::connect::queries::fetch_step_exercises(
-            conn, &mut steps,
-        )?)
-    })
-    .unwrap();
+    let steps = db
+        .run_in_connection(move |conn| {
+            crate::logic::connect::queries::fetch_step_exercises(conn, &mut steps)?;
+            Ok(steps)
+        })
+        .await
+        .unwrap();
 
     for idx in [0, 2] {
         let exercise = steps[idx].exercise.as_ref().expect("exercise filled");

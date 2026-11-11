@@ -263,10 +263,10 @@ pub(crate) fn fetch_sessions_details(
 }
 
 /// Parses a batch of `.FIT` files in parallel and inserts each new session (plus its exercises/series/heart rate/GPS/speeds) in the given transaction, then refreshes personal records.
-pub(crate) fn import_file_list<'a>(
+pub(crate) fn import_file_list(
     tx: &mut rusqlite_orm::rusqlite::Transaction,
-    files: &'a [FitFile],
-) -> Result<ImportedFiles<'a>, DatabaseError> {
+    files: &[FitFile],
+) -> Result<ImportedFiles, DatabaseError> {
     let mut success = Vec::new();
     let mut handled_exercises: HashSet<(u16, u16)> = HashSet::new();
 
@@ -282,7 +282,7 @@ pub(crate) fn import_file_list<'a>(
             }
             Err(e) => {
                 error!("Error parsing session file {}: {}", file.name, e);
-                Either::Right((file, e.to_string()))
+                Either::Right((file.clone(), e.to_string()))
             }
         }
     });
@@ -468,7 +468,7 @@ pub(crate) fn update_session_notes(
     Ok(())
 }
 
-pub(crate) fn heatmap_data(database: &DatabasePool) -> Result<Vec<Vec<(u32, u16)>>, String> {
+pub(crate) async fn heatmap_data(database: &DatabasePool) -> Result<Vec<Vec<(u32, u16)>>, String> {
     let today = Local::now().date_naive();
     let a_year_ago = today
         .checked_sub_months(Months::new(12))
@@ -483,7 +483,7 @@ pub(crate) fn heatmap_data(database: &DatabasePool) -> Result<Vec<Vec<(u32, u16)
         .timestamp();
 
     let res = database
-        .run_in_connection(|conn| {
+        .run_in_connection(move |conn| {
             let sessions = SessionRepository::select()
                 .columns(&[
                     session::entity::columns::DATE,
@@ -519,35 +519,44 @@ pub(crate) fn heatmap_data(database: &DatabasePool) -> Result<Vec<Vec<(u32, u16)
 
             Ok(res)
         })
+        .await
         .map_err(|e| e.to_string())?;
 
     Ok(res)
 }
 
 #[allow(dead_code)]
-pub(super) fn merge_sessions(
+pub(super) async fn merge_sessions(
     database: &DatabasePool,
     to_date: u32,
     from_date: u32,
 ) -> Result<(), DatabaseError> {
     let mut to = SessionRepository::select_by_id(database, to_date)
+        .await
         .expect("Error on database query")
         .unwrap_or_else(|| panic!("Could not find session with timestamp {}", to_date));
     to.fetch_data_relationship(database)
+        .await
         .expect("Error on database query");
     to.fetch_laps_relationship(database)
+        .await
         .expect("Error on database query");
     to.fetch_steps_relationship(database)
+        .await
         .expect("Error on database query");
 
     let mut from = SessionRepository::select_by_id(database, from_date)
+        .await
         .expect("Error on database query")
         .unwrap_or_else(|| panic!("Could not find session with timestamp {}", from_date));
     from.fetch_data_relationship(database)
+        .await
         .expect("Error on database query");
     from.fetch_laps_relationship(database)
+        .await
         .expect("Error on database query");
     from.fetch_steps_relationship(database)
+        .await
         .expect("Error on database query");
 
     to.total_elapsed_time += from.total_elapsed_time;
@@ -614,29 +623,31 @@ pub(super) fn merge_sessions(
         to.steps.push(set);
     }
 
-    database.run_in_transaction(|tx| {
-        to.delete_by_id_in(tx)?;
-        from.delete_by_id_in(tx)?;
+    database
+        .run_in_transaction(move |tx| {
+            to.delete_by_id_in(tx)?;
+            from.delete_by_id_in(tx)?;
 
-        insert_session(tx, &mut to, &mut HashSet::new())?;
+            insert_session(tx, &mut to, &mut HashSet::new())?;
 
-        let handled_exercises = to
-            .steps
-            .iter()
-            .filter_map(|s| {
-                if let Some(cat) = s.ex_cat
-                    && let Some(id) = s.ex_id
-                {
-                    Some((cat, id))
-                } else {
-                    None
-                }
-            })
-            .collect();
-        update_prs(tx, &handled_exercises, &[to.date])?;
+            let handled_exercises = to
+                .steps
+                .iter()
+                .filter_map(|s| {
+                    if let Some(cat) = s.ex_cat
+                        && let Some(id) = s.ex_id
+                    {
+                        Some((cat, id))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            update_prs(tx, &handled_exercises, &[to.date])?;
 
-        Ok(())
-    })
+            Ok(())
+        })
+        .await
 }
 
 /// Outcome of `apply_session_changes`.
@@ -726,15 +737,17 @@ pub(super) fn apply_session_changes(
 }
 
 /// Name of the session, `None` if it doesn't exist.
-pub(super) fn session_name(
+pub(super) async fn session_name(
     database: &DatabasePool,
     timestamp: u32,
 ) -> rusqlite_orm::errors::Result<Option<String>> {
-    Ok(SessionRepository::select_by_id(database, timestamp)?.map(|session| session.name))
+    Ok(SessionRepository::select_by_id(database, timestamp)
+        .await?
+        .map(|session| session.name))
 }
 
 /// Links the session to its Garmin Connect activity.
-pub(super) fn set_session_connect_id(
+pub(super) async fn set_session_connect_id(
     database: &DatabasePool,
     timestamp: u32,
     id: u64,
@@ -743,6 +756,7 @@ pub(super) fn set_session_connect_id(
         .where_(Where::Eq(session::entity::columns::DATE, timestamp.into()))
         .set(session::entity::columns::CONNECT_ID, id.into())
         .execute(database)
+        .await
 }
 
 /// The session with its sets, laps, additional data and workout, `None` if it doesn't exist.
@@ -764,7 +778,7 @@ pub(super) fn full_session(
 
 /// Coordinates of the unnamed sessions recorded with GPS, newest first, to name them after their
 /// location.
-pub(super) fn pending_geolocation(
+pub(super) async fn pending_geolocation(
     db: &DatabasePool,
 ) -> rusqlite_orm::errors::Result<Vec<SessionData>> {
     let unnamed_sessions = SessionRepository::select()
@@ -783,6 +797,7 @@ pub(super) fn pending_geolocation(
         ]))
         .order_by(OrderBy::Desc(session_data::entity::columns::SESSION))
         .fetch(db)
+        .await
         .map(|rows| {
             rows.into_iter()
                 .map(|row| {
@@ -798,7 +813,7 @@ pub(super) fn pending_geolocation(
 }
 
 /// Renames the session; returns the number of rows changed.
-pub(super) fn set_session_name(
+pub(super) async fn set_session_name(
     db: &DatabasePool,
     session: u32,
     name: &str,
@@ -807,15 +822,16 @@ pub(super) fn set_session_name(
         .set(session::entity::columns::NAME, name.into())
         .where_(Where::Eq(session::entity::columns::DATE, session.into()))
         .execute(db)
+        .await
 }
 
 /// Outcome of `import_file_list`.
 #[derive(Default)]
-pub(crate) struct ImportedFiles<'a> {
+pub(crate) struct ImportedFiles {
     /// Dates of the sessions inserted.
     pub sessions: Vec<u32>,
     /// Files that could not be parsed, with the parse error.
-    pub failed: Vec<(&'a FitFile, String)>,
+    pub failed: Vec<(FitFile, String)>,
     /// Whether any of the inserted sessions holds a new personal record.
     pub new_prs: bool,
     /// Whether some exercise of the inserted sessions has a progression suggestion pending.
@@ -827,12 +843,12 @@ pub(crate) struct ImportedFiles<'a> {
 
 /// Imports the `.fit` files fetched from `device` and, with `sync_mark`, moves its last activity
 /// sync to it.
-pub(super) fn import_device_files<'a>(
+pub(super) fn import_device_files(
     tx: &mut rusqlite_orm::rusqlite::Transaction,
-    files: &'a [FitFile],
+    files: &[FitFile],
     device: &mut Device,
     sync_mark: Option<u32>,
-) -> Result<ImportedFiles<'a>, DatabaseError> {
+) -> Result<ImportedFiles, DatabaseError> {
     let res = if !files.is_empty() {
         info!("Fetched {} activity files", files.len());
         import_file_list(tx, files)?

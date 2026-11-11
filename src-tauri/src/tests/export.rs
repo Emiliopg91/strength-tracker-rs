@@ -11,19 +11,20 @@ use crate::{
     utils::translations::Languages,
 };
 
-fn export_json(db: &rusqlite_orm::database::DatabasePool) -> Value {
+async fn export_json(db: &rusqlite_orm::database::DatabasePool) -> Value {
     let mut json = Vec::new();
     Export::from_database(db, Languages::English)
+        .await
         .unwrap()
         .write_json(&mut json)
         .unwrap();
     serde_json::from_slice(&json).unwrap()
 }
 
-#[test]
-fn empty_database_export() {
-    let db = common::test_db();
-    let json = export_json(&db);
+#[tokio::test]
+async fn empty_database_export() {
+    let db = common::test_db().await;
+    let json = export_json(&db).await;
 
     for key in ["body_metrics", "exercises", "workouts", "sessions", "laps"] {
         assert_eq!(json[key].as_array().unwrap().len(), 0, "{key}");
@@ -36,9 +37,9 @@ fn empty_database_export() {
     assert_eq!(devices[0]["serial"], "connect");
 }
 
-#[test]
-fn export_contains_all_data() {
-    let db = common::test_db();
+#[tokio::test]
+async fn export_contains_all_data() {
+    let db = common::test_db().await;
 
     let mut strength = common::session(1);
     strength.steps = vec![
@@ -54,7 +55,7 @@ fn export_contains_all_data() {
     data.heart_rates = Some(vec![120]);
     run.data = Some(data);
 
-    db.run_in_transaction(|tx| {
+    db.run_in_transaction(move |tx| {
         common::insert_session(tx, strength.clone());
         common::insert_session(tx, run.clone());
         BodyMetricRepository::insert()
@@ -68,9 +69,10 @@ fn export_contains_all_data() {
             .execute_in(tx)?;
         Ok(())
     })
+    .await
     .unwrap();
 
-    let json = export_json(&db);
+    let json = export_json(&db).await;
 
     assert_eq!(json["body_metrics"].as_array().unwrap().len(), 1);
     assert_eq!(json["laps"].as_array().unwrap().len(), 1);

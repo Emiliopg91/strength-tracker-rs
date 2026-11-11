@@ -233,7 +233,7 @@ pub(super) fn sync_connect_devices(
 }
 
 /// The Connect pseudo-device and the dates of every stored session, to import only new activities.
-pub(super) fn connect_import_state(
+pub(super) async fn connect_import_state(
     database: &DatabasePool,
 ) -> rusqlite_orm::errors::Result<(Device, BTreeSet<u32>)> {
     let device = DeviceRepository::select()
@@ -241,12 +241,14 @@ pub(super) fn connect_import_state(
             device::entity::columns::SERIAL,
             constants::CONNECT_DEVICE_SERIAL.into(),
         ))
-        .fetch_one(database)?
+        .fetch_one(database)
+        .await?
         .unwrap();
 
     let existing: BTreeSet<u32> = SessionRepository::select()
         .columns(&[session::entity::columns::DATE])
-        .fetch(database)?
+        .fetch(database)
+        .await?
         .iter()
         .map(|row| row.get_u32(session::entity::columns::DATE.as_ref()))
         .collect();
@@ -255,18 +257,21 @@ pub(super) fn connect_import_state(
 }
 
 /// Dates of the stored body measurements, newest first.
-pub(super) fn body_metric_dates(database: &DatabasePool) -> rusqlite_orm::errors::Result<Vec<u32>> {
+pub(super) async fn body_metric_dates(
+    database: &DatabasePool,
+) -> rusqlite_orm::errors::Result<Vec<u32>> {
     Ok(BodyMetricRepository::select()
         .columns(&[body_metric::entity::columns::DATE])
         .order_by(OrderBy::Desc(body_metric::entity::columns::DATE))
-        .fetch(database)?
+        .fetch(database)
+        .await?
         .iter()
         .map(|row| row.get_u32(session::entity::columns::DATE.as_ref()))
         .collect())
 }
 
 /// Stores the `entries` not logged yet (by date); returns how many were added.
-pub(super) fn insert_new_body_metrics(
+pub(super) async fn insert_new_body_metrics(
     database: &DatabasePool,
     entries: &mut [BodyMetric],
     existing: &[u32],
@@ -278,13 +283,15 @@ pub(super) fn insert_new_body_metrics(
             insert = insert.item(entry);
         }
     }
-    insert.execute(database)
+    insert.execute(database).await
 }
 
 /// Connect id of the workout, `None` if it doesn't exist or hasn't been uploaded.
-pub(super) fn workout_connect_id(
+pub(super) async fn workout_connect_id(
     database: &DatabasePool,
     name: &str,
 ) -> rusqlite_orm::errors::Result<Option<String>> {
-    Ok(WorkoutRepository::select_by_id(database, name)?.and_then(|w| w.connect_id))
+    Ok(WorkoutRepository::select_by_id(database, name)
+        .await?
+        .and_then(|w| w.connect_id))
 }

@@ -13,7 +13,7 @@ const BENCH: (u16, u16) = (0, 1);
 const CABLE_ROW: (u16, u16) = (23, 20);
 const PULL_UP: (u16, u16) = (21, 38);
 
-fn exercises(db: &DatabasePool, keys: &[(u16, u16)]) -> Vec<exercise::Exercise> {
+async fn exercises(db: &DatabasePool, keys: &[(u16, u16)]) -> Vec<exercise::Exercise> {
     ExerciseRepository::select()
         .where_(Where::InMultiple(
             vec![
@@ -25,6 +25,7 @@ fn exercises(db: &DatabasePool, keys: &[(u16, u16)]) -> Vec<exercise::Exercise> 
                 .collect(),
         ))
         .fetch(db)
+        .await
         .unwrap()
 }
 
@@ -39,20 +40,22 @@ fn muscles(exercise: &exercise::Exercise) -> Vec<(String, bool)> {
     muscles
 }
 
-#[test]
-fn batched_muscles_match_the_relationship_fetcher() {
-    let db = common::test_db();
-    let mut batched = exercises(&db, &[BENCH, CABLE_ROW, PULL_UP]);
+#[tokio::test]
+async fn batched_muscles_match_the_relationship_fetcher() {
+    let db = common::test_db().await;
+    let mut batched = exercises(&db, &[BENCH, CABLE_ROW, PULL_UP]).await;
     let mut one_by_one = batched.clone();
 
-    db.run_in_connection(|conn| {
-        fetch_exercises_muscles(conn, &mut batched)?;
-        for exercise in &mut one_by_one {
-            exercise.fetch_muscles_relationship_in(conn)?;
-        }
-        Ok(())
-    })
-    .unwrap();
+    let (batched, one_by_one) = db
+        .run_in_connection(move |conn| {
+            fetch_exercises_muscles(conn, &mut batched)?;
+            for exercise in &mut one_by_one {
+                exercise.fetch_muscles_relationship_in(conn)?;
+            }
+            Ok((batched, one_by_one))
+        })
+        .await
+        .unwrap();
 
     assert!(batched.iter().any(|e| !e.muscles.is_empty()));
     for (batched, single) in batched.iter().zip(&one_by_one) {
@@ -74,10 +77,10 @@ fn normalized(details: &[crate::dto::sessions::SessionDetails]) -> serde_json::V
     value
 }
 
-#[test]
-fn batched_session_details_match_single_ones_in_the_given_order() {
-    let db = common::test_db();
-    db.run_in_transaction(|tx| {
+#[tokio::test]
+async fn batched_session_details_match_single_ones_in_the_given_order() {
+    let db = common::test_db().await;
+    db.run_in_transaction(move |tx| {
         for (date, exercise) in [(1, BENCH), (2, CABLE_ROW)] {
             let mut session = common::session(date);
             session.steps = vec![
@@ -90,10 +93,11 @@ fn batched_session_details_match_single_ones_in_the_given_order() {
         }
         Ok(())
     })
+    .await
     .unwrap();
 
     let (batched, single) = db
-        .run_in_connection(|conn| {
+        .run_in_connection(move |conn| {
             let batched = fetch_sessions_details(conn, &[2, 1], true, true)?;
             let single = vec![
                 fetch_session_details(conn, 2, true, true)?,
@@ -101,6 +105,7 @@ fn batched_session_details_match_single_ones_in_the_given_order() {
             ];
             Ok((batched, single))
         })
+        .await
         .unwrap();
 
     let batched = normalized(&batched);
@@ -110,12 +115,13 @@ fn batched_session_details_match_single_ones_in_the_given_order() {
     assert_ne!(batched[0]["primary_muscles"], batched[1]["primary_muscles"]);
 }
 
-#[test]
-fn no_sessions_give_no_details() {
-    let db = common::test_db();
+#[tokio::test]
+async fn no_sessions_give_no_details() {
+    let db = common::test_db().await;
 
     let details = db
-        .run_in_connection(|conn| Ok(fetch_sessions_details(conn, &[], true, true)?))
+        .run_in_connection(move |conn| Ok(fetch_sessions_details(conn, &[], true, true)?))
+        .await
         .unwrap();
 
     assert!(details.is_empty());

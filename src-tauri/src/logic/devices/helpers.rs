@@ -21,8 +21,7 @@ use crate::{
     fit::{FitFile, parser::FitParser, writer::FitWriter},
     logic::{
         connect::helpers::queue_workout_on_connect, new_pending_dir,
-        notifications::show_notification, run_blocking, run_blocking_conn, run_blocking_tx,
-        store_pending_files,
+        notifications::show_notification, pool, store_pending_files,
     },
     utils::{
         constants,
@@ -114,11 +113,12 @@ pub(super) async fn on_device_connected<R: Runtime>(
         settings.language
     };
     let mut enrolled = device.clone();
-    let enrol_res = run_blocking_tx(app, move |_, tx| {
-        enrol_usb_device(tx, &mut enrolled)?;
-        Ok(enrolled)
-    })
-    .await;
+    let enrol_res = pool(app)
+        .run_in_transaction(move |tx| {
+            enrol_usb_device(tx, &mut enrolled)?;
+            Ok(enrolled)
+        })
+        .await;
     match enrol_res {
         Ok(enrolled) => *device = enrolled,
         Err(e) => {
@@ -204,14 +204,16 @@ pub(crate) async fn send_enabled_workout_to_connect_devices<R: Runtime>(
     // Held for the whole run: a waiting caller re-reads the queue after this one has cleared it
     let _guard = PUSH_LOCK.lock().await;
     let name = workout.to_string();
-    let serials =
-        match run_blocking_conn(app, move |_, conn| pending_connect_devices(conn, &name)).await {
-            Ok(serials) => serials,
-            Err(e) => {
-                error!("Error fetching Connect devices waiting for workout '{workout}': {e}");
-                return;
-            }
-        };
+    let serials = match pool(app)
+        .run_in_connection(move |conn| Ok(pending_connect_devices(conn, &name)?))
+        .await
+    {
+        Ok(serials) => serials,
+        Err(e) => {
+            error!("Error fetching Connect devices waiting for workout '{workout}': {e}");
+            return;
+        }
+    };
 
     let lang = app.state::<SettingsLock>().read().unwrap().language;
     for serial in serials {
@@ -247,7 +249,7 @@ pub(super) async fn push_pending_workouts<R: Runtime>(app: &AppHandle<R>, serial
     let _guard = PUSH_LOCK.lock().await;
     let serial = serial.to_string();
     let serial_q = serial.clone();
-    let pending = match run_blocking(app, move |db| pending_queue(db, &serial_q, true)).await {
+    let pending = match pending_queue(&pool(app), &serial_q, true).await {
         Ok(pending) => pending,
         Err(e) => {
             error!("Error fetching pending workouts for pushing to {serial}: {e}");
@@ -281,7 +283,7 @@ pub(super) async fn finish_push<R: Runtime>(
 ) {
     let device = serial.to_string();
     let wkt = workout.to_string();
-    if let Err(e) = run_blocking(app, move |db| clear_pending(db, &wkt, &device)).await {
+    if let Err(e) = clear_pending(&pool(app), &wkt, &device).await {
         error!("Error clearing pending upload entry for {serial}: {e}");
     }
 
@@ -299,7 +301,7 @@ pub(super) async fn delete_pending_workouts<R: Runtime>(app: &AppHandle<R>, seri
     let _guard = PUSH_LOCK.lock().await;
     let serial = serial.to_string();
     let serial_q = serial.clone();
-    let pending = match run_blocking(app, move |db| pending_queue(db, &serial_q, false)).await {
+    let pending = match pending_queue(&pool(app), &serial_q, false).await {
         Ok(pending) => pending,
         Err(e) => {
             error!("Error fetching pending workouts for deleting from {serial}: {e}");
@@ -320,8 +322,7 @@ pub(super) async fn delete_pending_workouts<R: Runtime>(app: &AppHandle<R>, seri
             Ok(deleted) => {
                 let device = serial.clone();
                 let wkt = workout.clone();
-                if let Err(e) = run_blocking(app, move |db| clear_pending(db, &wkt, &device)).await
-                {
+                if let Err(e) = clear_pending(&pool(app), &wkt, &device).await {
                     error!("Error clearing pending deletion entry for {serial}: {e}");
                 }
                 if deleted {
@@ -347,12 +348,12 @@ pub(super) async fn list_pending_workouts<R: Runtime>(
     serial: &str,
 ) -> Result<Vec<String>, DatabaseError> {
     let serial_q = serial.to_string();
-    run_blocking(app, move |db| workouts_without_steps(db, &serial_q)).await
+    workouts_without_steps(&pool(app), &serial_q).await
 }
 
 /// Stores the steps of the `pending_workouts` found among the `.fit` files fetched from the
 /// device. Those that fail to parse or to be stored are kept as pending files.
-pub(super) fn store_pending_workouts<R: Runtime>(
+pub(super) async fn store_pending_workouts<R: Runtime>(
     app: &AppHandle<R>,
     db: &DatabasePool,
     files: &[FitFile],
@@ -379,16 +380,16 @@ pub(super) fn store_pending_workouts<R: Runtime>(
 
     let mut workout_names: Vec<String> = Vec::new();
     for (mut workout, file) in workouts_to_insert {
-        let res = db.run_in_transaction(|tx| Ok(store_workout_steps(tx, &mut workout)?));
+        let name = workout.name.clone();
+        let res = db
+            .run_in_transaction(move |tx| Ok(store_workout_steps(tx, &mut workout)?))
+            .await;
 
         if let Err(e) = res {
-            error!(
-                "Error storing workout {} from {}: {}",
-                workout.name, serial, e
-            );
+            error!("Error storing workout {} from {}: {}", name, serial, e);
             failed.push(file);
         } else {
-            workout_names.push(workout.name.clone());
+            workout_names.push(name);
         }
     }
 
@@ -420,12 +421,7 @@ pub(super) async fn download_pending_workouts<R: Runtime>(app: &AppHandle<R>, se
 
     match downloaded {
         Ok(files) => {
-            let app_cl = app.clone();
-            let serial = serial.to_string();
-            run_blocking(app, move |db| {
-                store_pending_workouts(&app_cl, db, &files, &serial, &pending_workouts)
-            })
-            .await;
+            store_pending_workouts(app, &pool(app), &files, serial, &pending_workouts).await;
         }
         Err(e) => error!("Error downloading workouts from {}: {e}", serial),
     }
@@ -439,7 +435,8 @@ pub(super) async fn send_workout_to_device<R: Runtime>(
     serial: &str,
 ) -> Result<(), String> {
     let name = workout.to_string();
-    let workout = run_blocking_conn(app, move |_, conn| workout_for_device(conn, &name))
+    let workout = pool(app)
+        .run_in_connection(move |conn| Ok(workout_for_device(conn, &name)?))
         .await
         .map_err(|e| e.to_string())?;
 

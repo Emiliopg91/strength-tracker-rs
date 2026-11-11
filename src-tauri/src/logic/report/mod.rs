@@ -8,7 +8,7 @@ use self::queries::report_data;
 use crate::{
     SettingsLock,
     dto::report::ReportData,
-    logic::{print_to_pdf, report_error, run_blocking_conn},
+    logic::{pool, print_to_pdf, report_error},
     utils::translations::translate,
 };
 
@@ -51,7 +51,8 @@ pub async fn get_report_data<R: Runtime>(
     info!("Getting report data...");
     let lang = settings.read().unwrap().language;
 
-    let res = run_blocking_conn(app, move |_, conn| report_data(conn, from, to))
+    let res = pool(app)
+        .run_in_connection(move |conn| Ok(report_data(conn, from, to)?))
         .await
         .map(|mut data| {
             // Listed by name, which depends on the language

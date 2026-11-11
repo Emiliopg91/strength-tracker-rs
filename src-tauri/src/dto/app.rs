@@ -23,16 +23,18 @@ pub struct Settings {
     pub start_into_tray: bool,
 }
 
-impl From<&DatabasePool> for Settings {
-    fn from(database: &DatabasePool) -> Self {
+impl Settings {
+    /// Reads every persisted setting, falling back to its default when unset.
+    pub async fn load(database: &DatabasePool) -> Self {
         Self {
-            distance_unit: crate::dao::settings::Settings::get_distance_unit(database),
-            language: crate::dao::settings::Settings::get_language(database),
-            start_boot: crate::dao::settings::Settings::get_start_on_boot(database),
-            weight_unit: crate::dao::settings::Settings::get_weight_unit(database),
-            on_device_connect: crate::dao::settings::Settings::get_on_device_connect(database),
-            close_to_tray: crate::dao::settings::Settings::get_close_to_tray(database),
-            start_into_tray: crate::dao::settings::Settings::get_start_into_tray(database),
+            distance_unit: crate::dao::settings::Settings::get_distance_unit(database).await,
+            language: crate::dao::settings::Settings::get_language(database).await,
+            start_boot: crate::dao::settings::Settings::get_start_on_boot(database).await,
+            weight_unit: crate::dao::settings::Settings::get_weight_unit(database).await,
+            on_device_connect: crate::dao::settings::Settings::get_on_device_connect(database)
+                .await,
+            close_to_tray: crate::dao::settings::Settings::get_close_to_tray(database).await,
+            start_into_tray: crate::dao::settings::Settings::get_start_into_tray(database).await,
         }
     }
 }

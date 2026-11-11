@@ -18,11 +18,7 @@ use std::{
 };
 
 use chrono::Local;
-use rusqlite_orm::{
-    database::DatabasePool,
-    errors::DatabaseError,
-    rusqlite::{Connection, Transaction},
-};
+use rusqlite_orm::database::DatabasePool;
 use tauri::{AppHandle, Manager, Runtime, WebviewWindow};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_log::log::{error, info, warn};
@@ -54,52 +50,9 @@ pub fn report_error<E: std::fmt::Display>(
     e.to_string()
 }
 
-/// Runs `f` with the database pool on tokio's blocking thread pool, so synchronous DB and file
-/// work never stalls an async worker thread.
-pub async fn run_blocking<R, T, F>(app: &AppHandle<R>, f: F) -> T
-where
-    R: Runtime,
-    F: FnOnce(&DatabasePool) -> T + Send + 'static,
-    T: Send + 'static,
-{
-    let app = app.clone();
-    tokio::task::spawn_blocking(move || f(&app.state::<DatabasePool>()))
-        .await
-        .expect("blocking DB task panicked")
-}
-
-/// Runs `f` on a pooled connection in tokio's blocking thread pool.
-pub async fn run_blocking_conn<R, T, F>(app: &AppHandle<R>, f: F) -> Result<T, DatabaseError>
-where
-    R: Runtime,
-    F: FnOnce(&AppHandle<R>, &Connection) -> Result<T, DatabaseError> + Send + 'static,
-    T: Send + 'static,
-{
-    let app = app.clone();
-    tokio::task::spawn_blocking(move || {
-        let mut f = Some(f);
-        app.state::<DatabasePool>()
-            .run_in_connection(|conn| Ok(f.take().unwrap()(&app, conn)?))
-    })
-    .await
-    .expect("blocking DB task panicked")
-}
-
-/// Runs `f` in a transaction in tokio's blocking thread pool, committing it if `f` succeeds.
-pub async fn run_blocking_tx<R, T, F>(app: &AppHandle<R>, f: F) -> Result<T, DatabaseError>
-where
-    R: Runtime,
-    F: FnOnce(&AppHandle<R>, &mut Transaction) -> Result<T, DatabaseError> + Send + 'static,
-    T: Send + 'static,
-{
-    let app = app.clone();
-    tokio::task::spawn_blocking(move || {
-        let mut f = Some(f);
-        app.state::<DatabasePool>()
-            .run_in_transaction(|tx| Ok(f.take().unwrap()(&app, tx)?))
-    })
-    .await
-    .expect("blocking DB task panicked")
+/// The app's database pool. Clones are cheap and share the same connections.
+pub fn pool<R: Runtime>(app: &AppHandle<R>) -> DatabasePool {
+    app.state::<DatabasePool>().inner().clone()
 }
 
 /// Adds `extension` to `path` unless it already ends in it.

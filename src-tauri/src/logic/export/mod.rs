@@ -12,7 +12,7 @@ use crate::{
         export::Export,
         notifications::{NotificationDefinition, NotificationKind},
     },
-    logic::{ask_save_path, notifications::show_notification, report_error, run_blocking},
+    logic::{ask_save_path, notifications::show_notification, pool, report_error},
     rclone::providers::CloudProvider,
     utils::{
         constants,
@@ -88,15 +88,16 @@ pub async fn export_database<R: Runtime>(
 
     let export_path = path.clone();
     let export_lang = settings.read().unwrap().language;
-    let res = run_blocking(app, move |database| {
-        Export::from_database(database, export_lang)
-            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
-            .and_then(|export| {
-                let file = fs::File::create(&export_path)?;
-                export.write_json(BufWriter::new(file))?;
-                Ok(())
-            })
-    })
+    let res: Result<(), Box<dyn std::error::Error + Send + Sync>> = async {
+        let export = Export::from_database(&pool(app), export_lang).await?;
+        tokio::task::spawn_blocking(move || {
+            let file = fs::File::create(&export_path)?;
+            export.write_json(BufWriter::new(file))?;
+            Ok(())
+        })
+        .await
+        .expect("export writing task panicked")
+    }
     .await;
 
     let lang = settings.read().unwrap().language;

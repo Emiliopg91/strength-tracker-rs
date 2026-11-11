@@ -3,7 +3,6 @@ pub mod helpers;
 
 use std::collections::HashMap;
 
-use rusqlite_orm::database::DatabasePool;
 use tauri::{AppHandle, Manager, Runtime};
 use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_log::log::{error, info};
@@ -23,8 +22,8 @@ use crate::{
         connect::helpers::{get_devices_from_connect, up_to_date_connect},
         devices::helpers::start_device_watcher,
         notifications::show_notification,
-        report_error,
-        sessions::helpers::update_pending_geolocation,
+        pool, report_error,
+        sessions::helpers::spawn_geolocation_update,
     },
     utils::translations::{Languages, TRANSLATIONS, translate},
 };
@@ -59,11 +58,7 @@ pub async fn notify_frontend_ready<R: Runtime>(app: &AppHandle<R>) {
         let _ = show_main_window(app);
     }
 
-    let app_cl = app.clone();
-    std::thread::spawn(move || {
-        let db = app_cl.state::<DatabasePool>();
-        update_pending_geolocation(&app_cl, &db);
-    });
+    spawn_geolocation_update(app);
 
     let app_cl = app.clone();
     std::thread::spawn(move || check_for_update(&app_cl));
@@ -86,7 +81,6 @@ pub async fn update_settings_value<R: Runtime>(
 ) -> Result<(), String> {
     let name = name.to_string();
     let value = value.to_string();
-    let app_cl = app.clone();
 
     let lang = app.state::<SettingsLock>().read().unwrap().language;
 
@@ -102,20 +96,21 @@ pub async fn update_settings_value<R: Runtime>(
         ));
     }
 
-    let res = tokio::task::spawn_blocking(move || {
-        let app = app_cl;
-        let database = app.state::<DatabasePool>();
+    let res: Result<Languages, String> = async {
+        let database = pool(app);
         let settings = app.state::<SettingsLock>();
         match name.as_str() {
             DISTANCE_UNIT => {
                 let value = value.as_str().try_into()?;
                 crate::dao::settings::Settings::set_distance_unit(&database, &value)
+                    .await
                     .map_err(|e| e.to_string())?;
                 settings.write().unwrap().distance_unit = value;
             }
             START_ON_BOOT => {
                 let value = value == "true";
                 crate::dao::settings::Settings::set_start_on_boot(&database, value)
+                    .await
                     .map_err(|e| e.to_string())?;
                 if value {
                     app.autolaunch().enable()
@@ -128,30 +123,35 @@ pub async fn update_settings_value<R: Runtime>(
             START_INTO_TRAY => {
                 let value = value == "true";
                 crate::dao::settings::Settings::set_start_into_tray(&database, value)
+                    .await
                     .map_err(|e| e.to_string())?;
                 settings.write().unwrap().start_into_tray = value;
             }
             CLOSE_TO_TRAY => {
                 let value = value == "true";
                 crate::dao::settings::Settings::set_close_to_tray(&database, value)
+                    .await
                     .map_err(|e| e.to_string())?;
                 settings.write().unwrap().close_to_tray = value;
             }
             WEIGHT_UNIT => {
                 let value = value.as_str().try_into()?;
                 crate::dao::settings::Settings::set_weight_unit(&database, &value)
+                    .await
                     .map_err(|e| e.to_string())?;
                 settings.write().unwrap().weight_unit = value;
             }
             LANGUAGE => {
                 let value = Languages::from_name(&value);
                 crate::dao::settings::Settings::set_language(&database, &value)
+                    .await
                     .map_err(|e| e.to_string())?;
                 settings.write().unwrap().language = value;
             }
             ON_DEVICE_CONNECT => {
                 let value = value == "true";
                 crate::dao::settings::Settings::set_on_device_connect(&database, value)
+                    .await
                     .map_err(|e| e.to_string())?;
                 settings.write().unwrap().on_device_connect = value;
             }
@@ -159,10 +159,8 @@ pub async fn update_settings_value<R: Runtime>(
         }
 
         Ok(settings.read().unwrap().language)
-    })
-    .await
-    .map_err(|e| e.to_string())
-    .flatten();
+    }
+    .await;
 
     match res {
         Ok(lang) => {

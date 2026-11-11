@@ -143,7 +143,7 @@ pub(super) fn workout_for_device(
 }
 
 /// Records that the device has the workout, keeping the entry if it was already there.
-pub(super) fn add_workout_device(
+pub(super) async fn add_workout_device(
     database: &DatabasePool,
     entry: &mut WorkoutDevice,
 ) -> rusqlite_orm::errors::Result<usize> {
@@ -151,10 +151,11 @@ pub(super) fn add_workout_device(
         .or_ignore()
         .item(entry)
         .execute(database)
+        .await
 }
 
 /// Records the workout for the device, replacing the entry (and its `pending` flag) if any.
-pub(crate) fn queue_workout_device(
+pub(crate) async fn queue_workout_device(
     database: &DatabasePool,
     entry: &mut WorkoutDevice,
 ) -> rusqlite_orm::errors::Result<usize> {
@@ -162,27 +163,32 @@ pub(crate) fn queue_workout_device(
         .or_replace()
         .item(entry)
         .execute(database)
+        .await
 }
 
 /// The registered device with that serial number.
 ///
 /// # Panics
 /// If the device isn't registered.
-pub(super) fn device_by_serial(
+pub(super) async fn device_by_serial(
     database: &DatabasePool,
     serial: &str,
 ) -> rusqlite_orm::errors::Result<Device> {
-    DeviceRepository::select_by_id(database, serial).map(Option::unwrap)
+    DeviceRepository::select_by_id(database, serial)
+        .await
+        .map(Option::unwrap)
 }
 
 /// Every registered device, the Connect pseudo-device included.
-pub(super) fn all_devices(database: &DatabasePool) -> rusqlite_orm::errors::Result<Vec<Device>> {
-    DeviceRepository::select().fetch(database)
+pub(super) async fn all_devices(
+    database: &DatabasePool,
+) -> rusqlite_orm::errors::Result<Vec<Device>> {
+    DeviceRepository::select().fetch(database).await
 }
 
 /// Workouts queued for the device `serial`, by name: the enabled ones to upload, or the disabled
 /// ones to delete from it.
-pub(super) fn pending_queue(
+pub(super) async fn pending_queue(
     db: &DatabasePool,
     serial: &str,
     enabled: bool,
@@ -202,6 +208,7 @@ pub(super) fn pending_queue(
         ]))
         .order_by(OrderBy::Asc(workout_device::entity::columns::WORKOUT))
         .fetch(db)
+        .await
         .map(|rows| {
             rows.iter()
                 .map(|r| r.get_text(workout_device::entity::columns::WORKOUT.as_ref()))
@@ -210,7 +217,7 @@ pub(super) fn pending_queue(
 }
 
 /// Takes the workout off the queue of the device.
-pub(super) fn clear_pending(
+pub(super) async fn clear_pending(
     db: &DatabasePool,
     workout: &str,
     device: &str,
@@ -222,10 +229,11 @@ pub(super) fn clear_pending(
             Where::Eq(workout_device::entity::columns::DEVICE, device.into()),
         ]))
         .execute(db)
+        .await
 }
 
 /// Workouts recorded in sessions of the device `serial` that have no steps stored yet.
-pub(super) fn workouts_without_steps(
+pub(super) async fn workouts_without_steps(
     db: &DatabasePool,
     serial: &str,
 ) -> rusqlite_orm::errors::Result<Vec<String>> {
@@ -246,7 +254,8 @@ pub(super) fn workouts_without_steps(
                     .to_subquery(),
             ),
         ]))
-        .fetch(db)?
+        .fetch(db)
+        .await?
         .iter()
         .map(|r| r.get_text(workout::entity::columns::NAME.as_ref()))
         .collect())

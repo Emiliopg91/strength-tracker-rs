@@ -717,7 +717,7 @@ pub(super) fn exercise_list(
 }
 
 /// Marks the exercise as performed one side at a time, or not.
-pub(super) fn set_unilateral(
+pub(super) async fn set_unilateral(
     database: &DatabasePool,
     category: u16,
     id: u16,
@@ -726,12 +726,13 @@ pub(super) fn set_unilateral(
     ExerciseRepository::update()
         .set(exercise::entity::columns::UNILATERAL, value.into())
         .where_(by_key(category, id))
-        .execute(database)?;
+        .execute(database)
+        .await?;
     Ok(())
 }
 
 /// Enables or disables progression suggestions for the exercise.
-pub(super) fn set_progression(
+pub(super) async fn set_progression(
     database: &DatabasePool,
     category: u16,
     id: u16,
@@ -740,12 +741,13 @@ pub(super) fn set_progression(
     ExerciseRepository::update()
         .set(exercise::entity::columns::PROGRESSION, value.into())
         .where_(by_key(category, id))
-        .execute(database)?;
+        .execute(database)
+        .await?;
     Ok(())
 }
 
 /// Stores the rep range (e.g. `8-10-12`) and weight increment used to suggest progressions.
-pub(super) fn set_progression_parameters(
+pub(super) async fn set_progression_parameters(
     database: &DatabasePool,
     category: u16,
     id: u16,
@@ -756,7 +758,8 @@ pub(super) fn set_progression_parameters(
         .set(exercise::entity::columns::REPS, reps.into())
         .set(exercise::entity::columns::WEIGHT, weight.into())
         .where_(by_key(category, id))
-        .execute(database)?;
+        .execute(database)
+        .await?;
     Ok(())
 }
 
@@ -768,7 +771,7 @@ fn by_key(category: u16, id: u16) -> Where<Exercise> {
 }
 
 /// Highest load programmed for the exercise across workouts, as reps and weight.
-pub(super) fn progression_status(
+pub(super) async fn progression_status(
     database: &DatabasePool,
     category: u16,
     id: u16,
@@ -785,7 +788,8 @@ pub(super) fn progression_status(
         ]))
         .order_by(OrderBy::Desc(workout_step::entity::columns::WEIGHT))
         .order_by(OrderBy::Desc(workout_step::entity::columns::REPS))
-        .fetch_one(database)?
+        .fetch_one(database)
+        .await?
         .map(|r| ProgressionSuggestion {
             reps: r
                 .get_u16_nullable(workout_step::entity::columns::REPS.as_ref())

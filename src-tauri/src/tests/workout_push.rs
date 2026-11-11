@@ -18,9 +18,9 @@ const LINKED: &str = "linked";
 const LINKED_SENT: &str = "linked_sent";
 const USB_ONLY: &str = "usb_only";
 
-fn setup() -> DatabasePool {
-    let db = common::test_db();
-    db.run_in_transaction(|tx| {
+async fn setup() -> DatabasePool {
+    let db = common::test_db().await;
+    db.run_in_transaction(move |tx| {
         for name in ["a", "b"] {
             WorkoutRepository::insert()
                 .item(&mut Workout {
@@ -63,79 +63,90 @@ fn setup() -> DatabasePool {
         }
         Ok(())
     })
+    .await
     .unwrap();
     db
 }
 
-#[test]
-fn only_linked_devices_still_waiting_for_the_workout_are_returned() {
-    let db = setup();
+#[tokio::test]
+async fn only_linked_devices_still_waiting_for_the_workout_are_returned() {
+    let db = setup().await;
 
     let serials = db
-        .run_in_connection(|conn| Ok(pending_connect_devices(conn, "a")?))
+        .run_in_connection(move |conn| Ok(pending_connect_devices(conn, "a")?))
+        .await
         .unwrap();
 
     assert_eq!(serials, [LINKED]);
 }
 
-#[test]
-fn workout_without_entries_has_no_devices() {
-    let db = setup();
+#[tokio::test]
+async fn workout_without_entries_has_no_devices() {
+    let db = setup().await;
 
     let serials = db
-        .run_in_connection(|conn| Ok(pending_connect_devices(conn, "c")?))
+        .run_in_connection(move |conn| Ok(pending_connect_devices(conn, "c")?))
+        .await
         .unwrap();
 
     assert!(serials.is_empty());
 }
 
-fn connect_entry(db: &DatabasePool, workout: &str) -> Option<bool> {
+async fn connect_entry(db: &DatabasePool, workout: &str) -> Option<bool> {
     WorkoutDeviceRepository::select_by_id(db, workout, constants::CONNECT_DEVICE_SERIAL)
+        .await
         .unwrap()
         .map(|e| e.pending)
 }
 
-#[test]
-fn connect_pending_is_created_and_cleared() {
-    let db = setup();
+#[tokio::test]
+async fn connect_pending_is_created_and_cleared() {
+    let db = setup().await;
     let workouts = ["a".to_string(), "b".to_string()];
 
-    db.run_in_transaction(|tx| Ok(set_connect_pending(tx, &workouts, true)?))
+    let all = workouts.clone();
+    db.run_in_transaction(move |tx| Ok(set_connect_pending(tx, &all, true)?))
+        .await
         .unwrap();
-    assert_eq!(connect_entry(&db, "a"), Some(true));
-    assert_eq!(connect_entry(&db, "b"), Some(true));
+    assert_eq!(connect_entry(&db, "a").await, Some(true));
+    assert_eq!(connect_entry(&db, "b").await, Some(true));
 
-    db.run_in_transaction(|tx| Ok(set_connect_pending(tx, &workouts[..1], false)?))
+    db.run_in_transaction(move |tx| Ok(set_connect_pending(tx, &workouts[..1], false)?))
+        .await
         .unwrap();
-    assert_eq!(connect_entry(&db, "a"), Some(false));
-    assert_eq!(connect_entry(&db, "b"), Some(true));
+    assert_eq!(connect_entry(&db, "a").await, Some(false));
+    assert_eq!(connect_entry(&db, "b").await, Some(true));
 }
 
-#[test]
-fn connect_pending_is_not_a_linked_device() {
-    let db = setup();
+#[tokio::test]
+async fn connect_pending_is_not_a_linked_device() {
+    let db = setup().await;
 
-    db.run_in_transaction(|tx| Ok(set_connect_pending(tx, &["b".to_string()], true)?))
+    db.run_in_transaction(move |tx| Ok(set_connect_pending(tx, &["b".to_string()], true)?))
+        .await
         .unwrap();
     let serials = db
-        .run_in_connection(|conn| Ok(pending_connect_devices(conn, "b")?))
+        .run_in_connection(move |conn| Ok(pending_connect_devices(conn, "b")?))
+        .await
         .unwrap();
 
     assert_eq!(serials, [LINKED]);
 }
 
-#[test]
-fn only_workouts_pending_for_connect_are_listed() {
-    let db = setup();
+#[tokio::test]
+async fn only_workouts_pending_for_connect_are_listed() {
+    let db = setup().await;
 
-    db.run_in_transaction(|tx| {
+    db.run_in_transaction(move |tx| {
         set_connect_pending(tx, &["a".to_string()], false)?;
         set_connect_pending(tx, &["b".to_string()], true)?;
         Ok(())
     })
+    .await
     .unwrap();
     let pending = db
-        .run_in_connection(|conn| Ok(pending_connect_workouts(conn)?))
+        .run_in_connection(move |conn| Ok(pending_connect_workouts(conn)?))
+        .await
         .unwrap();
 
     // Workouts pending only for real devices are not listed

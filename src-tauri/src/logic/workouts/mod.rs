@@ -19,7 +19,7 @@ use crate::{
             send_enabled_workout_to_connect_devices,
         },
         notifications::show_notification,
-        print_to_pdf, report_error, run_blocking_conn, run_blocking_tx,
+        pool, print_to_pdf, report_error,
     },
     utils::translations::translate,
 };
@@ -30,7 +30,9 @@ pub async fn get_workout_list<R: Runtime>(
     settings: &SettingsLock,
 ) -> Result<Vec<WorkoutListItem>, String> {
     info!("Getting workouts list...");
-    let res = run_blocking_conn(app, move |_, conn| workout_list(conn)).await;
+    let res = pool(app)
+        .run_in_connection(move |conn| Ok(workout_list(conn)?))
+        .await;
     match res {
         Ok(l) => {
             info!("Retreived {} workouts", l.len());
@@ -52,7 +54,9 @@ pub async fn get_workout_details<R: Runtime>(
     name: &str,
 ) -> Result<WorkoutDetails, String> {
     let name = name.to_string();
-    let res = run_blocking_conn(app, move |_, conn| workout_details(conn, &name)).await;
+    let res = pool(app)
+        .run_in_connection(move |conn| Ok(workout_details(conn, &name)?))
+        .await;
 
     match res {
         Ok(l) => {
@@ -75,7 +79,8 @@ pub async fn set_workout_status<R: Runtime>(
 ) -> Result<(), String> {
     let name = workout;
     let workout = workout.to_string();
-    let res = run_blocking_tx(app, move |_, tx| set_workout_enabled(tx, &workout, status))
+    let res = pool(app)
+        .run_in_transaction(move |tx| Ok(set_workout_enabled(tx, &workout, status)?))
         .await
         .map_err(|e| e.to_string());
 
@@ -100,7 +105,9 @@ pub async fn save_workout<R: Runtime>(
 ) -> Result<(), String> {
     let name = workout.name.clone();
     let name_cl = workout.name.clone();
-    let res = run_blocking_tx(app, move |_, tx| store_workout(tx, &workout, edit)).await;
+    let res = pool(app)
+        .run_in_transaction(move |tx| Ok(store_workout(tx, &workout, edit)?))
+        .await;
 
     let lang = settings.read().unwrap().language;
     match res {
