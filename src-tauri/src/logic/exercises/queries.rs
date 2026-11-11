@@ -311,7 +311,7 @@ pub(super) fn progression_candidates() -> Where<Exercise> {
     let programmed = WorkoutStepRepository::select()
         .distinct(&[workout_step_cols::EX_CAT, workout_step_cols::EX_ID])
         .where_(Where::And(vec![
-            exercise_step(),
+            Where::Eq(workout_step_cols::KIND, StepType::Exercise.into()),
             Where::InSub(
                 workout_step_cols::WORKOUT,
                 WorkoutRepository::select()
@@ -417,7 +417,7 @@ pub(super) fn progression_suggestions_for<'a>(
             workout_step_cols::REPS,
         ])
         .where_(Where::And(vec![
-            exercise_step(),
+            Where::Eq(workout_step_cols::KIND, StepType::Exercise.into()),
             Where::NotNull(workout_step_cols::REPS),
             Where::InMultiple(
                 vec![workout_step_cols::EX_CAT, workout_step_cols::EX_ID],
@@ -492,11 +492,6 @@ fn suggestion_from_sets(exercise: &Exercise, sets: &[Set]) -> Option<Progression
         weight,
         reps: if exercise.unilateral { reps * 2 } else { reps },
     })
-}
-
-/// Only exercise steps progress: warm-ups and the like keep their own load.
-pub(super) fn exercise_step() -> Where<WorkoutStep> {
-    Where::Eq(workout_step_cols::KIND, StepType::Exercise.into())
 }
 
 /// Steps programmed below `suggestion`; steps already at or above it are never lowered.
@@ -690,7 +685,10 @@ pub(super) async fn set_unilateral(
 ) -> rusqlite_orm::errors::Result<()> {
     ExerciseRepository::update()
         .set(exercise_cols::UNILATERAL, value.into())
-        .where_(by_key(category, id))
+        .where_(Where::And(vec![
+            Where::Eq(exercise_cols::CATEGORY, category.into()),
+            Where::Eq(exercise_cols::ID, id.into()),
+        ]))
         .execute(database)
         .await?;
     Ok(())
@@ -705,7 +703,10 @@ pub(super) async fn set_progression(
 ) -> rusqlite_orm::errors::Result<()> {
     ExerciseRepository::update()
         .set(exercise_cols::PROGRESSION, value.into())
-        .where_(by_key(category, id))
+        .where_(Where::And(vec![
+            Where::Eq(exercise_cols::CATEGORY, category.into()),
+            Where::Eq(exercise_cols::ID, id.into()),
+        ]))
         .execute(database)
         .await?;
     Ok(())
@@ -722,17 +723,13 @@ pub(super) async fn set_progression_parameters(
     ExerciseRepository::update()
         .set(exercise_cols::REPS, reps.into())
         .set(exercise_cols::WEIGHT, weight.into())
-        .where_(by_key(category, id))
+        .where_(Where::And(vec![
+            Where::Eq(exercise_cols::CATEGORY, category.into()),
+            Where::Eq(exercise_cols::ID, id.into()),
+        ]))
         .execute(database)
         .await?;
     Ok(())
-}
-
-fn by_key(category: u16, id: u16) -> Where<Exercise> {
-    Where::And(vec![
-        Where::Eq(exercise_cols::CATEGORY, category.into()),
-        Where::Eq(exercise_cols::ID, id.into()),
-    ])
 }
 
 /// Highest load programmed for the exercise across workouts, as reps and weight.
@@ -746,7 +743,7 @@ pub(super) async fn progression_status(
         .where_(Where::And(vec![
             Where::Eq(workout_step_cols::EX_CAT, category.into()),
             Where::Eq(workout_step_cols::EX_ID, id.into()),
-            exercise_step(),
+            Where::Eq(workout_step_cols::KIND, StepType::Exercise.into()),
         ]))
         .order_by(OrderBy::Desc(workout_step_cols::WEIGHT))
         .order_by(OrderBy::Desc(workout_step_cols::REPS))
@@ -776,7 +773,7 @@ pub(super) fn apply_progression(
         .where_(Where::And(vec![
             Where::Eq(workout_step_cols::EX_CAT, category.into()),
             Where::Eq(workout_step_cols::EX_ID, id.into()),
-            exercise_step(),
+            Where::Eq(workout_step_cols::KIND, StepType::Exercise.into()),
             Where::NotNull(workout_step_cols::REPS),
             below_suggestion(suggestion),
         ]))
@@ -786,7 +783,7 @@ pub(super) fn apply_progression(
         .where_(Where::And(vec![
             Where::Eq(workout_step_cols::EX_CAT, category.into()),
             Where::Eq(workout_step_cols::EX_ID, id.into()),
-            exercise_step(),
+            Where::Eq(workout_step_cols::KIND, StepType::Exercise.into()),
             weight_below(suggestion.weight),
         ]))
         .execute_in(tx)?;
@@ -798,7 +795,7 @@ pub(super) fn apply_progression(
             .where_(Where::And(vec![
                 Where::Eq(workout_step_cols::EX_CAT, category.into()),
                 Where::Eq(workout_step_cols::EX_ID, id.into()),
-                exercise_step(),
+                Where::Eq(workout_step_cols::KIND, StepType::Exercise.into()),
             ]))
             .fetch_in(tx)?
             .iter()
@@ -813,7 +810,7 @@ pub(super) fn apply_progression(
                     .where_(Where::And(vec![
                         Where::Eq(workout_step_cols::EX_CAT, category.into()),
                         Where::Eq(workout_step_cols::EX_ID, id.into()),
-                        exercise_step(),
+                        Where::Eq(workout_step_cols::KIND, StepType::Exercise.into()),
                     ]))
                     .to_subquery(),
             ))
