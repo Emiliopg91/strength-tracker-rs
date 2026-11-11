@@ -28,22 +28,18 @@ pub async fn get_exercises<R: Runtime>(
     settings: &SettingsLock,
 ) -> Result<Vec<ExerciseListItem>, String> {
     info!("Getting exercises list...");
-    let res = pool(app)
+    pool(app)
         .run_in_connection(move |conn| Ok(exercise_list(conn)?))
-        .await;
-
-    match res {
-        Ok(l) => {
-            info!("Retreived {} exercises", l.len());
-            Ok(l)
-        }
-        Err(e) => Err(report_error(
-            e,
-            settings.read().unwrap().language,
-            "error_exercise_list",
-            "Error getting exercises list",
-        )),
-    }
+        .await
+        .inspect(|l| info!("Retreived {} exercises", l.len()))
+        .map_err(|e| {
+            report_error(
+                e,
+                settings,
+                "error_exercise_list",
+                "Error getting exercises list",
+            )
+        })
 }
 
 /// Returns the personal record and full per-session set history for one exercise.
@@ -57,21 +53,18 @@ pub async fn get_exercise_details<R: Runtime>(
         "Getting details for exercise with category {} and id {}...",
         category, id
     );
-    let res = pool(app)
+    pool(app)
         .run_in_connection(move |conn| Ok(fetch_exercise_details(conn, category, id, None)?))
-        .await;
-    match res {
-        Ok(l) => {
-            info!("Found details for exercise {} - {}", category, id);
-            Ok(l)
-        }
-        Err(e) => Err(report_error(
-            e,
-            settings.read().unwrap().language,
-            "error_exercise_details",
-            "Error getting exercise details",
-        )),
-    }
+        .await
+        .inspect(|_| info!("Found details for exercise {} - {}", category, id))
+        .map_err(|e| {
+            report_error(
+                e,
+                settings,
+                "error_exercise_details",
+                "Error getting exercise details",
+            )
+        })
 }
 
 pub async fn get_exercises_catalog<R: Runtime>(
@@ -90,20 +83,17 @@ pub async fn set_exercise_unilateral<R: Runtime>(
     id: u16,
     value: bool,
 ) -> Result<(), String> {
-    let res = set_unilateral(&pool(app), category, id, value).await;
-
-    match res {
-        Ok(l) => {
-            info!("Updated unilateral flag for exercise");
-            Ok(l)
-        }
-        Err(e) => Err(report_error(
-            e,
-            settings.read().unwrap().language,
-            "error_updating_exercise",
-            "Error updating unilateral flag for exercise",
-        )),
-    }
+    set_unilateral(&pool(app), category, id, value)
+        .await
+        .inspect(|_| info!("Updated unilateral flag for exercise"))
+        .map_err(|e| {
+            report_error(
+                e,
+                settings,
+                "error_updating_exercise",
+                "Error updating unilateral flag for exercise",
+            )
+        })
 }
 
 pub async fn set_exercise_progression<R: Runtime>(
@@ -113,20 +103,17 @@ pub async fn set_exercise_progression<R: Runtime>(
     id: u16,
     value: bool,
 ) -> Result<(), String> {
-    let res = set_progression(&pool(app), category, id, value).await;
-
-    match res {
-        Ok(l) => {
-            info!("Updated progression flag for exercise");
-            Ok(l)
-        }
-        Err(e) => Err(report_error(
-            e,
-            settings.read().unwrap().language,
-            "error_updating_exercise",
-            "Error updating progression flag for exercise",
-        )),
-    }
+    set_progression(&pool(app), category, id, value)
+        .await
+        .inspect(|_| info!("Updated progression flag for exercise"))
+        .map_err(|e| {
+            report_error(
+                e,
+                settings,
+                "error_updating_exercise",
+                "Error updating progression flag for exercise",
+            )
+        })
 }
 
 pub async fn set_exercise_progression_parameters<R: Runtime>(
@@ -138,20 +125,17 @@ pub async fn set_exercise_progression_parameters<R: Runtime>(
     weight: f32,
 ) -> Result<(), String> {
     let reps = reps.to_string();
-    let res = set_progression_parameters(&pool(app), category, id, reps, weight).await;
-
-    match res {
-        Ok(l) => {
-            info!("Updated rep ranges for exercise");
-            Ok(l)
-        }
-        Err(e) => Err(report_error(
-            e,
-            settings.read().unwrap().language,
-            "error_updating_exercise",
-            "Error updating rep ranges for exercise",
-        )),
-    }
+    set_progression_parameters(&pool(app), category, id, reps, weight)
+        .await
+        .inspect(|_| info!("Updated rep ranges for exercise"))
+        .map_err(|e| {
+            report_error(
+                e,
+                settings,
+                "error_updating_exercise",
+                "Error updating rep ranges for exercise",
+            )
+        })
 }
 
 pub async fn get_progression_status<R: Runtime>(
@@ -188,7 +172,6 @@ pub async fn apply_progression_suggestion<R: Runtime>(
         .await
         .map_err(|e| e.to_string());
 
-    let lang = settings.read().unwrap().language;
     match res {
         Ok((modified, workouts)) => {
             info!("Applied suggested progression");
@@ -200,7 +183,7 @@ pub async fn apply_progression_suggestion<R: Runtime>(
         }
         Err(e) => Err(report_error(
             e,
-            lang,
+            settings,
             "error_applying_progression",
             "Error applying progression",
         )),

@@ -7,12 +7,14 @@ use rusqlite_orm::{
 };
 
 use crate::dao::{
-    device::{self, Device, DeviceRepository},
-    exercise::{self, ExerciseRepository},
-    session::{self, SessionRepository},
-    workout::{self, Workout, WorkoutRepository},
-    workout_device::{self, WorkoutDevice, WorkoutDeviceRepository},
-    workout_step::{self, WorkoutStepRepository},
+    device::{Device, DeviceRepository, entity::columns as device_cols},
+    exercise::{ExerciseRepository, entity::columns as exercise_cols},
+    session::{SessionRepository, entity::columns as session_cols},
+    workout::{Workout, WorkoutRepository, entity::columns as workout_cols},
+    workout_device::{
+        WorkoutDevice, WorkoutDeviceRepository, entity::columns as workout_device_cols,
+    },
+    workout_step::{WorkoutStepRepository, entity::columns as workout_step_cols},
 };
 
 /// Devices linked to the Connect account where `workout` is still pending.
@@ -21,21 +23,21 @@ pub(crate) fn pending_connect_devices(
     workout: &str,
 ) -> rusqlite_orm::errors::Result<Vec<String>> {
     Ok(WorkoutDeviceRepository::select()
-        .columns(&[workout_device::entity::columns::DEVICE])
+        .columns(&[workout_device_cols::DEVICE])
         .where_(Where::And(vec![
-            Where::Eq(workout_device::entity::columns::WORKOUT, workout.into()),
-            Where::Eq(workout_device::entity::columns::PENDING, true.into()),
+            Where::Eq(workout_device_cols::WORKOUT, workout.into()),
+            Where::Eq(workout_device_cols::PENDING, true.into()),
             Where::InSub(
-                workout_device::entity::columns::DEVICE,
+                workout_device_cols::DEVICE,
                 DeviceRepository::select()
-                    .distinct(&[device::entity::columns::SERIAL])
-                    .where_(Where::Eq(device::entity::columns::CONNECT, true.into()))
+                    .distinct(&[device_cols::SERIAL])
+                    .where_(Where::Eq(device_cols::CONNECT, true.into()))
                     .to_subquery(),
             ),
         ]))
         .fetch_in(conn)?
         .iter()
-        .map(|r| r.get_text(workout_device::entity::columns::DEVICE.as_ref()))
+        .map(|r| r.get_text(workout_device_cols::DEVICE.as_ref()))
         .collect())
 }
 
@@ -47,11 +49,8 @@ pub(super) fn enrol_usb_device(
     let _: () = if let Some(device) = DeviceRepository::select_by_id_in(tx, &device.serial)? {
         if !device.usb {
             DeviceRepository::update()
-                .set(device::entity::columns::USB, true.into())
-                .where_(Where::Eq(
-                    device::entity::columns::SERIAL,
-                    device.serial.clone().into(),
-                ))
+                .set(device_cols::USB, true.into())
+                .where_(Where::Eq(device_cols::SERIAL, device.serial.clone().into()))
                 .execute_in(tx)
                 .map(|_| ())?
         }
@@ -70,14 +69,8 @@ pub(super) fn store_workout_steps(
     workout: &mut Workout,
 ) -> rusqlite_orm::errors::Result<()> {
     WorkoutRepository::update()
-        .set(
-            workout::entity::columns::NOTES,
-            workout.notes.clone().into(),
-        )
-        .where_(Where::Eq(
-            workout::entity::columns::NAME,
-            workout.name.clone().into(),
-        ))
+        .set(workout_cols::NOTES, workout.notes.clone().into())
+        .where_(Where::Eq(workout_cols::NAME, workout.name.clone().into()))
         .execute_in(tx)?;
 
     let mut insert = WorkoutStepRepository::insert();
@@ -119,10 +112,7 @@ pub(super) fn workout_for_device(
         let pks: HashSet<(u16, u16)> = pending.iter().map(|(_, pk)| *pk).collect();
         let notes = ExerciseRepository::select()
             .where_(Where::InMultiple(
-                vec![
-                    exercise::entity::columns::CATEGORY,
-                    exercise::entity::columns::ID,
-                ],
+                vec![exercise_cols::CATEGORY, exercise_cols::ID],
                 pks.iter()
                     .map(|(cat, id)| vec![(*cat).into(), (*id).into()])
                     .collect(),
@@ -194,24 +184,24 @@ pub(super) async fn pending_queue(
     enabled: bool,
 ) -> rusqlite_orm::errors::Result<Vec<String>> {
     WorkoutDeviceRepository::select()
-        .columns(&[workout_device::entity::columns::WORKOUT])
+        .columns(&[workout_device_cols::WORKOUT])
         .where_(Where::And(vec![
             Where::InSub(
-                workout_device::entity::columns::WORKOUT,
+                workout_device_cols::WORKOUT,
                 WorkoutRepository::select()
-                    .distinct(&[workout::entity::columns::NAME])
-                    .where_(Where::Eq(workout::entity::columns::ENABLED, enabled.into()))
+                    .distinct(&[workout_cols::NAME])
+                    .where_(Where::Eq(workout_cols::ENABLED, enabled.into()))
                     .to_subquery(),
             ),
-            Where::Eq(workout_device::entity::columns::DEVICE, serial.into()),
-            Where::Eq(workout_device::entity::columns::PENDING, true.into()),
+            Where::Eq(workout_device_cols::DEVICE, serial.into()),
+            Where::Eq(workout_device_cols::PENDING, true.into()),
         ]))
-        .order_by(OrderBy::Asc(workout_device::entity::columns::WORKOUT))
+        .order_by(OrderBy::Asc(workout_device_cols::WORKOUT))
         .fetch(db)
         .await
         .map(|rows| {
             rows.iter()
-                .map(|r| r.get_text(workout_device::entity::columns::WORKOUT.as_ref()))
+                .map(|r| r.get_text(workout_device_cols::WORKOUT.as_ref()))
                 .collect()
         })
 }
@@ -223,10 +213,10 @@ pub(super) async fn clear_pending(
     device: &str,
 ) -> rusqlite_orm::errors::Result<usize> {
     WorkoutDeviceRepository::update()
-        .set(workout_device::entity::columns::PENDING, false.into())
+        .set(workout_device_cols::PENDING, false.into())
         .where_(Where::And(vec![
-            Where::Eq(workout_device::entity::columns::WORKOUT, workout.into()),
-            Where::Eq(workout_device::entity::columns::DEVICE, device.into()),
+            Where::Eq(workout_device_cols::WORKOUT, workout.into()),
+            Where::Eq(workout_device_cols::DEVICE, device.into()),
         ]))
         .execute(db)
         .await
@@ -238,25 +228,25 @@ pub(super) async fn workouts_without_steps(
     serial: &str,
 ) -> rusqlite_orm::errors::Result<Vec<String>> {
     Ok(WorkoutRepository::select()
-        .columns(&[workout::entity::columns::NAME])
+        .columns(&[workout_cols::NAME])
         .where_(Where::And(vec![
             Where::NotInSub(
-                workout::entity::columns::NAME,
+                workout_cols::NAME,
                 WorkoutStepRepository::select()
-                    .distinct(&[workout_step::entity::columns::WORKOUT])
+                    .distinct(&[workout_step_cols::WORKOUT])
                     .to_subquery(),
             ),
             Where::InSub(
-                workout::entity::columns::NAME,
+                workout_cols::NAME,
                 SessionRepository::select()
-                    .distinct(&[session::entity::columns::WORKOUT])
-                    .where_(Where::Eq(session::entity::columns::DEVICE, serial.into()))
+                    .distinct(&[session_cols::WORKOUT])
+                    .where_(Where::Eq(session_cols::DEVICE, serial.into()))
                     .to_subquery(),
             ),
         ]))
         .fetch(db)
         .await?
         .iter()
-        .map(|r| r.get_text(workout::entity::columns::NAME.as_ref()))
+        .map(|r| r.get_text(workout_cols::NAME.as_ref()))
         .collect())
 }

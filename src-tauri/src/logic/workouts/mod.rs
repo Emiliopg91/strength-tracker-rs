@@ -30,21 +30,18 @@ pub async fn get_workout_list<R: Runtime>(
     settings: &SettingsLock,
 ) -> Result<Vec<WorkoutListItem>, String> {
     info!("Getting workouts list...");
-    let res = pool(app)
+    pool(app)
         .run_in_connection(move |conn| Ok(workout_list(conn)?))
-        .await;
-    match res {
-        Ok(l) => {
-            info!("Retreived {} workouts", l.len());
-            Ok(l)
-        }
-        Err(e) => Err(report_error(
-            e,
-            settings.read().unwrap().language,
-            "error_workout_list",
-            "Error getting workouts list",
-        )),
-    }
+        .await
+        .inspect(|l| info!("Retreived {} workouts", l.len()))
+        .map_err(|e| {
+            report_error(
+                e,
+                settings,
+                "error_workout_list",
+                "Error getting workouts list",
+            )
+        })
 }
 
 /// Returns every session for one workout name with per-session volume and session-over-session volume diff.
@@ -54,22 +51,18 @@ pub async fn get_workout_details<R: Runtime>(
     name: &str,
 ) -> Result<WorkoutDetails, String> {
     let name = name.to_string();
-    let res = pool(app)
+    pool(app)
         .run_in_connection(move |conn| Ok(workout_details(conn, &name)?))
-        .await;
-
-    match res {
-        Ok(l) => {
-            info!("Found details for workout {}", l.name);
-            Ok(l)
-        }
-        Err(e) => Err(report_error(
-            e,
-            settings.read().unwrap().language,
-            "error_workout_details",
-            "Error getting workout details",
-        )),
-    }
+        .await
+        .inspect(|l| info!("Found details for workout {}", l.name))
+        .map_err(|e| {
+            report_error(
+                e,
+                settings,
+                "error_workout_details",
+                "Error getting workout details",
+            )
+        })
 }
 
 pub async fn set_workout_status<R: Runtime>(
@@ -126,7 +119,7 @@ pub async fn save_workout<R: Runtime>(
         }
         Err(e) => Err(report_error(
             e,
-            lang,
+            settings,
             "error_workout_save",
             "Error saving workout",
         )),

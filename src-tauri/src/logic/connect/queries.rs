@@ -8,13 +8,17 @@ use rusqlite_orm::{
 
 use crate::{
     dao::{
-        body_metric::{self, BodyMetric, BodyMetricRepository},
-        device::{self, Device, DeviceRepository},
-        exercise::{self, Exercise, ExerciseRepository},
-        exercise_category::{self, ExerciseCategory, ExerciseCategoryRepository},
-        session::{self, SessionRepository},
+        body_metric::{BodyMetric, BodyMetricRepository, entity::columns as body_metric_cols},
+        device::{Device, DeviceRepository, entity::columns as device_cols},
+        exercise::{Exercise, ExerciseRepository, entity::columns as exercise_cols},
+        exercise_category::{
+            ExerciseCategory, ExerciseCategoryRepository, entity::columns as exercise_category_cols,
+        },
+        session::{SessionRepository, entity::columns as session_cols},
         workout::{Workout, WorkoutRepository},
-        workout_device::{self, WorkoutDevice, WorkoutDeviceRepository},
+        workout_device::{
+            WorkoutDevice, WorkoutDeviceRepository, entity::columns as workout_device_cols,
+        },
         workout_step::WorkoutStep,
     },
     dto::{connect::ConnectUpdateSets, devices::DeviceListItem, sessions::SessionStepDto},
@@ -28,12 +32,12 @@ pub(crate) fn pending_connect_workouts(
     Ok(WorkoutDeviceRepository::select()
         .where_(Where::And(vec![
             Where::Eq(
-                workout_device::entity::columns::DEVICE,
+                workout_device_cols::DEVICE,
                 constants::CONNECT_DEVICE_SERIAL.into(),
             ),
-            Where::Eq(workout_device::entity::columns::PENDING, true.into()),
+            Where::Eq(workout_device_cols::PENDING, true.into()),
         ]))
-        .order_by(OrderBy::Asc(workout_device::entity::columns::WORKOUT))
+        .order_by(OrderBy::Asc(workout_device_cols::WORKOUT))
         .fetch_in(conn)?
         .into_iter()
         .map(|e| e.workout)
@@ -91,10 +95,7 @@ pub(super) fn fetch_exercises_with_category(
 ) -> rusqlite_orm::errors::Result<HashMap<(u16, u16), Exercise>> {
     let mut exercises: HashMap<(u16, u16), Exercise> = ExerciseRepository::select()
         .where_(Where::InMultiple(
-            vec![
-                exercise::entity::columns::CATEGORY,
-                exercise::entity::columns::ID,
-            ],
+            vec![exercise_cols::CATEGORY, exercise_cols::ID],
             keys.iter()
                 .map(|(cat, id)| vec![(*cat).into(), (*id).into()])
                 .collect(),
@@ -107,7 +108,7 @@ pub(super) fn fetch_exercises_with_category(
     let category_ids: BTreeSet<u16> = keys.iter().map(|(cat, _)| *cat).collect();
     let categories: HashMap<u16, ExerciseCategory> = ExerciseCategoryRepository::select()
         .where_(Where::In(
-            exercise_category::entity::columns::ID,
+            exercise_category_cols::ID,
             category_ids.iter().map(|id| (*id).into()).collect(),
         ))
         .fetch_in(conn)?
@@ -142,11 +143,11 @@ pub(super) fn session_sets_for_connect(
     sets: &[SessionStepDto],
 ) -> rusqlite_orm::errors::Result<Option<(String, Vec<ConnectUpdateSets>)>> {
     let Some(connect_id) = SessionRepository::select()
-        .columns(&[session::entity::columns::CONNECT_ID])
-        .where_(Where::Eq(session::entity::columns::DATE, timestamp.into()))
+        .columns(&[session_cols::CONNECT_ID])
+        .where_(Where::Eq(session_cols::DATE, timestamp.into()))
         .fetch_in(conn)?
         .first()
-        .and_then(|row| row.get_text_nullable(session::entity::columns::CONNECT_ID.as_ref()))
+        .and_then(|row| row.get_text_nullable(session_cols::CONNECT_ID.as_ref()))
     else {
         return Ok(None);
     };
@@ -194,16 +195,10 @@ pub(super) fn sync_connect_devices(
                     || db.strength_workout != dao.strength_workout =>
             {
                 DeviceRepository::update()
-                    .set(device::entity::columns::CONNECT, true.into())
-                    .set(device::entity::columns::MODEL, dao.model.clone().into())
-                    .set(
-                        device::entity::columns::STRENGTH_WORKOUT,
-                        dao.strength_workout.into(),
-                    )
-                    .where_(Where::Eq(
-                        device::entity::columns::SERIAL,
-                        dao.serial.clone().into(),
-                    ))
+                    .set(device_cols::CONNECT, true.into())
+                    .set(device_cols::MODEL, dao.model.clone().into())
+                    .set(device_cols::STRENGTH_WORKOUT, dao.strength_workout.into())
+                    .where_(Where::Eq(device_cols::SERIAL, dao.serial.clone().into()))
                     .execute_in(tx)?;
             }
             Some(_) => {}
@@ -213,7 +208,7 @@ pub(super) fn sync_connect_devices(
     }
 
     let removed: Vec<Device> = DeviceRepository::select()
-        .where_(Where::Eq(device::entity::columns::CONNECT, true.into()))
+        .where_(Where::Eq(device_cols::CONNECT, true.into()))
         .fetch_in(tx)?
         .into_iter()
         .filter(|db| !listed.iter().any(|d| d.serial == db.serial))
@@ -221,9 +216,9 @@ pub(super) fn sync_connect_devices(
 
     if !removed.is_empty() {
         DeviceRepository::update()
-            .set(device::entity::columns::CONNECT, false.into())
+            .set(device_cols::CONNECT, false.into())
             .where_(Where::In(
-                device::entity::columns::SERIAL,
+                device_cols::SERIAL,
                 removed.iter().map(|d| d.serial.clone().into()).collect(),
             ))
             .execute_in(tx)?;
@@ -238,7 +233,7 @@ pub(super) async fn connect_import_state(
 ) -> rusqlite_orm::errors::Result<(Device, BTreeSet<u32>)> {
     let device = DeviceRepository::select()
         .where_(Where::Eq(
-            device::entity::columns::SERIAL,
+            device_cols::SERIAL,
             constants::CONNECT_DEVICE_SERIAL.into(),
         ))
         .fetch_one(database)
@@ -246,11 +241,11 @@ pub(super) async fn connect_import_state(
         .unwrap();
 
     let existing: BTreeSet<u32> = SessionRepository::select()
-        .columns(&[session::entity::columns::DATE])
+        .columns(&[session_cols::DATE])
         .fetch(database)
         .await?
         .iter()
-        .map(|row| row.get_u32(session::entity::columns::DATE.as_ref()))
+        .map(|row| row.get_u32(session_cols::DATE.as_ref()))
         .collect();
 
     Ok((device, existing))
@@ -261,12 +256,12 @@ pub(super) async fn body_metric_dates(
     database: &DatabasePool,
 ) -> rusqlite_orm::errors::Result<Vec<u32>> {
     Ok(BodyMetricRepository::select()
-        .columns(&[body_metric::entity::columns::DATE])
-        .order_by(OrderBy::Desc(body_metric::entity::columns::DATE))
+        .columns(&[body_metric_cols::DATE])
+        .order_by(OrderBy::Desc(body_metric_cols::DATE))
         .fetch(database)
         .await?
         .iter()
-        .map(|row| row.get_u32(session::entity::columns::DATE.as_ref()))
+        .map(|row| row.get_u32(session_cols::DATE.as_ref()))
         .collect())
 }
 

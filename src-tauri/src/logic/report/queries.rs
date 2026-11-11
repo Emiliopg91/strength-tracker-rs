@@ -6,7 +6,7 @@ use rusqlite_orm::{
 };
 
 use crate::{
-    dao::session::{self, SessionRepository},
+    dao::session::{SessionRepository, entity::columns as session_cols},
     dto::report::ReportData,
     logic::{
         body_metrics::queries::fetch_body_measures, exercises::queries::exercise_details,
@@ -26,20 +26,17 @@ pub(super) fn report_data(
     to: u32,
 ) -> rusqlite_orm::errors::Result<ReportData> {
     let timestamps: Vec<u32> = SessionRepository::select()
-        .columns(&[session::entity::columns::DATE])
+        .columns(&[session_cols::DATE])
         .where_(Where::And(vec![
-            Where::Gte(session::entity::columns::DATE, from.into()),
-            Where::Lte(session::entity::columns::DATE, to.into()),
-            Where::Eq(session::entity::columns::SPORT, STRENGTH_SPORT.into()),
-            Where::Eq(
-                session::entity::columns::SUB_SPORT,
-                STRENGTH_SUB_SPORT.into(),
-            ),
+            Where::Gte(session_cols::DATE, from.into()),
+            Where::Lte(session_cols::DATE, to.into()),
+            Where::Eq(session_cols::SPORT, STRENGTH_SPORT.into()),
+            Where::Eq(session_cols::SUB_SPORT, STRENGTH_SUB_SPORT.into()),
         ]))
-        .order_by(OrderBy::Asc(session::entity::columns::DATE))
+        .order_by(OrderBy::Asc(session_cols::DATE))
         .fetch_in(conn)?
         .iter()
-        .map(|row| row.get_u32(session::entity::columns::DATE.as_ref()))
+        .map(|row| row.get_u32(session_cols::DATE.as_ref()))
         .collect();
     let session_details = fetch_sessions_details(conn, &timestamps, false, false)?;
 

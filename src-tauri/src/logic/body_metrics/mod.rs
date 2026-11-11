@@ -22,22 +22,18 @@ pub async fn get_body_measures<R: Runtime>(
 ) -> Result<Vec<BodyMetricListItem>, String> {
     info!("Getting body measures list...");
 
-    let res = pool(app)
+    pool(app)
         .run_in_connection(move |conn| Ok(fetch_body_measures(conn, None)?))
-        .await;
-
-    match res {
-        Ok(res) => {
-            info!("Retrieved {} measures", res.len());
-            Ok(res)
-        }
-        Err(e) => Err(report_error(
-            e,
-            settings.read().unwrap().language,
-            "error_body_measures_list",
-            "Error getting measures list",
-        )),
-    }
+        .await
+        .inspect(|res| info!("Retrieved {} measures", res.len()))
+        .map_err(|e| {
+            report_error(
+                e,
+                settings,
+                "error_body_measures_list",
+                "Error getting measures list",
+            )
+        })
 }
 
 /// Inserts a new body measurement entry.
@@ -57,7 +53,7 @@ pub async fn add_body_measures<R: Runtime>(
         }
         Err(e) => Err(report_error(
             e,
-            settings.read().unwrap().language,
+            settings,
             "error_adding_body_measures",
             "Error adding measures",
         )),
@@ -85,7 +81,7 @@ pub async fn delete_body_metric<R: Runtime>(
         }
         Err(e) => Err(report_error(
             e,
-            lang,
+            settings,
             "error_deleting_body_measures",
             "Error deleting measures",
         )),

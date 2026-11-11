@@ -42,24 +42,15 @@ pub async fn upload_to_cloud(
     }
     .await;
 
-    match res {
-        Ok(l) => {
-            info!("File uploaded succesfully");
-            show_notification(NotificationDefinition {
-                title: translate("upload_succesful", lang),
-                body: "".to_string(),
-                kind: NotificationKind::Temporal,
-            });
-
-            Ok(l)
-        }
-        Err(e) => Err(report_error(
-            e,
-            lang,
-            "upload_error",
-            "Error uploading file",
-        )),
-    }
+    res.inspect(|_| {
+        info!("File uploaded succesfully");
+        show_notification(NotificationDefinition {
+            title: translate("upload_succesful", lang),
+            body: "".to_string(),
+            kind: NotificationKind::Temporal,
+        });
+    })
+    .map_err(|e| report_error(e, settings, "upload_error", "Error uploading file"))
 }
 
 /// Asks where to save the whole database as a JSON file, writes it there and notifies on success/failure.
@@ -116,7 +107,7 @@ pub async fn export_database<R: Runtime>(
         }
         Err(e) => Err(report_error(
             e,
-            lang,
+            settings,
             "error_on_export",
             "Error exporting database",
         )),

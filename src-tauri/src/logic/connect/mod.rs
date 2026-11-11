@@ -78,7 +78,7 @@ pub async fn import_from_connect<R: Runtime>(
         }
         Err(e) => Err(report_error(
             e,
-            lang,
+            settings,
             "error_import_sessions",
             "Error importing sessions",
         )),
@@ -90,8 +90,6 @@ pub async fn import_weight_from_connect<R: Runtime>(
     settings: &SettingsLock,
     connect: &ConnectLock,
 ) -> Result<usize, String> {
-    let lang = settings.read().unwrap().language;
-
     let res: Result<usize, String> = async {
         let existing = body_metric_dates(&pool(app))
             .await
@@ -121,7 +119,7 @@ pub async fn import_weight_from_connect<R: Runtime>(
         }
         Err(e) => Err(report_error(
             e,
-            lang,
+            settings,
             "error_adding_body_measures",
             "Error adding measures",
         )),
@@ -190,7 +188,7 @@ pub async fn send_to_connect<R: Runtime>(
         }
         Err(e) => Err(report_error(
             e,
-            lang,
+            settings,
             "error_workout_send",
             "Error sending workout to device",
         )),

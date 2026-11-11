@@ -29,7 +29,7 @@ use crate::{
     dto::notifications::{NotificationDefinition, NotificationKind},
     fit::FitFile,
     logic::notifications::show_notification,
-    utils::translations::{Languages, translate},
+    utils::translations::translate,
 };
 
 /// Logs `e` (prefixed by `log_msg`), fires a persistent desktop notification titled by the
@@ -37,13 +37,13 @@ use crate::{
 /// `Result<T, String>`.
 pub fn report_error<E: std::fmt::Display>(
     e: E,
-    lang: Languages,
+    settings: &SettingsLock,
     error_key: &str,
     log_msg: &str,
 ) -> String {
     error!("{}: {}", log_msg, e);
     show_notification(NotificationDefinition {
-        title: translate(error_key, lang),
+        title: translate(error_key, settings.read().unwrap().language),
         body: e.to_string(),
         kind: NotificationKind::Persistant,
     });

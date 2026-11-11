@@ -25,13 +25,12 @@ pub(super) async fn send_workout_connect<R: Runtime>(
     settings: &SettingsLock,
     workout: &str,
 ) -> Result<(), String> {
-    let lang = settings.read().unwrap().language;
     let res = upload_workout_connect(app, connect, settings, workout).await;
     mark_connect_pending(app, &[workout.to_string()], res.is_err()).await;
     res.map_err(|e| {
         report_error(
             format!("{workout}: {e}"),
-            lang,
+            settings,
             "error_workout_send_connect",
             "Error sending workout to Garmin Connect",
         )

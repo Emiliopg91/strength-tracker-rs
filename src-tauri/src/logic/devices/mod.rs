@@ -99,7 +99,7 @@ pub async fn send_to_device<R: Runtime>(
         }
         Err(e) => Err(report_error(
             e,
-            lang,
+            settings,
             "error_workout_send",
             "Error sending workout to device",
         )),
@@ -157,7 +157,7 @@ pub async fn import_from_device<R: Runtime>(
         }
         Err(e) => Err(report_error(
             e,
-            lang,
+            &app.state::<SettingsLock>(),
             "error_import_sessions",
             "Error importing sessions",
         )),

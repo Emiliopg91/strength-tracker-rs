@@ -82,83 +82,46 @@ pub async fn update_settings_value<R: Runtime>(
     let name = name.to_string();
     let value = value.to_string();
 
-    let lang = app.state::<SettingsLock>().read().unwrap().language;
-
     // Installed before persisting, so a cancelled password prompt leaves the setting untouched
     if name == ON_DEVICE_CONNECT
         && let Err(e) = install_udev_rules(app, value == "true").await
     {
         return Err(report_error(
             e,
-            lang,
+            &app.state::<SettingsLock>(),
             "error_update_settings",
             "Error updating settings",
         ));
     }
 
     let res: Result<Languages, String> = async {
-        let database = pool(app);
         let settings = app.state::<SettingsLock>();
+        let flag = value == "true";
+        let mut updated = settings.read().unwrap().clone();
         match name.as_str() {
-            DISTANCE_UNIT => {
-                let value = value.as_str().try_into()?;
-                crate::dao::settings::Settings::set_distance_unit(&database, &value)
-                    .await
-                    .map_err(|e| e.to_string())?;
-                settings.write().unwrap().distance_unit = value;
-            }
-            START_ON_BOOT => {
-                let value = value == "true";
-                crate::dao::settings::Settings::set_start_on_boot(&database, value)
-                    .await
-                    .map_err(|e| e.to_string())?;
-                if value {
-                    app.autolaunch().enable()
-                } else {
-                    app.autolaunch().disable()
-                }
-                .map_err(|e| e.to_string())?;
-                settings.write().unwrap().start_boot = value;
-            }
-            START_INTO_TRAY => {
-                let value = value == "true";
-                crate::dao::settings::Settings::set_start_into_tray(&database, value)
-                    .await
-                    .map_err(|e| e.to_string())?;
-                settings.write().unwrap().start_into_tray = value;
-            }
-            CLOSE_TO_TRAY => {
-                let value = value == "true";
-                crate::dao::settings::Settings::set_close_to_tray(&database, value)
-                    .await
-                    .map_err(|e| e.to_string())?;
-                settings.write().unwrap().close_to_tray = value;
-            }
-            WEIGHT_UNIT => {
-                let value = value.as_str().try_into()?;
-                crate::dao::settings::Settings::set_weight_unit(&database, &value)
-                    .await
-                    .map_err(|e| e.to_string())?;
-                settings.write().unwrap().weight_unit = value;
-            }
-            LANGUAGE => {
-                let value = Languages::from_name(&value);
-                crate::dao::settings::Settings::set_language(&database, &value)
-                    .await
-                    .map_err(|e| e.to_string())?;
-                settings.write().unwrap().language = value;
-            }
-            ON_DEVICE_CONNECT => {
-                let value = value == "true";
-                crate::dao::settings::Settings::set_on_device_connect(&database, value)
-                    .await
-                    .map_err(|e| e.to_string())?;
-                settings.write().unwrap().on_device_connect = value;
-            }
+            DISTANCE_UNIT => updated.distance_unit = value.as_str().try_into()?,
+            WEIGHT_UNIT => updated.weight_unit = value.as_str().try_into()?,
+            LANGUAGE => updated.language = Languages::from_name(&value),
+            START_ON_BOOT => updated.start_boot = flag,
+            START_INTO_TRAY => updated.start_into_tray = flag,
+            CLOSE_TO_TRAY => updated.close_to_tray = flag,
+            ON_DEVICE_CONNECT => updated.on_device_connect = flag,
             _ => unreachable!(),
         }
+        updated.save(&pool(app)).await.map_err(|e| e.to_string())?;
 
-        Ok(settings.read().unwrap().language)
+        if name == START_ON_BOOT {
+            if flag {
+                app.autolaunch().enable()
+            } else {
+                app.autolaunch().disable()
+            }
+            .map_err(|e| e.to_string())?;
+        }
+
+        let lang = updated.language;
+        *settings.write().unwrap() = updated;
+        Ok(lang)
     }
     .await;
 
@@ -173,7 +136,7 @@ pub async fn update_settings_value<R: Runtime>(
         }
         Err(e) => Err(report_error(
             e,
-            lang,
+            &app.state::<SettingsLock>(),
             "error_update_settings",
             "Error updating settings",
         )),

@@ -36,22 +36,18 @@ pub async fn get_sessions<R: Runtime>(
     limit: Option<i32>,
 ) -> Result<Vec<SessionListItem>, String> {
     info!("Getting sessions list...");
-    let res = pool(app)
+    pool(app)
         .run_in_connection(move |conn| Ok(fetch_sessions(conn, limit, None, None, None)?))
-        .await;
-
-    match res {
-        Ok(l) => {
-            info!("Retreived {} sessions", l.len());
-            Ok(l)
-        }
-        Err(e) => Err(report_error(
-            e,
-            settings.read().unwrap().language,
-            "error_session_list",
-            "Error getting sessions list",
-        )),
-    }
+        .await
+        .inspect(|l| info!("Retreived {} sessions", l.len()))
+        .map_err(|e| {
+            report_error(
+                e,
+                settings,
+                "error_session_list",
+                "Error getting sessions list",
+            )
+        })
 }
 
 /// Returns full details for one session (series grouped by exercise, heart rate, GPS, speeds, device).
@@ -86,7 +82,7 @@ pub async fn get_session_details<R: Runtime>(
         }
         Err(e) => Err(report_error(
             e,
-            settings.read().unwrap().language,
+            settings,
             "error_session_details",
             "Error getting session details",
         )),
@@ -138,7 +134,7 @@ pub async fn download_session<R: Runtime>(
         }
         Err(e) => Err(report_error(
             e,
-            lang,
+            settings,
             "error_session_download",
             "Error downloading session",
         )),
@@ -193,7 +189,7 @@ pub async fn save_session_changes<R: Runtime>(
         }
         Err(e) => Err(report_error(
             e,
-            lang,
+            settings,
             "error_update_session",
             "Error updating session",
         )),

@@ -8,12 +8,12 @@ use tauri_plugin_log::log::info;
 
 use crate::{
     dao::{
-        exercise::{self, ExerciseRepository},
-        session::{self, SessionRepository, entity},
-        session_step::{self, SessionStepRepository},
-        workout::{self, Workout, WorkoutRepository},
-        workout_device::{self, WorkoutDeviceRepository},
-        workout_step::{self, StepType, WorkoutStepRepository},
+        exercise::{ExerciseRepository, entity::columns as exercise_cols},
+        session::{SessionRepository, entity::columns as session_cols},
+        session_step::{SessionStepRepository, entity::columns as session_step_cols},
+        workout::{Workout, WorkoutRepository, entity::columns as workout_cols},
+        workout_device::{WorkoutDeviceRepository, entity::columns as workout_device_cols},
+        workout_step::{StepType, WorkoutStepRepository, entity::columns as workout_step_cols},
     },
     dto::workouts::{WorkoutDetails, WorkoutListItem, WorkoutSession},
     logic::exercises::queries::fetch_exercises_muscles,
@@ -31,13 +31,13 @@ pub(super) fn workout_list(
 
     let sessions = SessionRepository::select()
         .columns(&[
-            entity::columns::NAME,
-            entity::columns::DATE,
-            entity::columns::TOTAL_ELAPSED_TIME,
-            entity::columns::TRAINING_LOAD,
+            session_cols::NAME,
+            session_cols::DATE,
+            session_cols::TOTAL_ELAPSED_TIME,
+            session_cols::TRAINING_LOAD,
         ])
-        .where_(Where::NotNull(session::entity::columns::WORKOUT))
-        .order_by(OrderBy::Desc(entity::columns::DATE))
+        .where_(Where::NotNull(session_cols::WORKOUT))
+        .order_by(OrderBy::Desc(session_cols::DATE))
         .fetch_in(conn)?;
 
     let mut workout_stats = HashMap::new();
@@ -58,21 +58,21 @@ pub(super) fn workout_list(
 
     sessions.iter().for_each(|s| {
         let entry = workout_stats
-            .entry(s.get_text(entity::columns::NAME.as_ref()))
+            .entry(s.get_text(session_cols::NAME.as_ref()))
             .or_insert((0_u32, 0_u32, None, 0_u32));
         entry.0 += 1_u32;
-        entry.1 += s.get_u32(entity::columns::TOTAL_ELAPSED_TIME.as_ref());
+        entry.1 += s.get_u32(session_cols::TOTAL_ELAPSED_TIME.as_ref());
         if entry.2.is_none() {
-            entry.2 = Some(s.get_u32(entity::columns::DATE.as_ref()));
+            entry.2 = Some(s.get_u32(session_cols::DATE.as_ref()));
         }
-        entry.3 += s.get_u32(entity::columns::TRAINING_LOAD.as_ref())
+        entry.3 += s.get_u32(session_cols::TRAINING_LOAD.as_ref())
     });
 
     let with_steps: HashSet<_> = WorkoutStepRepository::select()
-        .distinct(&[workout_step::entity::columns::WORKOUT])
+        .distinct(&[workout_step_cols::WORKOUT])
         .fetch_in(conn)?
         .iter()
-        .map(|r| r.get_text(workout_step::entity::columns::WORKOUT.as_ref()))
+        .map(|r| r.get_text(workout_step_cols::WORKOUT.as_ref()))
         .collect();
 
     let mut res: Vec<_> = workout_stats
@@ -107,22 +107,16 @@ pub(super) fn workout_details(
     let sessions = SessionRepository::select_by_name_in(
         conn,
         name,
-        Some(&[OrderBy::Desc(entity::columns::DATE)]),
+        Some(&[OrderBy::Desc(session_cols::DATE)]),
     )?;
 
     let mut exercises = ExerciseRepository::select()
         .where_(Where::InMultipleSub(
-            vec![
-                exercise::entity::columns::CATEGORY,
-                exercise::entity::columns::ID,
-            ],
+            vec![exercise_cols::CATEGORY, exercise_cols::ID],
             WorkoutStepRepository::select()
-                .distinct(&[
-                    workout_step::entity::columns::EX_CAT,
-                    workout_step::entity::columns::EX_ID,
-                ])
+                .distinct(&[workout_step_cols::EX_CAT, workout_step_cols::EX_ID])
                 .where_(Where::Eq(
-                    workout_step::entity::columns::WORKOUT,
+                    workout_step_cols::WORKOUT,
                     workout.name.clone().into(),
                 ))
                 .to_subquery(),
@@ -155,18 +149,18 @@ pub(super) fn workout_details(
 
     let series = SessionStepRepository::select()
         .columns(&[
-            session_step::entity::columns::SESSION,
-            session_step::entity::columns::REPS,
-            session_step::entity::columns::WEIGHT,
+            session_step_cols::SESSION,
+            session_step_cols::REPS,
+            session_step_cols::WEIGHT,
         ])
         .where_(Where::And(vec![
             // Rest steps have neither reps nor weight
-            Where::NotEq(session_step::entity::columns::KIND, StepType::Rest.into()),
+            Where::NotEq(session_step_cols::KIND, StepType::Rest.into()),
             Where::InSub(
-                session_step::entity::columns::SESSION,
+                session_step_cols::SESSION,
                 SessionRepository::select()
-                    .columns(&[entity::columns::DATE])
-                    .where_(Where::Eq(entity::columns::NAME, name.into()))
+                    .columns(&[session_cols::DATE])
+                    .where_(Where::Eq(session_cols::NAME, name.into()))
                     .to_subquery(),
             ),
         ]))
@@ -175,12 +169,12 @@ pub(super) fn workout_details(
     let mut volume_by_session = HashMap::new();
     for serie in &series {
         *volume_by_session
-            .entry(serie.get_u32(session_step::entity::columns::SESSION.as_ref()))
+            .entry(serie.get_u32(session_step_cols::SESSION.as_ref()))
             .or_insert(0.0) += serie
-            .get_u16_nullable(session_step::entity::columns::REPS.as_ref())
+            .get_u16_nullable(session_step_cols::REPS.as_ref())
             .unwrap_or_default() as f32
             * serie
-                .get_f32_nullable(session_step::entity::columns::WEIGHT.as_ref())
+                .get_f32_nullable(session_step_cols::WEIGHT.as_ref())
                 .unwrap_or_default();
     }
 
@@ -226,19 +220,19 @@ pub(super) fn set_workout_enabled(
     let wk_cl = workout;
 
     let res = WorkoutRepository::update()
-        .where_(Where::Eq(workout::entity::columns::NAME, workout.into()))
-        .set(workout::entity::columns::ENABLED, status.into())
+        .where_(Where::Eq(workout_cols::NAME, workout.into()))
+        .set(workout_cols::ENABLED, status.into())
         .execute_in(tx)
         .map(|_| ());
 
     if res.is_ok() {
         // The enabled flag only exists on devices, so Connect is left as it was
         let _ = WorkoutDeviceRepository::update()
-            .set(workout_device::entity::columns::PENDING, true.into())
+            .set(workout_device_cols::PENDING, true.into())
             .where_(Where::And(vec![
-                Where::Eq(workout_device::entity::columns::WORKOUT, wk_cl.into()),
+                Where::Eq(workout_device_cols::WORKOUT, wk_cl.into()),
                 Where::NotEq(
-                    workout_device::entity::columns::DEVICE,
+                    workout_device_cols::DEVICE,
                     constants::CONNECT_DEVICE_SERIAL.into(),
                 ),
             ]))
@@ -258,7 +252,7 @@ pub(super) fn store_workout(
     if edit && WorkoutRepository::select_by_id_in(tx, &workout.name)?.is_some() {
         WorkoutRepository::update()
             .set(
-                workout::entity::columns::NOTES,
+                workout_cols::NOTES,
                 (if let Some(note) = workout.notes.clone()
                     && !note.is_empty()
                 {
@@ -268,24 +262,21 @@ pub(super) fn store_workout(
                 })
                 .into(),
             )
-            .where_(Where::Eq(
-                workout::entity::columns::NAME,
-                workout.name.clone().into(),
-            ))
+            .where_(Where::Eq(workout_cols::NAME, workout.name.clone().into()))
             .execute_in(tx)?;
 
         WorkoutStepRepository::delete()
             .where_(Where::Eq(
-                workout_step::entity::columns::WORKOUT,
+                workout_step_cols::WORKOUT,
                 workout.name.clone().into(),
             ))
             .execute_in(tx)?;
 
         // Re-send the edited workout to every device that already has it
         WorkoutDeviceRepository::update()
-            .set(workout_device::entity::columns::PENDING, true.into())
+            .set(workout_device_cols::PENDING, true.into())
             .where_(Where::Eq(
-                workout_device::entity::columns::WORKOUT,
+                workout_device_cols::WORKOUT,
                 workout.name.clone().into(),
             ))
             .execute_in(tx)?;

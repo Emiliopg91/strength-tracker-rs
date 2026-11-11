@@ -12,13 +12,13 @@ use tauri_plugin_log::log::{error, info, warn};
 
 use crate::{
     dao::{
-        device::{self, Device, DeviceRepository},
-        exercise::{self, Exercise, ExerciseRepository},
-        session::{self, Session, SessionRepository},
-        session_data::{self, SessionData, SessionDataRepository},
-        session_lap::{self, SessionLapRepository},
-        session_step::{self, SessionStepRepository, entity},
-        workout::{self, Workout, WorkoutRepository},
+        device::{Device, DeviceRepository, entity::columns as device_cols},
+        exercise::{Exercise, ExerciseRepository, entity::columns as exercise_cols},
+        session::{Session, SessionRepository, entity::columns as session_cols},
+        session_data::{SessionData, SessionDataRepository, entity::columns as session_data_cols},
+        session_lap::{SessionLapRepository, entity::columns as session_lap_cols},
+        session_step::{SessionStepRepository, entity::columns as session_step_cols},
+        workout::{Workout, WorkoutRepository, entity::columns as workout_cols},
         workout_step::WorkoutStepRepository,
     },
     dto::sessions::{SessionDetails, SessionListItem, SessionStepsUpdate},
@@ -37,26 +37,23 @@ pub(super) fn fetch_sessions(
     sub_sport: Option<u8>,
 ) -> rusqlite_orm::errors::Result<Vec<SessionListItem>> {
     let mut select_builder =
-        SessionRepository::select().order_by(OrderBy::Desc(session::entity::columns::DATE));
+        SessionRepository::select().order_by(OrderBy::Desc(session_cols::DATE));
 
     let mut conditions = Vec::new();
     if let Some(min_date) = from {
-        conditions.push(Where::Gte(session::entity::columns::DATE, min_date.into()))
+        conditions.push(Where::Gte(session_cols::DATE, min_date.into()))
     }
 
     if let Some(max_date) = to {
-        conditions.push(Where::Lte(session::entity::columns::DATE, max_date.into()))
+        conditions.push(Where::Lte(session_cols::DATE, max_date.into()))
     }
 
     if let Some(sport) = sport {
-        conditions.push(Where::Eq(session::entity::columns::SPORT, sport.into()))
+        conditions.push(Where::Eq(session_cols::SPORT, sport.into()))
     }
 
     if let Some(sub_sport) = sub_sport {
-        conditions.push(Where::Eq(
-            session::entity::columns::SUB_SPORT,
-            sub_sport.into(),
-        ))
+        conditions.push(Where::Eq(session_cols::SUB_SPORT, sub_sport.into()))
     }
 
     if !conditions.is_empty() {
@@ -86,24 +83,16 @@ pub(crate) fn session_set_flags(
     min_date: Option<i32>,
     max_date: Option<i32>,
 ) -> rusqlite_orm::errors::Result<HashMap<u32, bool>> {
-    let mut select_builder = SessionStepRepository::select().distinct(&[
-        session_step::entity::columns::SESSION,
-        session_step::entity::columns::PR,
-    ]);
+    let mut select_builder = SessionStepRepository::select()
+        .distinct(&[session_step_cols::SESSION, session_step_cols::PR]);
 
     // `where_` replaces the previous condition, so bounds must be combined in a single `And`
     let mut conditions = Vec::new();
     if let Some(min_date) = min_date {
-        conditions.push(Where::Gte(
-            session_step::entity::columns::SESSION,
-            min_date.into(),
-        ));
+        conditions.push(Where::Gte(session_step_cols::SESSION, min_date.into()));
     }
     if let Some(max_date) = max_date {
-        conditions.push(Where::Lte(
-            session_step::entity::columns::SESSION,
-            max_date.into(),
-        ));
+        conditions.push(Where::Lte(session_step_cols::SESSION, max_date.into()));
     }
     if !conditions.is_empty() {
         select_builder = select_builder.where_(Where::And(conditions));
@@ -111,8 +100,8 @@ pub(crate) fn session_set_flags(
 
     let mut flags: HashMap<u32, bool> = HashMap::new();
     for row in select_builder.fetch_in(conn)? {
-        let session = row.get_u32(session_step::entity::columns::SESSION.as_ref());
-        let pr = row.get_bool(session_step::entity::columns::PR.as_ref());
+        let session = row.get_u32(session_step_cols::SESSION.as_ref());
+        let pr = row.get_bool(session_step_cols::PR.as_ref());
         *flags.entry(session).or_default() |= pr;
     }
     Ok(flags)
@@ -148,14 +137,14 @@ pub(crate) fn fetch_sessions_details(
     let dates: Vec<Value> = timestamps.iter().map(|ts| (*ts).into()).collect();
 
     let mut sessions: HashMap<u32, Session> = SessionRepository::select()
-        .where_(Where::In(session::entity::columns::DATE, dates.clone()))
+        .where_(Where::In(session_cols::DATE, dates.clone()))
         .fetch_in(conn)?
         .into_iter()
         .map(|s| (s.date, s))
         .collect();
 
     for step in SessionStepRepository::select()
-        .where_(Where::In(entity::columns::SESSION, dates.clone()))
+        .where_(Where::In(session_step_cols::SESSION, dates.clone()))
         .fetch_in(conn)?
     {
         if let Some(session) = sessions.get_mut(&step.session) {
@@ -167,7 +156,7 @@ pub(crate) fn fetch_sessions_details(
     if !serials.is_empty() {
         let devices: HashMap<String, Device> = DeviceRepository::select()
             .where_(Where::In(
-                device::entity::columns::SERIAL,
+                device_cols::SERIAL,
                 serials.into_iter().map(|s| s.into()).collect(),
             ))
             .fetch_in(conn)?
@@ -184,10 +173,7 @@ pub(crate) fn fetch_sessions_details(
 
     if with_add_data {
         for add_data in SessionDataRepository::select()
-            .where_(Where::In(
-                session_data::entity::columns::SESSION,
-                dates.clone(),
-            ))
+            .where_(Where::In(session_data_cols::SESSION, dates.clone()))
             .fetch_in(conn)?
         {
             if let Some(session) = sessions.get_mut(&add_data.session) {
@@ -198,7 +184,7 @@ pub(crate) fn fetch_sessions_details(
 
     if with_laps {
         for lap in SessionLapRepository::select()
-            .where_(Where::In(session_lap::entity::columns::SESSION, dates))
+            .where_(Where::In(session_lap_cols::SESSION, dates))
             .fetch_in(conn)?
         {
             if let Some(session) = sessions.get_mut(&lap.session) {
@@ -217,10 +203,7 @@ pub(crate) fn fetch_sessions_details(
     } else {
         ExerciseRepository::select()
             .where_(Where::InMultiple(
-                vec![
-                    exercise::entity::columns::CATEGORY,
-                    exercise::entity::columns::ID,
-                ],
+                vec![exercise_cols::CATEGORY, exercise_cols::ID],
                 keys.iter()
                     .map(|(cat, id)| vec![(*cat).into(), (*id).into()])
                     .collect(),
@@ -293,24 +276,24 @@ pub(crate) fn import_file_list(
         HashSet::new()
     } else {
         SessionRepository::select()
-            .columns(&[session::entity::columns::DATE])
+            .columns(&[session_cols::DATE])
             .where_(Where::In(
-                session::entity::columns::DATE,
+                session_cols::DATE,
                 sessions.iter().map(|s| s.date.into()).collect(),
             ))
             .fetch_in(tx)?
             .iter()
-            .map(|row| row.get_u32(session::entity::columns::DATE.as_ref()))
+            .map(|row| row.get_u32(session_cols::DATE.as_ref()))
             .collect()
     };
     let known_devices: HashSet<_> = if sessions.is_empty() {
         HashSet::new()
     } else {
         DeviceRepository::select()
-            .columns(&[device::entity::columns::SERIAL])
+            .columns(&[device_cols::SERIAL])
             .fetch_in(tx)?
             .iter()
-            .map(|row| row.get_text(device::entity::columns::SERIAL.as_ref()))
+            .map(|row| row.get_text(device_cols::SERIAL.as_ref()))
             .collect()
     };
     let mut handled_workouts = HashSet::new();
@@ -376,14 +359,8 @@ pub(super) fn insert_session(
 
     if let Some(workout) = &session.workout_obj {
         let updated = WorkoutRepository::update()
-            .set(
-                workout::entity::columns::NOTES,
-                workout.notes.clone().into(),
-            )
-            .where_(Where::Eq(
-                workout::entity::columns::NAME,
-                workout.name.clone().into(),
-            ))
+            .set(workout_cols::NOTES, workout.notes.clone().into())
+            .where_(Where::Eq(workout_cols::NAME, workout.name.clone().into()))
             .execute_in(tx)?;
         if updated == 0 {
             WorkoutRepository::insert()
@@ -450,11 +427,8 @@ pub(crate) fn update_session_notes(
     let notes = notes.filter(|n| !n.trim().is_empty()).map(str::to_string);
 
     let updated = SessionDataRepository::update()
-        .set(session_data::entity::columns::NOTES, notes.clone().into())
-        .where_(Where::Eq(
-            session_data::entity::columns::SESSION,
-            session.into(),
-        ))
+        .set(session_data_cols::NOTES, notes.clone().into())
+        .where_(Where::Eq(session_data_cols::SESSION, session.into()))
         .execute_in(tx)?;
 
     if updated == 0 && notes.is_some() {
@@ -485,32 +459,28 @@ pub(crate) async fn heatmap_data(database: &DatabasePool) -> Result<Vec<Vec<(u32
     let res = database
         .run_in_connection(move |conn| {
             let sessions = SessionRepository::select()
-                .columns(&[
-                    session::entity::columns::DATE,
-                    session::entity::columns::TRAINING_LOAD,
-                ])
-                .where_(Where::Gte(session::entity::columns::DATE, ts.into()))
+                .columns(&[session_cols::DATE, session_cols::TRAINING_LOAD])
+                .where_(Where::Gte(session_cols::DATE, ts.into()))
                 .fetch_in(conn)?;
             let prs = SessionStepRepository::select()
-                .columns(&[session_step::entity::columns::SESSION])
+                .columns(&[session_step_cols::SESSION])
                 .where_(Where::And(vec![
-                    Where::Eq(session_step::entity::columns::PR, true.into()),
-                    Where::Gte(session_step::entity::columns::SESSION, ts.into()),
+                    Where::Eq(session_step_cols::PR, true.into()),
+                    Where::Gte(session_step_cols::SESSION, ts.into()),
                 ]))
                 .fetch_in(conn)?;
 
             let mut pr_counts: HashMap<u32, u16> = HashMap::new();
             for pr in &prs {
                 *pr_counts
-                    .entry(pr.get_u32(session_step::entity::columns::SESSION.as_ref()))
+                    .entry(pr.get_u32(session_step_cols::SESSION.as_ref()))
                     .or_default() += 1;
             }
 
             let mut res = vec![vec![(0_u32, 0_u16); 31]; 12];
             sessions.iter().for_each(|session| {
-                let date = session.get_u32(session::entity::columns::DATE.as_ref());
-                let training_load =
-                    session.get_u32(session::entity::columns::TRAINING_LOAD.as_ref());
+                let date = session.get_u32(session_cols::DATE.as_ref());
+                let training_load = session.get_u32(session_cols::TRAINING_LOAD.as_ref());
                 let dt = Local.timestamp_opt(date as i64, 0).single().unwrap();
                 let cell = &mut res[dt.month0() as usize][dt.day0() as usize];
                 cell.0 += training_load;
@@ -671,11 +641,11 @@ pub(super) fn apply_session_changes(
     let mut exercises = HashSet::new();
 
     SessionStepRepository::select()
-        .columns(&[entity::columns::EX_CAT, entity::columns::EX_ID])
+        .columns(&[session_step_cols::EX_CAT, session_step_cols::EX_ID])
         .where_(Where::And(vec![
-            Where::Eq(entity::columns::SESSION, details.timestamp.into()),
+            Where::Eq(session_step_cols::SESSION, details.timestamp.into()),
             Where::In(
-                entity::columns::IDX,
+                session_step_cols::IDX,
                 details.sets.iter().map(|s| s.idx.into()).collect(),
             ),
         ]))
@@ -683,8 +653,8 @@ pub(super) fn apply_session_changes(
         .iter()
         .for_each(|row| {
             // Rest steps have no exercise
-            if let Some(cat) = row.get_u16_nullable(entity::columns::EX_CAT.as_ref())
-                && let Some(id) = row.get_u16_nullable(entity::columns::EX_ID.as_ref())
+            if let Some(cat) = row.get_u16_nullable(session_step_cols::EX_CAT.as_ref())
+                && let Some(id) = row.get_u16_nullable(session_step_cols::EX_ID.as_ref())
             {
                 exercises.insert((cat, id));
             }
@@ -711,13 +681,13 @@ pub(super) fn apply_session_changes(
 
     for serie in &details.sets {
         SessionStepRepository::update()
-            .set(entity::columns::REPS, serie.reps.into())
-            .set(entity::columns::WEIGHT, serie.weight.into())
-            .set(entity::columns::EX_CAT, serie.ex_cat.into())
-            .set(entity::columns::EX_ID, serie.ex_id.into())
+            .set(session_step_cols::REPS, serie.reps.into())
+            .set(session_step_cols::WEIGHT, serie.weight.into())
+            .set(session_step_cols::EX_CAT, serie.ex_cat.into())
+            .set(session_step_cols::EX_ID, serie.ex_id.into())
             .where_(Where::And(vec![
-                Where::Eq(entity::columns::SESSION, details.timestamp.into()),
-                Where::Eq(entity::columns::IDX, serie.idx.into()),
+                Where::Eq(session_step_cols::SESSION, details.timestamp.into()),
+                Where::Eq(session_step_cols::IDX, serie.idx.into()),
             ]))
             .execute_in(tx)?;
     }
@@ -753,8 +723,8 @@ pub(super) async fn set_session_connect_id(
     id: u64,
 ) -> rusqlite_orm::errors::Result<usize> {
     SessionRepository::update()
-        .where_(Where::Eq(session::entity::columns::DATE, timestamp.into()))
-        .set(session::entity::columns::CONNECT_ID, id.into())
+        .where_(Where::Eq(session_cols::DATE, timestamp.into()))
+        .set(session_cols::CONNECT_ID, id.into())
         .execute(database)
         .await
 }
@@ -782,30 +752,26 @@ pub(super) async fn pending_geolocation(
     db: &DatabasePool,
 ) -> rusqlite_orm::errors::Result<Vec<SessionData>> {
     let unnamed_sessions = SessionRepository::select()
-        .columns(&[session::entity::columns::DATE])
-        .where_(Where::Eq(session::entity::columns::NAME, "".into()))
+        .columns(&[session_cols::DATE])
+        .where_(Where::Eq(session_cols::NAME, "".into()))
         .to_subquery();
 
     SessionDataRepository::select()
-        .columns(&[
-            session_data::entity::columns::SESSION,
-            session_data::entity::columns::COORDINATES,
-        ])
+        .columns(&[session_data_cols::SESSION, session_data_cols::COORDINATES])
         .where_(Where::And(vec![
-            Where::InSub(session_data::entity::columns::SESSION, unnamed_sessions),
-            Where::NotNull(session_data::entity::columns::COORDINATES),
+            Where::InSub(session_data_cols::SESSION, unnamed_sessions),
+            Where::NotNull(session_data_cols::COORDINATES),
         ]))
-        .order_by(OrderBy::Desc(session_data::entity::columns::SESSION))
+        .order_by(OrderBy::Desc(session_data_cols::SESSION))
         .fetch(db)
         .await
         .map(|rows| {
             rows.into_iter()
                 .map(|row| {
-                    let mut add_data = SessionData::new(
-                        row.get_u32(session_data::entity::columns::SESSION.as_ref()),
-                    );
+                    let mut add_data =
+                        SessionData::new(row.get_u32(session_data_cols::SESSION.as_ref()));
                     add_data.coordinates =
-                        row.get_blob_nullable(session_data::entity::columns::COORDINATES.as_ref());
+                        row.get_blob_nullable(session_data_cols::COORDINATES.as_ref());
                     add_data
                 })
                 .collect()
@@ -819,8 +785,8 @@ pub(super) async fn set_session_name(
     name: &str,
 ) -> rusqlite_orm::errors::Result<usize> {
     SessionRepository::update()
-        .set(session::entity::columns::NAME, name.into())
-        .where_(Where::Eq(session::entity::columns::DATE, session.into()))
+        .set(session_cols::NAME, name.into())
+        .where_(Where::Eq(session_cols::DATE, session.into()))
         .execute(db)
         .await
 }

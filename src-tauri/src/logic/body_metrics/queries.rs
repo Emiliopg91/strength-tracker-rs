@@ -6,7 +6,7 @@ use rusqlite_orm::{
 };
 
 use crate::{
-    dao::body_metric::{self, BodyMetric, BodyMetricRepository},
+    dao::body_metric::{BodyMetric, BodyMetricRepository, entity::columns as body_metric_cols},
     dto::body_metrics::BodyMetricListItem,
 };
 
@@ -15,13 +15,12 @@ pub(crate) fn fetch_body_measures(
     conn: &rusqlite_orm::rusqlite::Connection,
     from_to: Option<(u32, u32)>,
 ) -> rusqlite_orm::errors::Result<Vec<BodyMetricListItem>> {
-    let mut query =
-        BodyMetricRepository::select().order_by(OrderBy::Desc(body_metric::entity::columns::DATE));
+    let mut query = BodyMetricRepository::select().order_by(OrderBy::Desc(body_metric_cols::DATE));
 
     if let Some((from, to)) = from_to {
         query = query.where_(Where::And(vec![
-            Where::Gte(body_metric::entity::columns::DATE, from.into()),
-            Where::Lte(body_metric::entity::columns::DATE, to.into()),
+            Where::Gte(body_metric_cols::DATE, from.into()),
+            Where::Lte(body_metric_cols::DATE, to.into()),
         ]))
     }
 
@@ -51,7 +50,7 @@ pub(super) async fn delete_body_metric_on(
     date: u32,
 ) -> rusqlite_orm::errors::Result<()> {
     BodyMetricRepository::delete()
-        .where_(Where::Eq(body_metric::entity::columns::DATE, date.into()))
+        .where_(Where::Eq(body_metric_cols::DATE, date.into()))
         .execute(database)
         .await
         .map(|_| ())

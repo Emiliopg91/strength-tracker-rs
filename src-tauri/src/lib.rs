@@ -120,9 +120,10 @@ fn initialize(app: &AppHandle) -> (DatabasePool, Settings, ConnectClient, MtpCli
                 debug!("Loading settings...");
                 let settings = Settings::load(&database).await;
 
-                crate::dao::settings::Settings::set_version(
+                crate::dao::settings::Settings::set(
                     &database,
-                    &constants::APP_SEM_VERSION.clone(),
+                    crate::dao::settings::settings_keys::VERSION,
+                    &*constants::APP_SEM_VERSION,
                 )
                 .await
                 .unwrap();

@@ -25,205 +25,91 @@ pub struct Settings {
 }
 
 impl Settings {
-    /// Reads the persisted weight unit, defaulting to kilograms if unset/invalid.
-    pub async fn get_weight_unit(db: &DatabasePool) -> WeightUnit {
-        SettingsRepository::select_by_id(db, settings_keys::WEIGHT_UNIT)
+    /// Stored value of the setting `name`, `None` if unset or unreadable.
+    async fn value(db: &DatabasePool, name: &str) -> Option<String> {
+        SettingsRepository::select_by_id(db, name)
             .await
             .ok()
             .flatten()
-            .and_then(|r| WeightUnit::try_from(r.value.as_str()).ok())
-            .unwrap_or(WeightUnit::Kilograms)
+            .map(|r| r.value)
     }
-    /// Persists the weight unit setting.
-    pub async fn set_weight_unit(
+
+    /// Persists `value` as the setting `name`.
+    pub async fn set(
         db: &DatabasePool,
-        value: &WeightUnit,
+        name: &str,
+        value: impl fmt::Display,
     ) -> rusqlite_orm::errors::Result<()> {
         SettingsRepository::insert()
             .or_replace()
             .item(&mut Settings {
-                name: settings_keys::WEIGHT_UNIT.to_string(),
+                name: name.to_string(),
                 value: value.to_string(),
             })
             .execute(db)
             .await
             .map(|_| ())
+    }
+
+    /// Reads the persisted weight unit, defaulting to kilograms if unset/invalid.
+    pub async fn get_weight_unit(db: &DatabasePool) -> WeightUnit {
+        Self::value(db, settings_keys::WEIGHT_UNIT)
+            .await
+            .and_then(|v| WeightUnit::try_from(v.as_str()).ok())
+            .unwrap_or(WeightUnit::Kilograms)
     }
 
     /// Reads the persisted distance unit, defaulting to kilometers if unset/invalid.
     pub async fn get_distance_unit(db: &DatabasePool) -> DistanceUnit {
-        SettingsRepository::select_by_id(db, settings_keys::DISTANCE_UNIT)
+        Self::value(db, settings_keys::DISTANCE_UNIT)
             .await
-            .ok()
-            .flatten()
-            .and_then(|r| DistanceUnit::try_from(r.value.as_str()).ok())
+            .and_then(|v| DistanceUnit::try_from(v.as_str()).ok())
             .unwrap_or(DistanceUnit::Kilometers)
-    }
-    /// Persists the distance unit setting.
-    pub async fn set_distance_unit(
-        db: &DatabasePool,
-        value: &DistanceUnit,
-    ) -> rusqlite_orm::errors::Result<()> {
-        SettingsRepository::insert()
-            .or_replace()
-            .item(&mut Settings {
-                name: settings_keys::DISTANCE_UNIT.to_string(),
-                value: value.to_string(),
-            })
-            .execute(db)
-            .await
-            .map(|_| ())
     }
 
     /// Reads the persisted UI language, defaulting to the system language if unset.
     pub async fn get_language(db: &DatabasePool) -> Languages {
-        SettingsRepository::select_by_id(db, settings_keys::LANGUAGE)
+        Self::value(db, settings_keys::LANGUAGE)
             .await
-            .ok()
-            .flatten()
-            .map(|r| Languages::from(r.value.as_str()))
+            .map(|v| Languages::from(v.as_str()))
             .unwrap_or(*constants::SYSTEM_LANGUAGE)
     }
-    /// Persists the UI language setting.
-    pub async fn set_language(
-        db: &DatabasePool,
-        value: &Languages,
-    ) -> rusqlite_orm::errors::Result<()> {
-        SettingsRepository::insert()
-            .or_replace()
-            .item(&mut Settings {
-                name: settings_keys::LANGUAGE.to_string(),
-                value: value.to_string(),
-            })
-            .execute(db)
-            .await
-            .map(|_| ())
-    }
 
-    /// Reads whether auto-sync on device connect is enabled, defaulting to `true` if unset.
+    /// Reads whether auto-sync on device connect is enabled, defaulting to `false` if unset.
     pub async fn get_on_device_connect(db: &DatabasePool) -> bool {
-        SettingsRepository::select_by_id(db, settings_keys::ON_DEVICE_CONNECT)
-            .await
-            .ok()
-            .flatten()
-            .and_then(|r| r.value.parse().ok())
-            .unwrap_or(false)
-    }
-    /// Persists the auto-sync setting.
-    pub async fn set_on_device_connect(
-        db: &DatabasePool,
-        value: bool,
-    ) -> rusqlite_orm::errors::Result<()> {
-        SettingsRepository::insert()
-            .or_replace()
-            .item(&mut Settings {
-                name: settings_keys::ON_DEVICE_CONNECT.to_string(),
-                value: value.to_string(),
-            })
-            .execute(db)
-            .await
-            .map(|_| ())
+        Self::flag(db, settings_keys::ON_DEVICE_CONNECT).await
     }
 
     /// Reads whether launch-on-boot is enabled, defaulting to `false` if unset.
     pub async fn get_start_on_boot(db: &DatabasePool) -> bool {
-        SettingsRepository::select_by_id(db, settings_keys::START_ON_BOOT)
-            .await
-            .ok()
-            .flatten()
-            .and_then(|r| r.value.parse().ok())
-            .unwrap_or(false)
-    }
-    /// Persists the launch-on-boot setting.
-    pub async fn set_start_on_boot(
-        db: &DatabasePool,
-        value: bool,
-    ) -> rusqlite_orm::errors::Result<()> {
-        SettingsRepository::insert()
-            .or_replace()
-            .item(&mut Settings {
-                name: settings_keys::START_ON_BOOT.to_string(),
-                value: value.to_string(),
-            })
-            .execute(db)
-            .await
-            .map(|_| ())
+        Self::flag(db, settings_keys::START_ON_BOOT).await
     }
 
     /// Reads whether close to tray is enabled, defaulting to `false` if unset.
     pub async fn get_close_to_tray(db: &DatabasePool) -> bool {
-        SettingsRepository::select_by_id(db, settings_keys::CLOSE_TO_TRAY)
-            .await
-            .ok()
-            .flatten()
-            .and_then(|r| r.value.parse().ok())
-            .unwrap_or(false)
-    }
-    /// Persists the close to tray setting.
-    pub async fn set_close_to_tray(
-        db: &DatabasePool,
-        value: bool,
-    ) -> rusqlite_orm::errors::Result<()> {
-        SettingsRepository::insert()
-            .or_replace()
-            .item(&mut Settings {
-                name: settings_keys::CLOSE_TO_TRAY.to_string(),
-                value: value.to_string(),
-            })
-            .execute(db)
-            .await
-            .map(|_| ())
+        Self::flag(db, settings_keys::CLOSE_TO_TRAY).await
     }
 
     /// Reads whether start into tray is enabled, defaulting to `false` if unset.
     pub async fn get_start_into_tray(db: &DatabasePool) -> bool {
-        SettingsRepository::select_by_id(db, settings_keys::START_INTO_TRAY)
-            .await
-            .ok()
-            .flatten()
-            .and_then(|r| r.value.parse().ok())
-            .unwrap_or(false)
+        Self::flag(db, settings_keys::START_INTO_TRAY).await
     }
-    /// Persists the start into tray setting.
-    pub async fn set_start_into_tray(
-        db: &DatabasePool,
-        value: bool,
-    ) -> rusqlite_orm::errors::Result<()> {
-        SettingsRepository::insert()
-            .or_replace()
-            .item(&mut Settings {
-                name: settings_keys::START_INTO_TRAY.to_string(),
-                value: value.to_string(),
-            })
-            .execute(db)
+
+    /// Boolean setting `name`, `false` if unset/invalid.
+    async fn flag(db: &DatabasePool, name: &str) -> bool {
+        Self::value(db, name)
             .await
-            .map(|_| ())
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(false)
     }
 
     #[allow(dead_code)]
     /// Reads latest version.
     pub async fn get_version(db: &DatabasePool) -> Version {
-        SettingsRepository::select_by_id(db, settings_keys::VERSION)
+        Self::value(db, settings_keys::VERSION)
             .await
-            .ok()
-            .flatten()
-            .and_then(|r| Version::parse(&r.value).ok())
+            .and_then(|v| Version::parse(&v).ok())
             .unwrap_or(Version::new(0, 1, 0))
-    }
-    /// Persists the version.
-    pub async fn set_version(
-        db: &DatabasePool,
-        value: &Version,
-    ) -> rusqlite_orm::errors::Result<()> {
-        SettingsRepository::insert()
-            .or_replace()
-            .item(&mut Settings {
-                name: settings_keys::VERSION.to_string(),
-                value: value.to_string(),
-            })
-            .execute(db)
-            .await
-            .map(|_| ())
     }
 }
 

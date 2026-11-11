@@ -118,7 +118,7 @@ pub(crate) async fn import_file_paths<R: Runtime>(
         }
         Err(e) => Err(report_error(
             e,
-            lang,
+            &app.state::<SettingsLock>(),
             "error_import_sessions",
             "Error importing sessions",
         )),

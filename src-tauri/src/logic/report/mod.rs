@@ -61,21 +61,20 @@ pub async fn get_report_data<R: Runtime>(
             data
         });
 
-    match res {
-        Ok(data) => {
-            info!(
-                "Retrieved report data: {} sessions, {} exercises, {} body metrics",
-                data.sessions.len(),
-                data.exercises.len(),
-                data.body_metrics.len()
-            );
-            Ok(data)
-        }
-        Err(e) => Err(report_error(
+    res.inspect(|data| {
+        info!(
+            "Retrieved report data: {} sessions, {} exercises, {} body metrics",
+            data.sessions.len(),
+            data.exercises.len(),
+            data.body_metrics.len()
+        )
+    })
+    .map_err(|e| {
+        report_error(
             e,
-            lang,
+            settings,
             "error_report_data",
             "Error getting report data",
-        )),
-    }
+        )
+    })
 }

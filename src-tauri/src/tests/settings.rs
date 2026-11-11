@@ -44,20 +44,19 @@ async fn seeded_defaults() {
 async fn setters_roundtrip() {
     let db = common::test_db().await;
 
-    Settings::set_start_on_boot(&db, true).await.unwrap();
-    Settings::set_on_device_connect(&db, true).await.unwrap();
-    Settings::set_weight_unit(&db, &WeightUnit::Pounds)
-        .await
-        .unwrap();
-    Settings::set_distance_unit(&db, &DistanceUnit::Miles)
-        .await
-        .unwrap();
-    Settings::set_language(&db, &Languages::Spanish)
-        .await
-        .unwrap();
-    Settings::set_version(&db, &Version::new(2, 5, 0))
-        .await
-        .unwrap();
+    for (name, value) in [
+        (settings_keys::START_ON_BOOT, "true".to_string()),
+        (settings_keys::ON_DEVICE_CONNECT, "true".to_string()),
+        (settings_keys::WEIGHT_UNIT, WeightUnit::Pounds.to_string()),
+        (
+            settings_keys::DISTANCE_UNIT,
+            DistanceUnit::Miles.to_string(),
+        ),
+        (settings_keys::LANGUAGE, Languages::Spanish.to_string()),
+        (settings_keys::VERSION, Version::new(2, 5, 0).to_string()),
+    ] {
+        Settings::set(&db, name, value).await.unwrap();
+    }
 
     assert!(Settings::get_start_on_boot(&db).await);
     assert!(Settings::get_on_device_connect(&db).await);
@@ -112,4 +111,28 @@ async fn invalid_stored_values_fall_back_to_defaults() {
         DistanceUnit::Kilometers
     ));
     assert_eq!(Settings::get_version(&db).await, Version::new(0, 1, 0));
+}
+
+#[tokio::test]
+async fn save_persists_every_setting() {
+    let db = common::test_db().await;
+
+    let mut settings = app::Settings::load(&db).await;
+    settings.start_boot = true;
+    settings.close_to_tray = true;
+    settings.start_into_tray = true;
+    settings.on_device_connect = true;
+    settings.weight_unit = WeightUnit::Pounds;
+    settings.distance_unit = DistanceUnit::Miles;
+    settings.language = Languages::Spanish;
+    settings.save(&db).await.unwrap();
+
+    let loaded = app::Settings::load(&db).await;
+    assert!(loaded.start_boot);
+    assert!(loaded.close_to_tray);
+    assert!(loaded.start_into_tray);
+    assert!(loaded.on_device_connect);
+    assert!(matches!(loaded.weight_unit, WeightUnit::Pounds));
+    assert!(matches!(loaded.distance_unit, DistanceUnit::Miles));
+    assert!(matches!(loaded.language, Languages::Spanish));
 }
