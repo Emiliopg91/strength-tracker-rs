@@ -74,7 +74,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/app/commands.rs:31
+	// From src-tauri/src/logic/app/commands.rs:30
 	public static getEnvironment(): Promise<AppEnvironment> {
 	  return BackendClient.inner_invoke("get_environment"); 
 	}
@@ -146,7 +146,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/app/commands.rs:49
+	// From src-tauri/src/logic/app/commands.rs:48
 	public static getTranslations(): Promise<Record<string, string>> {
 	  return BackendClient.inner_invoke("get_translations"); 
 	}
@@ -200,7 +200,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/app/commands.rs:24
+	// From src-tauri/src/logic/app/commands.rs:23
 	public static notifyFrontendReady(): Promise<void> {
 	  return BackendClient.inner_invoke("notify_frontend_ready"); 
 	}
@@ -266,7 +266,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/app/commands.rs:42
+	// From src-tauri/src/logic/app/commands.rs:41
 	public static updateSettingsValue(name: string, value: string): Promise<void> {
 	  return BackendClient.inner_invoke("update_settings_value", { name, value }); 
 	}
