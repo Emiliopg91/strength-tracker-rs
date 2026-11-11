@@ -1,6 +1,12 @@
 import { AppContext, ExerciseOption } from "@/context/AppContext";
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
-import { Autocomplete, SxProps, TextField, Theme } from "@mui/material";
+import {
+    Autocomplete,
+    SxProps,
+    TextField,
+    Theme,
+    Tooltip,
+} from "@mui/material";
 import { useContext } from "react";
 
 type Props = {
@@ -9,6 +15,9 @@ type Props = {
     // Makes the field clearable
     onClear?: () => void;
     error?: boolean;
+    // Keeps the field on one line, cutting long names with an ellipsis and showing them whole
+    // in a tooltip
+    singleLine?: boolean;
     sx?: SxProps<Theme>;
 };
 
@@ -17,6 +26,7 @@ export function ExerciseField({
     onChange,
     onClear,
     error,
+    singleLine,
     sx,
 }: Props) {
     const { exercisesCatalog } = useContext(AppContext);
@@ -37,12 +47,17 @@ export function ExerciseField({
             }
             onChange={(_, opt) => (opt ? onChange(opt) : onClear?.())}
             renderInput={(params) => (
-                <TextField
-                    {...params}
-                    multiline
-                    error={error}
-                    label={translate("select_exercise")}
-                />
+                <Tooltip
+                    title={singleLine ? (selected?.label ?? "") : ""}
+                    placement="top"
+                >
+                    <TextField
+                        {...params}
+                        multiline={!singleLine}
+                        error={error}
+                        label={translate("select_exercise")}
+                    />
+                </Tooltip>
             )}
         />
     );

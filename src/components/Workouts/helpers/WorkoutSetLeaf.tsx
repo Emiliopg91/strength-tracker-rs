@@ -273,6 +273,9 @@ export function WorkoutSetLeaf({
                 gap: 0.5,
                 flexDirection: "row",
                 justifyContent: "flex-end",
+                alignItems: "center",
+                // Same height as a single-line field, so the buttons line up with its first line
+                height: 40,
                 marginLeft: "auto",
             }}
         >
@@ -329,7 +332,8 @@ export function WorkoutSetLeaf({
                 sx={{
                     display: "flex",
                     flexWrap: "wrap",
-                    alignItems: "center",
+                    // A multiline exercise grows downwards without dragging the rest of the row
+                    alignItems: "flex-start",
                     gap: 1,
                 }}
             >
@@ -337,6 +341,7 @@ export function WorkoutSetLeaf({
                 {isActive && (
                     <ExerciseField
                         selected={selected}
+                        singleLine
                         error={errors.exercise}
                         onChange={(opt) => onExerciseChange(opt!)}
                         onClear={
@@ -349,7 +354,7 @@ export function WorkoutSetLeaf({
                                       })
                                 : undefined
                         }
-                        sx={{ width: 370 }}
+                        sx={{ flex: 1, minWidth: 250 }}
                     />
                 )}
                 {actions}
