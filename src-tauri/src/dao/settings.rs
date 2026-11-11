@@ -13,8 +13,6 @@ pub mod settings_keys {
     pub const WEIGHT_UNIT: &str = "weight_unit";
     pub const ON_DEVICE_CONNECT: &str = "on_device_connect";
     pub const VERSION: &str = "version";
-    pub const START_INTO_TRAY: &str = "start_into_tray";
-    pub const CLOSE_TO_TRAY: &str = "close_to_tray";
 }
 
 #[derive(Entity, Serialize, Deserialize)]
@@ -83,16 +81,6 @@ impl Settings {
     /// Reads whether launch-on-boot is enabled, defaulting to `false` if unset.
     pub async fn get_start_on_boot(db: &DatabasePool) -> bool {
         Self::flag(db, settings_keys::START_ON_BOOT).await
-    }
-
-    /// Reads whether close to tray is enabled, defaulting to `false` if unset.
-    pub async fn get_close_to_tray(db: &DatabasePool) -> bool {
-        Self::flag(db, settings_keys::CLOSE_TO_TRAY).await
-    }
-
-    /// Reads whether start into tray is enabled, defaulting to `false` if unset.
-    pub async fn get_start_into_tray(db: &DatabasePool) -> bool {
-        Self::flag(db, settings_keys::START_INTO_TRAY).await
     }
 
     /// Boolean setting `name`, `false` if unset/invalid.

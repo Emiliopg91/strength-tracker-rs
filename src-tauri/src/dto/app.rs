@@ -19,8 +19,6 @@ pub struct Settings {
     pub start_boot: bool,
     pub language: Languages,
     pub on_device_connect: bool,
-    pub close_to_tray: bool,
-    pub start_into_tray: bool,
 }
 
 impl Settings {
@@ -32,8 +30,6 @@ impl Settings {
             start_boot: settings::Settings::get_start_on_boot(database).await,
             weight_unit: settings::Settings::get_weight_unit(database).await,
             on_device_connect: settings::Settings::get_on_device_connect(database).await,
-            close_to_tray: settings::Settings::get_close_to_tray(database).await,
-            start_into_tray: settings::Settings::get_start_into_tray(database).await,
         }
     }
 
@@ -47,11 +43,6 @@ impl Settings {
             (
                 settings_keys::ON_DEVICE_CONNECT,
                 self.on_device_connect.to_string(),
-            ),
-            (settings_keys::CLOSE_TO_TRAY, self.close_to_tray.to_string()),
-            (
-                settings_keys::START_INTO_TRAY,
-                self.start_into_tray.to_string(),
             ),
         ];
         database

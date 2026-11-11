@@ -8,15 +8,14 @@ use crate::{
     dto::app::{AppEnvironment, Settings},
 };
 
-/// Current in-memory settings (units, language, tray and startup behaviour).
+/// Current in-memory settings (units, language and startup behaviour).
 #[traced_command]
 #[tauri::command]
 pub async fn get_settings(settings: State<'_, SettingsLock>) -> Result<Settings, String> {
     super::get_settings(&settings).await
 }
 
-/// Signals that the main window has mounted. Shows it (unless set to start into the tray) and, in
-/// the background: installs the udev rules if missing (exits the app if that fails), syncs the
+/// Signals that the main window has mounted. Shows it and, in the background: installs the udev rules if missing (exits the app if that fails), syncs the
 /// Connect devices, starts the USB device watcher, sends pending workouts to Connect, geocodes
 /// pending sessions and checks for updates.
 #[traced_command]

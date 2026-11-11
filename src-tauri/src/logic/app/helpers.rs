@@ -40,14 +40,6 @@ pub(crate) fn show_main_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<
     Ok(())
 }
 
-pub(crate) fn hide_main_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
-    if let Some(w) = app.get_webview_window("main") {
-        w.hide()?;
-        return Ok(());
-    }
-    Ok(())
-}
-
 /// Writes the udev rules, asking for the sudo password through the frontend unless already root.
 /// A rejected password is asked again; fails if the user cancels.
 pub(super) async fn install_udev_rules<R: Runtime>(

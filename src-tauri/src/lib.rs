@@ -20,11 +20,7 @@ use rusqlite_orm::database::{
     builder::{DatabaseConnectionBuilder, JournalMode},
 };
 use rusqlite_orm::ddls;
-use tauri::{
-    AppHandle, Emitter, Manager, RunEvent, WindowEvent,
-    menu::{Menu, MenuItem, PredefinedMenuItem},
-    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-};
+use tauri::{AppHandle, Emitter, Manager, RunEvent, WindowEvent};
 use tauri_plugin_log::{
     Target, TargetKind,
     log::{LevelFilter, debug, error, info, warn},
@@ -37,12 +33,9 @@ use crate::{
     dao::body_metric::migration_21,
     dto::app::Settings,
     logic::{
-        app::{
-            commands::{
-                get_environment, get_settings, get_translations, notify_frontend_ready,
-                update_settings_value,
-            },
-            helpers::{hide_main_window, show_main_window},
+        app::commands::{
+            get_environment, get_settings, get_translations, notify_frontend_ready,
+            update_settings_value,
         },
         body_metrics::commands::{add_body_measures, delete_body_metric, get_body_measures},
         connect::commands::{
@@ -76,7 +69,7 @@ use crate::{
     },
     mtp::MtpClient,
     udev::UdevManager,
-    utils::{constants, single_instance::SingleInstance, translations::translate},
+    utils::{constants, single_instance::SingleInstance},
 };
 
 pub fn check_running() -> bool {
@@ -270,17 +263,7 @@ pub fn run(log_level: LevelFilter) {
             let window = app_handle.get_webview_window("main");
             if let Some(window) = window {
                 window.on_window_event(move |event| {
-                    if let WindowEvent::CloseRequested { api, .. } = event {
-                        if app_handle
-                            .state::<SettingsLock>()
-                            .read()
-                            .unwrap()
-                            .close_to_tray
-                        {
-                            api.prevent_close();
-                            let _ = hide_main_window(&app_handle);
-                        }
-                    } else if let WindowEvent::DragDrop(event) = event
+                    if let WindowEvent::DragDrop(event) = event
                         && let tauri::DragDropEvent::Drop { paths, position: _ } = event
                     {
                         let paths: Vec<_> = paths
@@ -298,46 +281,6 @@ pub fn run(log_level: LevelFilter) {
                     }
                 });
             }
-
-            let open = MenuItem::with_id(
-                app,
-                "open",
-                translate("open", settings.language),
-                true,
-                None::<&str>,
-            )?;
-            let separator = PredefinedMenuItem::separator(app)?;
-            let exit = MenuItem::with_id(
-                app,
-                "exit",
-                translate("exit", settings.language),
-                true,
-                None::<&str>,
-            )?;
-            let menu = Menu::with_items(app, &[&open, &separator, &exit])?;
-            TrayIconBuilder::new()
-                .icon(app.default_window_icon().unwrap().clone())
-                .tooltip(constants::APP_TITLE)
-                .menu(&menu)
-                .show_menu_on_left_click(false)
-                .on_menu_event(|app, event| match event.id.as_ref() {
-                    "open" => {
-                        let _ = show_main_window(app);
-                    }
-                    "exit" => app.exit(0),
-                    _ => {}
-                })
-                .on_tray_icon_event(|tray, event| {
-                    if let TrayIconEvent::Click {
-                        button: MouseButton::Left,
-                        button_state: MouseButtonState::Up,
-                        ..
-                    } = event
-                    {
-                        let _ = show_main_window(tray.app_handle());
-                    }
-                })
-                .build(app)?;
 
             app.manage(Prompts::default());
             app.manage(database);
@@ -411,18 +354,13 @@ pub fn run(log_level: LevelFilter) {
             eprintln!("Error while running tauri application {}", e);
             exit(constants::ExitCodes::TauriError.into())
         })
-        .run(|app, event| match event {
-            RunEvent::ExitRequested { api, code, .. }
-                if code.is_none() && app.state::<SettingsLock>().read().unwrap().close_to_tray =>
-            {
-                api.prevent_exit();
-                let _ = hide_main_window(app);
+        .run(|_, event| {
+            if let RunEvent::Exit = event {
+                info!(
+                    "Stopped {} v{}",
+                    *constants::APP_NAME,
+                    *constants::APP_VERSION
+                )
             }
-            RunEvent::Exit => info!(
-                "Stopped {} v{}",
-                *constants::APP_NAME,
-                *constants::APP_VERSION
-            ),
-            _ => {}
         });
 }

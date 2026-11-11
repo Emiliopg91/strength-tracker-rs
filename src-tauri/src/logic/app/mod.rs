@@ -11,8 +11,7 @@ use self::helpers::{check_for_update, install_udev_rules, show_main_window};
 use crate::{
     SettingsLock, constants,
     dao::settings::settings_keys::{
-        CLOSE_TO_TRAY, DISTANCE_UNIT, LANGUAGE, ON_DEVICE_CONNECT, START_INTO_TRAY, START_ON_BOOT,
-        WEIGHT_UNIT,
+        DISTANCE_UNIT, LANGUAGE, ON_DEVICE_CONNECT, START_ON_BOOT, WEIGHT_UNIT,
     },
     dto::{
         app::{AppEnvironment, Settings},
@@ -54,9 +53,7 @@ pub async fn notify_frontend_ready<R: Runtime>(app: &AppHandle<R>) {
         up_to_date_connect(&app_cl).await;
     });
 
-    if !app.state::<SettingsLock>().read().unwrap().start_into_tray {
-        let _ = show_main_window(app);
-    }
+    let _ = show_main_window(app);
 
     spawn_geolocation_update(app);
 
@@ -103,8 +100,6 @@ pub async fn update_settings_value<R: Runtime>(
             WEIGHT_UNIT => updated.weight_unit = value.as_str().try_into()?,
             LANGUAGE => updated.language = Languages::from_name(&value),
             START_ON_BOOT => updated.start_boot = flag,
-            START_INTO_TRAY => updated.start_into_tray = flag,
-            CLOSE_TO_TRAY => updated.close_to_tray = flag,
             ON_DEVICE_CONNECT => updated.on_device_connect = flag,
             _ => unreachable!(),
         }

@@ -526,24 +526,12 @@ create_workout:
 pending_workout_send:
   en: Workout will be sent to device when connected
   es: El entrenamiento se enviará al dispositivo cuando se conecte
-start_into_tray:
-  en: Start into system tray
-  es: Iniciar en bandeja del sistema
-close_to_tray:
-  en: Close to system tray
-  es: Cerrar en la bandeja del sistema
 yes:
   en: Yes
   es: Sí
 no:
   en: No
   es: No
-open:
-  en: Open
-  es: Abrir
-exit:
-  en: Exit
-  es: Salir
 notes:
   en: Notes
   es: Notas

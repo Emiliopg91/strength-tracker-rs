@@ -29,7 +29,7 @@ export interface DeviceListItem {
   strength_workout: boolean;
 }
 
-// From src-tauri/src/dao/settings.rs:231
+// From src-tauri/src/dao/settings.rs:105
 export enum DistanceUnit {
 	Kilometers = "Kilometers",
 	Miles = "Miles",
@@ -214,12 +214,10 @@ export interface SessionStepsUpdate {
 
 // From src-tauri/src/dto/app.rs:16
 export interface Settings {
-  close_to_tray: boolean;
   distance_unit: DistanceUnit;
   language: Languages;
   on_device_connect: boolean;
   start_boot: boolean;
-  start_into_tray: boolean;
   weight_unit: WeightUnit;
 }
 
@@ -234,7 +232,7 @@ export enum StepType {
 	Repeat = "Repeat",
 }
 
-// From src-tauri/src/dao/settings.rs:259
+// From src-tauri/src/dao/settings.rs:133
 export enum WeightUnit {
 	Kilograms = "Kilograms",
 	Pounds = "Pounds",

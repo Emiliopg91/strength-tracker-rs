@@ -119,8 +119,6 @@ async fn save_persists_every_setting() {
 
     let mut settings = app::Settings::load(&db).await;
     settings.start_boot = true;
-    settings.close_to_tray = true;
-    settings.start_into_tray = true;
     settings.on_device_connect = true;
     settings.weight_unit = WeightUnit::Pounds;
     settings.distance_unit = DistanceUnit::Miles;
@@ -129,8 +127,6 @@ async fn save_persists_every_setting() {
 
     let loaded = app::Settings::load(&db).await;
     assert!(loaded.start_boot);
-    assert!(loaded.close_to_tray);
-    assert!(loaded.start_into_tray);
     assert!(loaded.on_device_connect);
     assert!(matches!(loaded.weight_unit, WeightUnit::Pounds));
     assert!(matches!(loaded.distance_unit, DistanceUnit::Miles));

@@ -15,8 +15,6 @@ export const DEFAULT_SETTINGS: Settings = {
     start_boot: false,
     language: Languages.English,
     on_device_connect: false,
-    close_to_tray: false,
-    start_into_tray: false,
 };
 
 interface I18nSettingsContextType {

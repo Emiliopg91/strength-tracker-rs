@@ -40,7 +40,7 @@ pub(crate) async fn request_prompt<R: Runtime>(
     prompts.pending.lock().unwrap().insert(id, tx);
 
     info!("Requesting {:?} prompt #{}", kind, id);
-    // The dialog lives in the main window, which may be hidden in the tray. A recreated window
+    // The dialog lives in the main window, which may be minimized. A recreated window
     // would not be listening yet, so only an existing one is shown
     if app.get_webview_window("main").is_some() {
         let _ = show_main_window(app);

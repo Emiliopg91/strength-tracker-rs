@@ -11,8 +11,8 @@ use crate::{
     dao::{
         device::{Device, DeviceRepository},
         session::Session,
-        settings::WeightUnit,
-        settings::settings_keys::CLOSE_TO_TRAY,
+        settings::settings_keys::DISTANCE_UNIT,
+        settings::{DistanceUnit, WeightUnit},
         workout::Workout,
         workout_device::WorkoutDeviceRepository,
         workout_step::{StepType, WorkoutStep},
@@ -104,19 +104,20 @@ async fn insert_session(app: &App<MockRuntime>, date: u32, reps: u16, weight: f3
 #[tokio::test]
 async fn settings_are_read_and_updated_in_memory_and_database() {
     let app = test_app().await;
-    app::update_settings_value(app.handle(), CLOSE_TO_TRAY, "true")
+    app::update_settings_value(app.handle(), DISTANCE_UNIT, "Miles")
         .await
         .unwrap();
 
     let settings = app::get_settings(&app.state::<SettingsLock>())
         .await
         .unwrap();
-    assert!(settings.close_to_tray);
-    assert!(
+    assert!(matches!(settings.distance_unit, DistanceUnit::Miles));
+    assert!(matches!(
         Settings::load(&app.state::<DatabasePool>())
             .await
-            .close_to_tray
-    );
+            .distance_unit,
+        DistanceUnit::Miles
+    ));
 }
 
 #[tokio::test]
