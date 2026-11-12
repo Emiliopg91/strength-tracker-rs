@@ -1,11 +1,12 @@
 //! Authenticated Garmin Connect API client (OAuth2 bearer tokens).
 
 use bytes::Bytes;
-use curl_rest::{Client, Header, Response, StatusCode};
+use reqwest::header::{AUTHORIZATION, USER_AGENT};
+use reqwest::{Method, RequestBuilder, StatusCode};
 use serde::{Serialize, de::DeserializeOwned};
 
 use super::error::{GarminError, Result};
-use super::http;
+use super::http::{self, Response};
 use super::models::{
     ActivityDescriptionUpdate, ActivityDetails, ActivitySummary, CalendarItem, CalendarMonth,
     DeviceSummary, ExerciseSets,
@@ -118,7 +119,7 @@ impl GarminClient {
         token: &OAuth2Token,
         path: &str,
     ) -> Result<T> {
-        let response = self.send(Self::request(token).get(), path).await?;
+        let response = self.send(token, Method::GET, path, |r| r).await?;
         Self::parse_json(path, &response)
     }
 
@@ -129,8 +130,9 @@ impl GarminClient {
         path: &str,
         body: &B,
     ) -> Result<T> {
-        let request = Self::request(token).post().body_json(Self::to_json(body)?);
-        let response = self.send(request, path).await?;
+        let response = self
+            .send(token, Method::POST, path, |r| r.json(body))
+            .await?;
         Self::parse_json(path, &response)
     }
 
@@ -141,32 +143,21 @@ impl GarminClient {
         path: &str,
         body: &B,
     ) -> Result<()> {
-        let request = Self::request(token).put().body_json(Self::to_json(body)?);
-        self.send(request, path).await?;
+        self.send(token, Method::PUT, path, |r| r.json(body))
+            .await?;
         Ok(())
     }
 
     /// Make an authenticated DELETE request, discarding the response body
     pub async fn delete(&self, token: &OAuth2Token, path: &str) -> Result<()> {
-        self.send(Self::request(token).delete(), path).await?;
+        self.send(token, Method::DELETE, path, |r| r).await?;
         Ok(())
     }
 
     /// Make an authenticated GET request and return raw bytes (for file downloads)
     pub async fn download(&self, token: &OAuth2Token, path: &str) -> Result<Bytes> {
-        let response = self.send(Self::request(token).get(), path).await?;
-        Ok(Bytes::from(response.body))
-    }
-
-    fn request(token: &OAuth2Token) -> Client<'static> {
-        Client::new()
-            .header(Header::UserAgent(API_USER_AGENT.into()))
-            .header(Header::Authorization(token.authorization_header().into()))
-    }
-
-    fn to_json<B: Serialize + ?Sized>(body: &B) -> Result<String> {
-        serde_json::to_string(body)
-            .map_err(|e| GarminError::config(format!("Failed to serialize request body: {}", e)))
+        let response = self.send(token, Method::GET, path, |r| r).await?;
+        Ok(response.body)
     }
 
     fn parse_json<T: DeserializeOwned>(path: &str, response: &Response) -> Result<T> {
@@ -176,14 +167,25 @@ impl GarminClient {
                 path,
                 response.status,
                 e,
-                response_preview(&http::body_text(response))
+                response_preview(&response.text())
             ))
         })
     }
 
-    async fn send(&self, request: Client<'static>, path: &str) -> Result<Response> {
+    /// Send an authenticated request to `path`, after `build` adds the body (if any)
+    async fn send(
+        &self,
+        token: &OAuth2Token,
+        method: Method,
+        path: &str,
+        build: impl FnOnce(RequestBuilder) -> RequestBuilder,
+    ) -> Result<Response> {
         let url = format!("{}{}", self.base_url, path);
-        let response = http::send(request, url.clone()).await?;
+        let request = http::client()
+            .request(method, &url)
+            .header(USER_AGENT, API_USER_AGENT)
+            .header(AUTHORIZATION, token.authorization_header());
+        let response = http::send(build(request)).await?;
 
         match response.status {
             StatusCode::OK
@@ -195,7 +197,7 @@ impl GarminClient {
             StatusCode::NOT_FOUND => Err(GarminError::NotFound(url)),
             status => Err(GarminError::Api {
                 status: status.as_u16(),
-                message: http::body_text(&response),
+                message: response.text(),
             }),
         }
     }

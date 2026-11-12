@@ -5,7 +5,6 @@ use std::{
 };
 
 use chrono::{Local, TimeZone};
-use curl_rest::StatusCode;
 use rusqlite_orm::errors::DatabaseError;
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tauri_plugin_log::log::{error, info};
@@ -270,19 +269,17 @@ pub(crate) async fn update_pending_geolocation<R: Runtime>(app: &AppHandle<R>) {
                     first.0, first.1
                 );
                 //
-                let resp = tokio::task::spawn_blocking(move || {
-                    curl_rest::Client::with_user_agent("strength-tracker-rs")
-                        .get()
-                        .header(curl_rest::Header::Accept("application/json".into()))
-                        .send(&url)
-                })
-                .await
-                .expect("geocode request task panicked");
+                let resp = reqwest::Client::new()
+                    .get(&url)
+                    .header(reqwest::header::USER_AGENT, "strength-tracker-rs")
+                    .header(reqwest::header::ACCEPT, "application/json")
+                    .send()
+                    .await;
 
                 match resp {
                     Ok(response) => {
-                        if response.status == StatusCode::Ok {
-                            match serde_json::from_slice::<serde_json::Value>(&response.body) {
+                        if response.status() == reqwest::StatusCode::OK {
+                            match response.json::<serde_json::Value>().await {
                                 Ok(e) => {
                                     if let Some(address) = e.get("address") {
                                         for key in ["village", "town", "city", "state", "country"] {
@@ -335,7 +332,7 @@ pub(crate) async fn update_pending_geolocation<R: Runtime>(app: &AppHandle<R>) {
                                 }
                             }
                         } else {
-                            error!("Invalid status code: {}", response.status)
+                            error!("Invalid status code: {}", response.status())
                         }
                     }
                     Err(e) => {

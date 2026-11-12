@@ -108,22 +108,20 @@ pub(super) async fn check_for_update<R: Runtime>(app: &AppHandle<R>) {
 
 /// Latest version published on GitHub.
 async fn latest_version() -> Result<Version, String> {
-    let response = tokio::task::spawn_blocking(|| {
-        curl_rest::Client::with_user_agent("strength-tracker-rs")
-            .get()
-            .header(curl_rest::Header::Accept(
-                "application/vnd.github+json".into(),
-            ))
-            .send(constants::URL)
-    })
-    .await
-    .expect("Update check task panicked")
-    .map_err(|e| format!("Error sending request to GitHub: {e}"))?;
-    if response.status != curl_rest::StatusCode::Ok {
-        return Err(format!("Invalid response status: {}", response.status));
+    let response = reqwest::Client::new()
+        .get(constants::URL)
+        .header(reqwest::header::USER_AGENT, "strength-tracker-rs")
+        .header(reqwest::header::ACCEPT, "application/vnd.github+json")
+        .send()
+        .await
+        .map_err(|e| format!("Error sending request to GitHub: {e}"))?;
+    if response.status() != reqwest::StatusCode::OK {
+        return Err(format!("Invalid response status: {}", response.status()));
     }
 
-    let json: Value = serde_json::from_slice(&response.body)
+    let json: Value = response
+        .json()
+        .await
         .map_err(|e| format!("Invalid parsing response: {e}"))?;
     let tag_name = json
         .get("tag_name")

@@ -18,10 +18,14 @@
 
 use super::GLOBAL_DOMAIN;
 use super::error::{GarminError, Result};
-use super::http::{self, CookieStore};
+use super::http;
 use super::oauth1::{OAuth1Signer, OAuthConsumer, OAuthToken, parse_oauth_response};
 use super::tokens::{OAuth1Token, OAuth2Token};
-use curl_rest::{Client, Header, Response, StatusCode};
+use reqwest::StatusCode;
+use reqwest::header::{
+    ACCEPT, ACCEPT_LANGUAGE, AUTHORIZATION, CONTENT_TYPE, HeaderMap, HeaderName, HeaderValue,
+    ORIGIN, REFERER, USER_AGENT,
+};
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -108,7 +112,8 @@ struct MfaInfo {
 
 /// SSO Client for Garmin authentication
 pub struct SsoClient {
-    cookies: CookieStore,
+    /// Client with a cookie store, carrying the SSO session cookies
+    client: reqwest::Client,
     domain: String,
 }
 
@@ -122,7 +127,7 @@ impl SsoClient {
     /// for international accounts, `garmin.cn` for mainland China accounts).
     pub fn with_domain(domain: impl Into<String>) -> Result<Self> {
         Ok(Self {
-            cookies: CookieStore::default(),
+            client: reqwest::Client::builder().cookie_store(true).build()?,
             domain: domain.into(),
         })
     }
@@ -133,53 +138,51 @@ impl SsoClient {
     }
 
     /// Build SSO page headers (browser-like to establish session cookies)
-    fn sso_page_headers(fetch_site: &'static str) -> Vec<Header<'static>> {
-        vec![
-            Header::UserAgent(SSO_USER_AGENT.into()),
-            Header::Accept(
-                "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8".into(),
+    fn sso_page_headers(fetch_site: &'static str) -> HeaderMap {
+        HeaderMap::from_iter([
+            (USER_AGENT, HeaderValue::from_static(SSO_USER_AGENT)),
+            (
+                ACCEPT,
+                HeaderValue::from_static(
+                    "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                ),
             ),
-            Header::AcceptLanguage("en-US,en;q=0.9".into()),
-            Header::Custom("Sec-Fetch-Mode".into(), "navigate".into()),
-            Header::Custom("Sec-Fetch-Dest".into(), "document".into()),
-            Header::Custom("Sec-Fetch-Site".into(), fetch_site.into()),
-        ]
+            (ACCEPT_LANGUAGE, HeaderValue::from_static("en-US,en;q=0.9")),
+            (
+                HeaderName::from_static("sec-fetch-mode"),
+                HeaderValue::from_static("navigate"),
+            ),
+            (
+                HeaderName::from_static("sec-fetch-dest"),
+                HeaderValue::from_static("document"),
+            ),
+            (
+                HeaderName::from_static("sec-fetch-site"),
+                HeaderValue::from_static(fetch_site),
+            ),
+        ])
     }
 
     /// Build mobile JSON API headers for login/MFA endpoints
-    fn sso_api_headers(&self) -> Vec<Header<'static>> {
-        vec![
-            Header::UserAgent(MOBILE_USER_AGENT.into()),
-            Header::Accept("application/json, text/plain, */*".into()),
-            Header::AcceptLanguage("en-US,en;q=0.9".into()),
-            Header::ContentType("application/json".into()),
-            Header::Origin(format!("https://sso.{}", self.domain).into()),
-            Header::Referer(format!("https://sso.{}/mobile/sso/en/sign-in", self.domain).into()),
-        ]
-    }
-
-    /// Send `request` to an SSO page, carrying and updating the session cookies
-    async fn send_with_cookies(&self, request: Client<'static>, url: String) -> Result<Response> {
-        let request = match self.cookies.header() {
-            Some(cookie) => request.header(cookie),
-            None => request,
+    fn sso_api_headers(&self) -> Result<HeaderMap> {
+        let header = |value: String| {
+            HeaderValue::try_from(value)
+                .map_err(|e| GarminError::config(format!("Invalid header value: {}", e)))
         };
-        let response = http::send(request, url).await?;
-        self.cookies.store(&response);
-        Ok(response)
-    }
-
-    /// Query parameters for the login and MFA endpoints
-    fn query(params: &[(&str, &str)]) -> Vec<curl_rest::QueryParam<'static>> {
-        params
-            .iter()
-            .map(|(k, v)| curl_rest::QueryParam::new(k.to_string(), v.to_string()))
-            .collect()
-    }
-
-    fn to_json<B: Serialize>(body: &B) -> Result<String> {
-        serde_json::to_string(body)
-            .map_err(|e| GarminError::config(format!("Failed to serialize request body: {}", e)))
+        Ok(HeaderMap::from_iter([
+            (USER_AGENT, HeaderValue::from_static(MOBILE_USER_AGENT)),
+            (
+                ACCEPT,
+                HeaderValue::from_static("application/json, text/plain, */*"),
+            ),
+            (ACCEPT_LANGUAGE, HeaderValue::from_static("en-US,en;q=0.9")),
+            (CONTENT_TYPE, HeaderValue::from_static("application/json")),
+            (ORIGIN, header(format!("https://sso.{}", self.domain))?),
+            (
+                REFERER,
+                header(format!("https://sso.{}/mobile/sso/en/sign-in", self.domain))?,
+            ),
+        ]))
     }
 
     /// Perform full login flow using mobile JSON API.
@@ -205,12 +208,12 @@ impl SsoClient {
 
         // Step 1: Set cookies by visiting the sign-in page
         let sign_in_url = format!("https://sso.{}/mobile/sso/en/sign-in", self.domain);
-        let request = Client::new()
-            .get()
-            .query_param_kv("clientId", CLIENT_ID)
+        let request = self
+            .client
+            .get(sign_in_url)
+            .query(&[("clientId", CLIENT_ID)])
             .headers(Self::sso_page_headers("none"));
-
-        self.send_with_cookies(request, sign_in_url).await?;
+        http::send(request).await?;
 
         // Step 2: Submit login via JSON API
         let login_url = format!("https://sso.{}/mobile/api/login", self.domain);
@@ -221,15 +224,16 @@ impl SsoClient {
             captcha_token: "",
         };
 
-        let request = Client::new()
-            .post()
-            .query_params(Self::query(&login_params))
-            .headers(self.sso_api_headers())
-            .body_json(Self::to_json(&login_body)?);
-        let response = self.send_with_cookies(request, login_url).await?;
+        let request = self
+            .client
+            .post(login_url)
+            .query(&login_params)
+            .headers(self.sso_api_headers()?)
+            .json(&login_body);
+        let response = http::send(request).await?;
 
         let status_code = response.status;
-        let body_text = http::body_text(&response);
+        let body_text = response.text();
 
         if status_code == StatusCode::TOO_MANY_REQUESTS {
             return Err(GarminError::auth(format!(
@@ -237,7 +241,7 @@ impl SsoClient {
                 &body_text[..body_text.len().min(400)]
             )));
         }
-        if !http::is_success(status_code) {
+        if !status_code.is_success() {
             return Err(GarminError::auth(format!(
                 "SSO HTTP {}. Response body: {}",
                 status_code,
@@ -314,12 +318,13 @@ impl SsoClient {
             mfa_setup: false,
         };
 
-        let request = Client::new()
-            .post()
-            .query_params(Self::query(login_params))
-            .headers(self.sso_api_headers())
-            .body_json(Self::to_json(&mfa_body)?);
-        let response = self.send_with_cookies(request, mfa_url).await?;
+        let request = self
+            .client
+            .post(mfa_url)
+            .query(login_params)
+            .headers(self.sso_api_headers()?)
+            .json(&mfa_body);
+        let response = http::send(request).await?;
 
         let sso_resp: SsoResponse = serde_json::from_slice(&response.body).map_err(|e| {
             GarminError::invalid_response(format!("Failed to parse MFA response: {}", e))
@@ -351,10 +356,11 @@ impl SsoClient {
     async fn complete_login(&self, ticket: &str) -> Result<(OAuth1Token, OAuth2Token)> {
         // Best-effort: set Cloudflare LB cookie for backend pinning
         let portal_url = format!("https://sso.{}/portal/sso/embed", self.domain);
-        let request = Client::new()
-            .get()
+        let request = self
+            .client
+            .get(portal_url)
             .headers(Self::sso_page_headers("same-origin"));
-        let _ = self.send_with_cookies(request, portal_url).await;
+        let _ = http::send(request).await;
 
         // Exchange ticket for OAuth1 token
         let oauth1 = self.get_oauth1_token(ticket).await?;
@@ -396,21 +402,21 @@ impl SsoClient {
         let auth_header = signer.sign("GET", &url, &[]);
 
         // Sent without cookies (matches garth's OAuth1Session behavior)
-        let request = Client::new()
-            .get()
-            .header(Header::UserAgent(MOBILE_USER_AGENT.into()))
-            .header(Header::Authorization(auth_header.into()));
-        let response = http::send(request, url).await?;
+        let request = http::client()
+            .get(url)
+            .header(USER_AGENT, MOBILE_USER_AGENT)
+            .header(AUTHORIZATION, auth_header);
+        let response = http::send(request).await?;
 
         let status = response.status;
-        if !http::is_success(status) {
+        if !status.is_success() {
             return Err(GarminError::auth(format!(
                 "Failed to get OAuth1 token: {}",
                 status
             )));
         }
 
-        let params = parse_oauth_response(&http::body_text(&response));
+        let params = parse_oauth_response(&response.text());
 
         let oauth_token = params
             .get("oauth_token")
@@ -482,23 +488,21 @@ impl SsoClient {
 
         let auth_header = signer.sign("POST", &url, &form_params);
 
-        // Always send the (possibly empty) form so libcurl posts a zero-length body
+        // Always send the (possibly empty) form, so the POST carries a zero-length body
         let form = url::form_urlencoded::Serializer::new(String::new())
             .extend_pairs(&form_params)
             .finish();
 
-        let request = Client::new()
-            .post()
-            .header(Header::UserAgent(MOBILE_USER_AGENT.into()))
-            .header(Header::Authorization(auth_header.into()))
-            .header(Header::ContentType(
-                "application/x-www-form-urlencoded".into(),
-            ))
-            .body_bytes(form.into_bytes());
-        let response = http::send(request, url).await?;
+        let request = http::client()
+            .post(url)
+            .header(USER_AGENT, MOBILE_USER_AGENT)
+            .header(AUTHORIZATION, auth_header)
+            .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .body(form);
+        let response = http::send(request).await?;
 
         let status = response.status;
-        if !http::is_success(status) {
+        if !status.is_success() {
             return Err(GarminError::auth(format!(
                 "Failed to exchange OAuth1 for OAuth2: {}",
                 status
@@ -535,7 +539,7 @@ impl SsoClient {
 
     /// Fetch OAuth consumer credentials from Garth's S3
     async fn fetch_oauth_consumer(&self) -> Result<OAuthConsumerResponse> {
-        let response = http::send(Client::new().get(), OAUTH_CONSUMER_URL.to_string()).await?;
+        let response = http::send(http::client().get(OAUTH_CONSUMER_URL)).await?;
 
         serde_json::from_slice(&response.body).map_err(|e| {
             GarminError::invalid_response(format!("Failed to parse OAuth consumer: {}", e))

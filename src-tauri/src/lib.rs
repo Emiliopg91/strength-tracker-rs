@@ -246,7 +246,6 @@ pub fn run(log_level: LevelFilter) {
                 })
                 .build(),
         )
-        .plugin(tauri_plugin_opener::init())
         .setup(move |app| {
             info!(
                 "Starting {} v{} with PID {}",
