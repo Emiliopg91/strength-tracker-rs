@@ -284,133 +284,73 @@ export class SessionUtils {
         }
     }
 
+    /** Days shown in the load chart; twice as many are loaded to warm the averages up. */
     public static CHRONIC_DAYS = 28;
-    public static ACWR_UPPER_RATIO = 1.4;
+    /** Acute/chronic ratio from which Garmin rates the load as high. */
+    public static ACWR_UPPER_RATIO = 1.5;
+    /** Acute/chronic ratio below which Garmin rates the load as low. */
+    public static ACWR_LOWER_RATIO = 0.8;
 
     public static isOverreaching(load: WorkoutLoad[]): boolean {
         if (load.length === 0) {
             return false;
         }
         const last = load[load.length - 1];
-        return last.current > last.reference * SessionUtils.ACWR_UPPER_RATIO;
+        return last.current >= last.reference * SessionUtils.ACWR_UPPER_RATIO;
     }
 
+    /**
+     * Daily acute and chronic load, as Garmin computes them (fitted against Garmin Connect data):
+     * - acute: 7 x EWMA of the daily load (N = 10), in "load per week" units,
+     * - chronic: EWMA of the acute load (N = 18),
+     * - optimal range: between 0.8 and 1.5 times the chronic load.
+     */
     public static calculateWorkoutLoad(data: SessionListItem[]): WorkoutLoad[] {
         if (data.length === 0) {
             return [];
-        } else {
-            const addDays = (ts: number, n: number) => {
-                const d = new Date(ts);
-                d.setDate(d.getDate() + n);
-                return d.getTime();
-            };
+        }
 
-            const ACUTE_DAYS = 7;
-            const ACWR_LOWER_RATIO = 0.9;
-            const TODAY = startOfDay(new Date()).getTime();
+        const ACUTE_ALPHA = 2 / (10 + 1);
+        const CHRONIC_ALPHA = 2 / (18 + 1);
+        const WEEK_DAYS = 7;
 
-            const LAMBDA_ACUTE = 2 / (ACUTE_DAYS + 1); // ~0.25
-            const LAMBDA_CHRONIC = 2 / (SessionUtils.CHRONIC_DAYS + 1); // ~0.069
+        const today = startOfDay(new Date());
+        const first = new Date(today);
+        first.setDate(first.getDate() - 2 * SessionUtils.CHRONIC_DAYS + 1);
 
-            let working_data = Array.from(
-                data
-                    .map((s) => {
-                        return {
-                            date: startOfDay(
-                                new Date(s.timestamp * 1000),
-                            ).getTime(),
-                            load: s.training_load,
-                        };
-                    })
-                    .filter(
-                        (s) =>
-                            TODAY -
-                                2 *
-                                    SessionUtils.CHRONIC_DAYS *
-                                    24 *
-                                    60 *
-                                    60 *
-                                    1000 <=
-                            s.date,
-                    )
-                    .reduce((map, s) => {
-                        map.set(s.date, (map.get(s.date) ?? 0) + s.load);
-                        return map;
-                    }, new Map<number, number>()),
-                ([date, load]) => ({ date, load }),
-            );
+        const dailyLoad = new Map<number, number>();
+        for (const s of data) {
+            const day = startOfDay(new Date(s.timestamp * 1000)).getTime();
+            dailyLoad.set(day, (dailyLoad.get(day) ?? 0) + s.training_load);
+        }
 
-            for (
-                let dat = addDays(TODAY, -2 * SessionUtils.CHRONIC_DAYS + 1);
-                dat <= TODAY;
-                dat = addDays(dat, 1)
-            ) {
-                if (!working_data.find(({ date }) => date === dat)) {
-                    working_data.push({ date: dat, load: 0 });
-                }
-            }
+        const result: WorkoutLoad[] = [];
+        let acute = 0;
+        let chronic = 0;
+        for (
+            let day = first, idx = 0;
+            day <= today;
+            day.setDate(day.getDate() + 1), idx++
+        ) {
+            const load = dailyLoad.get(day.getTime()) ?? 0;
+            acute = load * WEEK_DAYS * ACUTE_ALPHA + acute * (1 - ACUTE_ALPHA);
+            chronic = acute * CHRONIC_ALPHA + chronic * (1 - CHRONIC_ALPHA);
 
-            working_data = working_data.sort((a, b) => a.date - b.date);
-
-            if (working_data.length === 0) {
-                return [];
-            } else {
-                let ewmaAcute = working_data[0].load;
-                let ewmaChronic = working_data[0].load;
-
-                const ewmaSeries: {
-                    date: number;
-                    acute: number;
-                    chronic: number;
-                }[] = [
-                    {
-                        date: working_data[0].date,
-                        acute: ewmaAcute,
-                        chronic: ewmaChronic,
-                    },
-                ];
-
-                for (let i = 1; i < working_data.length; i++) {
-                    const v = working_data[i].load;
-                    ewmaAcute =
-                        v * LAMBDA_ACUTE + ewmaAcute * (1 - LAMBDA_ACUTE);
-                    ewmaChronic =
-                        v * LAMBDA_CHRONIC + ewmaChronic * (1 - LAMBDA_CHRONIC);
-
-                    ewmaSeries.push({
-                        date: working_data[i].date,
-                        acute: ewmaAcute,
-                        chronic: ewmaChronic,
-                    });
-                }
-
-                let load_data = ewmaSeries
-                    .filter((_, idx) => idx >= SessionUtils.CHRONIC_DAYS)
-                    .map((e) => ({
-                        date: e.date,
-                        upper:
-                            e.chronic *
-                            (SessionUtils.ACWR_UPPER_RATIO - ACWR_LOWER_RATIO),
-                        lower: e.chronic * ACWR_LOWER_RATIO,
-                        current: e.acute,
-                        reference: e.chronic,
-                    }));
-
-                if (load_data.length === 0) {
-                    return [];
-                } else {
-                    load_data = load_data.map((e) => ({
-                        ...e,
-                        current: e.current,
-                        upper: e.upper,
-                        lower: e.lower,
-                        reference: e.reference,
-                    }));
-
-                    return load_data;
-                }
+            if (idx >= SessionUtils.CHRONIC_DAYS) {
+                result.push({
+                    date: day.getTime(),
+                    lower: chronic * SessionUtils.ACWR_LOWER_RATIO,
+                    upper:
+                        chronic *
+                        (SessionUtils.ACWR_UPPER_RATIO -
+                            SessionUtils.ACWR_LOWER_RATIO),
+                    current: acute,
+                    reference: chronic,
+                });
             }
         }
+
+        return result;
     }
 
     private static makeMarkerIcon(

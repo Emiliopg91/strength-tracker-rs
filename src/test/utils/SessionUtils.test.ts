@@ -389,12 +389,13 @@ describe("SessionUtils.isOverreaching", () => {
             SessionUtils.isOverreaching([load(1000, 1), load(100, 100)]),
         ).toBe(false);
         expect(
-            SessionUtils.isOverreaching([load(100, 100), load(141, 100)]),
+            SessionUtils.isOverreaching([load(100, 100), load(151, 100)]),
         ).toBe(true);
     });
 
-    it("uses the ACWR upper ratio as a strict threshold", () => {
-        expect(SessionUtils.isOverreaching([load(140, 100)])).toBe(false);
+    it("starts at the ACWR upper ratio, as Garmin's high load", () => {
+        expect(SessionUtils.isOverreaching([load(149, 100)])).toBe(false);
+        expect(SessionUtils.isOverreaching([load(150, 100)])).toBe(true);
     });
 });
 
@@ -448,15 +449,17 @@ describe("SessionUtils.calculateWorkoutLoad", () => {
         }
     });
 
-    it("applies EWMA to a single load spike", () => {
+    it("applies Garmin's acute and chronic EWMA to a single load spike", () => {
         const result = SessionUtils.calculateWorkoutLoad([session(0, 100)]);
         const last = result[result.length - 1];
 
-        const chronic = (100 * 2) / (SessionUtils.CHRONIC_DAYS + 1);
-        expect(last.current).toBeCloseTo(25, 10);
+        // acute: 7 x EWMA(N = 10) of the daily load; chronic: EWMA(N = 18) of the acute load
+        const acute = (100 * 7 * 2) / 11;
+        const chronic = (acute * 2) / 19;
+        expect(last.current).toBeCloseTo(acute, 10);
         expect(last.reference).toBeCloseTo(chronic, 10);
-        expect(last.lower).toBeCloseTo(chronic * 0.9, 10);
-        expect(last.upper).toBeCloseTo(chronic * 0.5, 10);
+        expect(last.lower).toBeCloseTo(chronic * 0.8, 10);
+        expect(last.upper).toBeCloseTo(chronic * 0.7, 10);
         expect(
             result
                 .slice(0, -1)
@@ -475,17 +478,17 @@ describe("SessionUtils.calculateWorkoutLoad", () => {
         expect(split).toEqual(single);
     });
 
-    it("stays flat with a constant daily load", () => {
+    it("converges to the weekly load with a constant daily load", () => {
         const sessions = Array.from(
             { length: 2 * SessionUtils.CHRONIC_DAYS },
             (_, i) => session(i, 80),
         );
         const result = SessionUtils.calculateWorkoutLoad(sessions);
+        const last = result[result.length - 1];
 
-        for (const entry of result) {
-            expect(entry.current).toBeCloseTo(80, 10);
-            expect(entry.reference).toBeCloseTo(80, 10);
-        }
+        // Both averages start from zero, so they get within 0.5% of 7 x 80 by the end
+        expect(Math.abs(last.current - 560) / 560).toBeLessThan(0.005);
+        expect(Math.abs(last.reference - 560) / 560).toBeLessThan(0.005);
         expect(SessionUtils.isOverreaching(result)).toBe(false);
     });
 

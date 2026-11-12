@@ -41,6 +41,16 @@ function WorkloadTooltip({ active, payload, label }: TooltipContentProps) {
             <div>
                 {translate("lower_threshold")}: {formatNumber(data.lower, 0)}
             </div>
+            {data.reference > 0 && (
+                <div>
+                    {translate("load_ratio")}:{" "}
+                    {/* Truncated to one decimal, as Garmin shows it */}
+                    {formatNumber(
+                        Math.floor((data.current / data.reference) * 10) / 10,
+                        1,
+                    )}
+                </div>
+            )}
         </div>
     );
 }
