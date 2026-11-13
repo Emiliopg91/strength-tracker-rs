@@ -30,6 +30,18 @@ export interface WorkoutLoad {
     lower: number;
 }
 
+/** Position of the acute load relative to the optimal range. */
+export type LoadZone = "above" | "optimal" | "below";
+
+/** Straight piece of the acute load line lying in a single zone, in data coordinates. */
+export interface LoadSegment {
+    x0: number;
+    y0: number;
+    x1: number;
+    y1: number;
+    zone: LoadZone;
+}
+
 export interface SessionFrontDetails extends SessionDetails {
     zones_times: number[];
     gps_segments: {
@@ -297,6 +309,68 @@ export class SessionUtils {
         }
         const last = load[load.length - 1];
         return last.current >= last.reference * SessionUtils.ACWR_UPPER_RATIO;
+    }
+
+    /** Zone of `current` given the optimal range `[lower, upper)`, as Garmin rates it. */
+    public static loadZone(
+        current: number,
+        lower: number,
+        upper: number,
+    ): LoadZone {
+        if (current >= upper) {
+            return "above";
+        }
+        return current < lower ? "below" : "optimal";
+    }
+
+    /**
+     * Splits the straight acute load line wherever it crosses the edges of the (also straight)
+     * optimal range, so each segment lies in a single zone.
+     */
+    public static loadSegments(load: WorkoutLoad[]): LoadSegment[] {
+        const segments: LoadSegment[] = [];
+        for (let i = 1; i < load.length; i++) {
+            const a = load[i - 1];
+            const b = load[i];
+            const at = (t: number) => ({
+                x: a.date + (b.date - a.date) * t,
+                current: a.current + (b.current - a.current) * t,
+                lower: a.lower + (b.lower - a.lower) * t,
+                upper:
+                    a.lower +
+                    a.upper +
+                    (b.lower + b.upper - a.lower - a.upper) * t,
+            });
+
+            // Fractions of the segment where `current - edge` changes sign
+            const cuts = [0, 1];
+            for (const edge of ["lower", "upper"] as const) {
+                const d0 = a.current - at(0)[edge];
+                const d1 = b.current - at(1)[edge];
+                if (d0 * d1 < 0) {
+                    cuts.push(d0 / (d0 - d1));
+                }
+            }
+            cuts.sort((x, y) => x - y);
+
+            for (let j = 1; j < cuts.length; j++) {
+                const start = at(cuts[j - 1]);
+                const end = at(cuts[j]);
+                const mid = at((cuts[j - 1] + cuts[j]) / 2);
+                segments.push({
+                    x0: start.x,
+                    y0: start.current,
+                    x1: end.x,
+                    y1: end.current,
+                    zone: SessionUtils.loadZone(
+                        mid.current,
+                        mid.lower,
+                        mid.upper,
+                    ),
+                });
+            }
+        }
+        return segments;
     }
 
     /**

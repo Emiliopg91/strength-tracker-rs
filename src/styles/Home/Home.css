@@ -75,3 +75,15 @@
     }
   }
 }
+
+/* Status title on top of the load chart, which takes the remaining height */
+.workload-chart {
+  display: flex;
+  flex-direction: column;
+}
+
+.workload-status {
+  text-align: center;
+  font-weight: 600;
+  margin-bottom: 4px;
+}

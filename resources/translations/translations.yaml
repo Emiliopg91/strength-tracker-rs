@@ -103,6 +103,15 @@ lower_threshold:
 load_ratio:
   en: Load ratio
   es: Ratio de carga
+load_status_above:
+  en: Overreaching
+  es: Sobrecarga
+load_status_optimal:
+  en: Productive
+  es: Productivo
+load_status_below:
+  en: Detraining
+  es: Desentrenamiento
 workout:
   en: Workout
   es: Entrenamiento

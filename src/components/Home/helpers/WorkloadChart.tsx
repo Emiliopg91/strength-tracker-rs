@@ -1,5 +1,5 @@
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
-import { WorkoutLoad } from "@/utils/SessionUtils";
+import { LoadZone, SessionUtils, WorkoutLoad } from "@/utils/SessionUtils";
 import { useContext } from "react";
 import {
     Area,
@@ -9,9 +9,62 @@ import {
     ResponsiveContainer,
     Tooltip,
     TooltipContentProps,
+    useXAxisScale,
+    useYAxisScale,
     XAxis,
     YAxis,
 } from "recharts";
+
+const Y_AXIS = "left";
+
+const ZONE_COLORS: Record<LoadZone, string> = {
+    above: "#ef5350",
+    optimal: "green",
+    below: "#42a5f5",
+};
+
+/** Acute load line, colored by its position relative to the optimal range. */
+function ZoneLine({ workload }: { workload: WorkoutLoad[] }) {
+    const xScale = useXAxisScale();
+    const yScale = useYAxisScale(Y_AXIS);
+    if (!xScale || !yScale) {
+        return null;
+    }
+
+    return (
+        <g>
+            {SessionUtils.loadSegments(workload).map((s, i) => (
+                <line
+                    key={i}
+                    x1={xScale(s.x0)}
+                    y1={yScale(s.y0)}
+                    x2={xScale(s.x1)}
+                    y2={yScale(s.y1)}
+                    stroke={ZONE_COLORS[s.zone]}
+                    strokeWidth={1.5}
+                    strokeLinecap="round"
+                />
+            ))}
+            {workload.map((p) => (
+                <circle
+                    key={p.date}
+                    cx={xScale(p.date)}
+                    cy={yScale(p.current)}
+                    r={3}
+                    fill={
+                        ZONE_COLORS[
+                            SessionUtils.loadZone(
+                                p.current,
+                                p.lower,
+                                p.lower + p.upper,
+                            )
+                        ]
+                    }
+                />
+            ))}
+        </g>
+    );
+}
 
 type Props = {
     workload: WorkoutLoad[];
@@ -58,8 +111,29 @@ function WorkloadTooltip({ active, payload, label }: TooltipContentProps) {
 export function WorkloadChart({ workload, minDate }: Props) {
     const { translate } = useContext(I18nSettingsContext);
 
+    // Status of today's load
+    const today = workload[workload.length - 1];
+    const zone = SessionUtils.loadZone(
+        today.current,
+        today.lower,
+        today.lower + today.upper,
+    );
+
+    // Y axis spans just the load line and the optimal range
+    const yMin = Math.min(...workload.map((p) => Math.min(p.current, p.lower)));
+    const yMax = Math.max(
+        ...workload.map((p) => Math.max(p.current, p.lower + p.upper)),
+    );
+    const yDomain = yMax > yMin ? [yMin, yMax] : [yMin, yMin + 1];
+
     return (
-        <div className="chart-container">
+        <div className="chart-container workload-chart">
+            <div
+                className="workload-status"
+                style={{ color: ZONE_COLORS[zone] }}
+            >
+                {translate("load_status_" + zone)}
+            </div>
             <ResponsiveContainer
                 className="chart-responsive"
                 width="100%"
@@ -76,17 +150,21 @@ export function WorkloadChart({ workload, minDate }: Props) {
                         height={0}
                     />
                     <YAxis
-                        yAxisId="left"
+                        yAxisId={Y_AXIS}
                         stroke="#fff"
                         width={0}
-                        domain={[0, 1]}
+                        domain={yDomain}
+                        // Otherwise the stacked band would stretch the axis down to 0
+                        allowDataOverflow
                         tick={false}
-                    />{" "}
+                    />
+                    {/* Straight band edges, so the line changes color right where it crosses them */}
                     <Area
+                        yAxisId={Y_AXIS}
                         dataKey="lower"
                         stackId="1"
                         stroke="none"
-                        type="monotone"
+                        type="linear"
                         legendType="none"
                         fill="transparent"
                         dot={false}
@@ -94,10 +172,11 @@ export function WorkloadChart({ workload, minDate }: Props) {
                         activeDot={false}
                     />
                     <Area
+                        yAxisId={Y_AXIS}
                         dataKey="upper"
                         stackId="1"
                         stroke="none"
-                        type="monotone"
+                        type="linear"
                         fill="lightgreen"
                         legendType="none"
                         fillOpacity={0.1}
@@ -106,15 +185,7 @@ export function WorkloadChart({ workload, minDate }: Props) {
                         activeDot={false}
                     />
                     <Line
-                        type="monotone"
-                        name={translate("workload")}
-                        dataKey="current"
-                        stroke="green"
-                        dot={{ fill: "green" }}
-                        isAnimationActive={false}
-                        activeDot={false}
-                    />
-                    <Line
+                        yAxisId={Y_AXIS}
                         type="monotone"
                         name={translate("reference")}
                         legendType="line"
@@ -124,6 +195,7 @@ export function WorkloadChart({ workload, minDate }: Props) {
                         isAnimationActive={false}
                         activeDot={false}
                     />
+                    <ZoneLine workload={workload} />
                     <Tooltip
                         isAnimationActive={false}
                         content={(props) => <WorkloadTooltip {...props} />}

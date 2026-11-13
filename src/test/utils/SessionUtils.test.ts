@@ -399,6 +399,72 @@ describe("SessionUtils.isOverreaching", () => {
     });
 });
 
+describe("SessionUtils.loadZone", () => {
+    it("rates the load against the optimal range, upper edge included as high", () => {
+        expect(SessionUtils.loadZone(79, 80, 150)).toBe("below");
+        expect(SessionUtils.loadZone(80, 80, 150)).toBe("optimal");
+        expect(SessionUtils.loadZone(149, 80, 150)).toBe("optimal");
+        expect(SessionUtils.loadZone(150, 80, 150)).toBe("above");
+    });
+});
+
+describe("SessionUtils.loadSegments", () => {
+    // `upper` is the height of the band over `lower`, as the chart stacks them
+    const point = (date: number, current: number): WorkoutLoad => ({
+        date,
+        current,
+        lower: 80,
+        upper: 70,
+        reference: 100,
+    });
+
+    it("returns nothing for less than two points", () => {
+        expect(SessionUtils.loadSegments([])).toEqual([]);
+        expect(SessionUtils.loadSegments([point(0, 100)])).toEqual([]);
+    });
+
+    it("keeps a segment whole when it stays in one zone", () => {
+        expect(
+            SessionUtils.loadSegments([point(0, 100), point(10, 120)]),
+        ).toEqual([{ x0: 0, y0: 100, x1: 10, y1: 120, zone: "optimal" }]);
+    });
+
+    it("splits a segment where it crosses the upper edge", () => {
+        expect(
+            SessionUtils.loadSegments([point(0, 130), point(10, 170)]),
+        ).toEqual([
+            { x0: 0, y0: 130, x1: 5, y1: 150, zone: "optimal" },
+            { x0: 5, y0: 150, x1: 10, y1: 170, zone: "above" },
+        ]);
+    });
+
+    it("splits a segment crossing the whole band into three", () => {
+        const zones = SessionUtils.loadSegments([
+            point(0, 60),
+            point(10, 160),
+        ]).map((s) => [s.x0, s.x1, s.zone]);
+
+        expect(zones).toEqual([
+            [0, 2, "below"],
+            [2, 9, "optimal"],
+            [9, 10, "above"],
+        ]);
+    });
+
+    it("follows a moving band", () => {
+        // The line stays at 100 while the lower edge rises from 80 to 120: crossing at the middle
+        const segments = SessionUtils.loadSegments([
+            { date: 0, current: 100, lower: 80, upper: 70, reference: 100 },
+            { date: 10, current: 100, lower: 120, upper: 70, reference: 150 },
+        ]);
+
+        expect(segments.map((s) => [s.x0, s.x1, s.zone])).toEqual([
+            [0, 5, "optimal"],
+            [5, 10, "below"],
+        ]);
+    });
+});
+
 describe("SessionUtils.calculateWorkoutLoad", () => {
     const DAY_MS = 24 * 60 * 60 * 1000;
     const NOW = new Date(2025, 5, 15, 18, 30);
