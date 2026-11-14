@@ -19,7 +19,7 @@ import {
     IconButton,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
-import { UploadToCloudMenu } from "./helpers/UploadToCloudMenu";
+import { UploadToCloudMenu } from "./menus/UploadToCloudMenu";
 
 type Props = {
     onClose: () => void;

@@ -15,12 +15,12 @@ import {
 import CloseIcon from "@mui/icons-material/Close";
 import DownloadIcon from "@mui/icons-material/Download";
 import { SessionFrontDetails } from "@/utils/SessionUtils";
-import { SessionMap } from "./helpers/SessionMap";
-import { SessionDetailsTable } from "./helpers/SessionDetailsTable";
-import { SessionHeartRateChart } from "./helpers/SessionHeartRateChart";
-import { SessionSetsTable } from "./helpers/SessionSetsTable";
+import { SessionMap } from "../charts/SessionMap";
+import { SessionDetailsTable } from "../tables/SessionDetailsTable";
+import { SessionHeartRateChart } from "../charts/SessionHeartRateChart";
+import { SessionSetsTable } from "../tables/SessionSetsTable";
 import "@/styles/Sessions/SessionModal.css";
-import { MuscleModel } from "../Exercises/helpers/MuscleModel";
+import { MuscleModel } from "../../Exercises/charts/MuscleModel";
 
 type Props = {
     session: SessionFrontDetails;

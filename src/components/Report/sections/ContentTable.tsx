@@ -1,6 +1,6 @@
 import { AppContext } from "@/context/AppContext";
 import { JSX, useContext } from "react";
-import PageContent from "./PageContent";
+import PageContent from "../layout/PageContent";
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
 import { ReportData } from "@/utils/backend/models";
 

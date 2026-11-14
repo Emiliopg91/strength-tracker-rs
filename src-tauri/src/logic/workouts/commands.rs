@@ -4,7 +4,7 @@ use tauri::{AppHandle, State, WebviewWindow};
 use crate::{
     ConnectLock, SettingsLock,
     dao::workout::Workout,
-    dto::workouts::{WorkoutDetails, WorkoutListItem},
+    dto::workouts::{WorkoutDetails, WorkoutListItem, WorkoutPlanListItem},
 };
 
 /// Every workout with its session stats (count, average time and load, latest date), by name. On
@@ -69,4 +69,38 @@ pub async fn load_workout_page(app: AppHandle, workout: &str) -> Result<(), Stri
 #[tauri::command]
 pub async fn workout_print_ready(window: WebviewWindow, workout: &str) -> Result<(), String> {
     super::workout_print_ready(window, workout).await
+}
+
+/// List planned workouts.
+#[traced_command]
+#[tauri::command]
+pub async fn get_planned_workouts(app: AppHandle) -> Result<Vec<WorkoutPlanListItem>, String> {
+    super::get_planned_workouts(&app).await
+}
+
+/// Delete planned workout.
+#[traced_command]
+#[tauri::command]
+pub async fn delete_planned_workout(
+    app: AppHandle,
+    date: u32,
+    workout: &str,
+) -> Result<(), String> {
+    super::remove_planned_workout(&app, date, workout).await
+}
+
+/// Add planned workout.
+#[traced_command]
+#[tauri::command]
+pub async fn add_planned_workout(app: AppHandle, date: u32, workout: &str) -> Result<(), String> {
+    super::add_planned_workout(&app, date, workout).await
+}
+
+/// get next planned workout.
+#[traced_command]
+#[tauri::command]
+pub async fn get_next_planned_workout(
+    app: AppHandle,
+) -> Result<Option<WorkoutPlanListItem>, String> {
+    super::get_next_planned_workout(&app).await
 }

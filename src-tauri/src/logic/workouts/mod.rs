@@ -1,27 +1,35 @@
 pub mod commands;
 pub mod queries;
 
+use rusqlite_orm::{
+    dao::Repository,
+    types::{order_by::OrderBy, where_clause::Where},
+};
 use tauri::{AppHandle, Runtime, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_log::log::info;
 
 use self::queries::{set_workout_enabled, store_workout, workout_details, workout_list};
 use crate::{
     ConnectLock, SettingsLock,
-    dao::workout::Workout,
+    dao::{
+        workout::Workout,
+        workout_planning::{WorkoutPlanningRepository, entity::columns as workout_planning_cols},
+    },
     dto::{
         notifications::{NotificationDefinition, NotificationKind},
-        workouts::{WorkoutDetails, WorkoutListItem},
+        workouts::{WorkoutDetails, WorkoutListItem, WorkoutPlanListItem},
     },
     logic::{
-        connect::helpers::sync_workouts_connect,
+        connect::helpers::{delete_plan_from_connect, push_plan_to_connect, sync_workouts_connect},
         devices::helpers::{
             delete_pending_from_connected, push_pending_to_usb,
-            send_enabled_workout_to_connect_devices,
+            send_enabled_workout_to_connect_devices, send_schedule_to_connected,
         },
         notifications::show_notification,
         pool, print_to_pdf, report_error,
+        workouts::queries::{fetch_planning, insert_planned_workout},
     },
-    utils::translations::translate,
+    utils::{time::today_local_midnight, translations::translate},
 };
 
 /// Returns sessions grouped/aggregated by workout name (count, average time, latest date), sorted by name.
@@ -153,4 +161,87 @@ pub async fn load_workout_page<R: Runtime>(
 pub async fn workout_print_ready(window: WebviewWindow, workout: &str) -> Result<(), String> {
     info!("Workout ready, printing");
     print_to_pdf(window, workout).await
+}
+
+pub async fn get_planned_workouts<R: Runtime>(
+    app: &AppHandle<R>,
+) -> Result<Vec<WorkoutPlanListItem>, String> {
+    Ok(pool(app)
+        .run_in_connection(|conn| Ok(fetch_planning(conn)?))
+        .await
+        .unwrap_or_default()
+        .iter()
+        .map(WorkoutPlanListItem::from)
+        .collect())
+}
+
+pub async fn remove_planned_workout<R: Runtime>(
+    app: &AppHandle<R>,
+    date: u32,
+    workout: &str,
+) -> Result<(), String> {
+    let workout = workout.to_string();
+    let res = pool(app)
+        .run_in_connection(move |conn| {
+            let entry = WorkoutPlanningRepository::select_by_id_in(conn, date, &workout)?.unwrap();
+            entry.delete_by_id_in(conn)?;
+            Ok(entry.connect_id)
+        })
+        .await
+        .map_err(|e| e.to_string());
+
+    let connect_id = res?;
+
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        send_schedule_to_connected(&app).await;
+        if let Some(id) = connect_id {
+            delete_plan_from_connect(&app, id.parse().unwrap()).await;
+        }
+    });
+
+    Ok(())
+}
+
+pub async fn add_planned_workout<R: Runtime>(
+    app: &AppHandle<R>,
+    date: u32,
+    workout: &str,
+) -> Result<(), String> {
+    let workout = workout.to_string();
+    let workout_cl = workout.clone();
+    let res = pool(app)
+        .run_in_connection(move |conn| {
+            insert_planned_workout(conn, date, workout_cl.as_str())?;
+            Ok(())
+        })
+        .await
+        .map_err(|e| e.to_string());
+
+    if res.is_ok() {
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            // Pushing it first can upload the workout, which gives it the Connect creation time
+            // the schedule needs
+            push_plan_to_connect(&app, date, &workout).await;
+            send_schedule_to_connected(&app).await;
+        });
+    }
+
+    res
+}
+
+pub async fn get_next_planned_workout(
+    app: &AppHandle,
+) -> Result<Option<WorkoutPlanListItem>, String> {
+    WorkoutPlanningRepository::select()
+        .where_(Where::And(vec![
+            Where::Gte(workout_planning_cols::DATE, today_local_midnight().into()),
+            Where::Null(workout_planning_cols::SESSION),
+        ]))
+        .order_by(OrderBy::Asc(workout_planning_cols::DATE))
+        .fetch_one(&pool(app))
+        .await
+        .map_err(|e| e.to_string())
+        .map(|w| w.map(|w| WorkoutPlanListItem::from(&w)))
 }

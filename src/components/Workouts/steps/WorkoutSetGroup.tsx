@@ -1,7 +1,7 @@
 import { StepGroup, WorkoutStepData, WorkoutUtils } from "@/utils/WorkoutUtils";
 import { StepType } from "@/utils/backend/models";
 import { WorkoutSetLeaf } from "./WorkoutSetLeaf";
-import { StepTypeMenu } from "./StepTypeMenu";
+import { StepTypeMenu } from "../menus/StepTypeMenu";
 import {
     Box,
     Divider,

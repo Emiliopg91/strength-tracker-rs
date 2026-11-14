@@ -3,7 +3,7 @@ import { BodyMetricListItem } from "@/utils/backend/models";
 import { useContext } from "react";
 import { Dialog, DialogContent, DialogTitle, IconButton } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
-import { MetricCompareRow } from "./helpers/MetricCompareRow";
+import { MetricCompareRow } from "../rows/MetricCompareRow";
 
 type Props = {
     measures: BodyMetricListItem[];

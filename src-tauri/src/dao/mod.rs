@@ -13,4 +13,5 @@ pub mod sport;
 pub mod sub_sport;
 pub mod workout;
 pub mod workout_device;
+pub mod workout_planning;
 pub mod workout_step;

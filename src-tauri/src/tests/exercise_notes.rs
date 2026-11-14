@@ -33,6 +33,7 @@ async fn program(db: &DatabasePool, name: &str, steps: &[((u16, u16), Option<&st
                 notes: None,
                 steps: Vec::new(),
                 connect_id: None,
+                connect_created_time: None,
             })
             .execute_in(tx)?;
 

@@ -19,21 +19,28 @@ import {
     WorkoutListItem,
 } from "@/utils/backend/models";
 import { BackendListener } from "@/utils/backend/listener";
-import { SessionModal } from "../Sessions/SessionModal";
-import { WorkoutModal } from "../Workouts/WorkoutModal";
-import { Heatmap } from "./helpers/Heatmap";
-import { WorkloadChart } from "./helpers/WorkloadChart";
-import { WorkoutStepsModal } from "../Workouts/WorkoutStepsModal";
-import { WorkoutActionsMenu } from "../Workouts/helpers/WorkoutActionsMenu";
+import { SessionModal } from "../Sessions/modals/SessionModal";
+import { WorkoutModal } from "../Workouts/modals/WorkoutModal";
+import { Heatmap } from "./charts/Heatmap";
+import { WorkloadChart } from "./charts/WorkloadChart";
+import { WorkoutStepsModal } from "../Workouts/modals/WorkoutStepsModal";
+import { WorkoutActionsMenu } from "../Workouts/menus/WorkoutActionsMenu";
 import { Button } from "@mui/material";
-import { ReportModal } from "../Report/ReportModal";
-import { ImportSessionsMenu } from "../Sessions/helpers/ImportSessionsMenu";
+import { ReportModal } from "../Report/modals/ReportModal";
+import { ImportSessionsMenu } from "../Sessions/menus/ImportSessionsMenu";
+import { differenceInCalendarDays } from "date-fns";
 
 interface PeriodStats {
     sessions: number;
     time: number;
     kcal: number;
     load: number;
+}
+
+interface NextWorkout {
+    /// Planned date (local midnight, seconds); undefined when it is just a suggestion
+    date?: number;
+    details: WorkoutListItem;
 }
 
 const PERIODS = ["today", "thisWeek", "previousWeek", "month"] as const;
@@ -95,8 +102,14 @@ const calculateStats = (
 export function Home() {
     const { sessionsVersion } = useContext(AppContext);
     const withLoading = useLoadingTask();
-    const { translate, fromKg, formatDuration, formatTimeDate, formatNumber } =
-        useContext(I18nSettingsContext);
+    const {
+        translate,
+        fromKg,
+        formatDuration,
+        formatTimeDate,
+        formatWeekday,
+        formatNumber,
+    } = useContext(I18nSettingsContext);
     const adapter = usePickerAdapter();
 
     const day = useCurrentDay();
@@ -107,9 +120,7 @@ export function Home() {
         [number, number][][] | undefined
     >(undefined);
 
-    const [workout, setWorkout] = useState<WorkoutListItem | undefined>(
-        undefined,
-    );
+    const [workout, setWorkout] = useState<NextWorkout | undefined>(undefined);
     const [rest, setRest] = useState(false);
     const [workoutDetails, setWorkoutDetails] = useState<
         WorkoutDetails | undefined
@@ -139,14 +150,31 @@ export function Home() {
                 const workout_data =
                     SessionUtils.calculateWorkoutLoad(sessions);
                 const overreaching = SessionUtils.isOverreaching(workout_data);
+                const newStats = calculateStats(sessions, today, adapter);
 
                 withLoading(BackendClient.getHeatmapData()).then(
                     setHeatMapData,
                 );
 
-                withLoading(BackendClient.getWorkoutList()).then((workouts) => {
-                    const filtered = workouts.filter((w) => w.enabled);
+                Promise.all([
+                    withLoading(BackendClient.getNextPlannedWorkout()),
+                    withLoading(BackendClient.getWorkoutList()),
+                ]).then(([next, workouts]) => {
+                    const planned =
+                        next !== null
+                            ? workouts.find((w) => w.name == next.workout)
+                            : undefined;
 
+                    if (next !== null && planned) {
+                        setRest(false);
+                        setWorkout({ date: next.date, details: planned });
+                        return;
+                    }
+
+                    // No planned workout: fall back to the activity suggestion
+                    setRest(newStats.today.load > 50 || overreaching);
+
+                    const filtered = workouts.filter((w) => w.enabled);
                     if (!overreaching && filtered.length > 0) {
                         // Never-done workouts take priority, otherwise the least recent one
                         let oldest = filtered.find(
@@ -162,22 +190,29 @@ export function Home() {
                                 }
                             }
                         }
-                        setWorkout(oldest);
+                        setWorkout({ details: oldest });
                     } else {
                         setWorkout(undefined);
                     }
                 });
 
-                const newStats = calculateStats(sessions, today, adapter);
                 setStats(newStats);
 
                 setWorkload(workout_data);
 
                 setLastSession(sessions[0]);
-
-                setRest(newStats.today.load > 50 || overreaching);
             }
         });
+    };
+
+    const isPlanned = workout?.date !== undefined;
+
+    // "Today", the day of the week within a week, or how many days away the planned workout is
+    const formatPlannedDay = (date: number) => {
+        const diff = differenceInCalendarDays(date * 1000, new Date());
+        if (diff <= 0) return translate("today");
+        if (diff <= 7) return formatWeekday(date);
+        return translate("in_n_days", [String(diff)]);
     };
 
     const getSessionDetails = (timestamp: number) => {
@@ -206,8 +241,8 @@ export function Home() {
 
     useBackendEvent(BackendListener.onAddedWorkoutSteps, (names) => {
         setWorkout((prev) =>
-            prev && names.includes(prev.name)
-                ? { ...prev, has_steps: true }
+            prev && names.includes(prev.details.name)
+                ? { ...prev, details: { ...prev.details, has_steps: true } }
                 : prev,
         );
     });
@@ -399,17 +434,28 @@ export function Home() {
                     </div>
                     <div className="dashboard-box">
                         <fieldset>
-                            <legend>{translate("activity_suggestion")}</legend>
-                            {rest && (
+                            <legend>
+                                {translate(
+                                    isPlanned
+                                        ? "next_planned_workout"
+                                        : "activity_suggestion",
+                                )}
+                            </legend>
+                            {!isPlanned && rest && (
                                 <div style={{ textAlign: "center" }}>
                                     <p>{translate("rest_recommended")}</p>
                                 </div>
                             )}
-                            {!rest && workout && (
+                            {workout && (isPlanned || !rest) && (
                                 <div className="list-layer">
                                     <table>
                                         <thead>
                                             <tr>
+                                                {isPlanned && (
+                                                    <th className="text-center">
+                                                        {translate("date")}
+                                                    </th>
+                                                )}
                                                 <th className="text-center">
                                                     {translate("workout")}
                                                 </th>
@@ -417,9 +463,6 @@ export function Home() {
                                                     {translate(
                                                         "latest_session",
                                                     )}
-                                                </th>
-                                                <th className="text-center">
-                                                    {translate("session_count")}
                                                 </th>
                                                 <th className="text-center">
                                                     {translate(
@@ -437,55 +480,68 @@ export function Home() {
                                                 className="clickable-row"
                                                 onClick={() =>
                                                     getWorkoutDetails(
-                                                        workout.name,
+                                                        workout.details.name,
                                                     )
                                                 }
                                             >
-                                                <td className="text-left">
-                                                    {workout.name.length >
-                                                        0 && (
+                                                {workout.date !== undefined && (
+                                                    <td className="text-center">
+                                                        {formatPlannedDay(
+                                                            workout.date,
+                                                        )}
+                                                    </td>
+                                                )}
+                                                <td className="text-center">
+                                                    {workout.details.name
+                                                        .length > 0 && (
                                                         <span>
-                                                            {workout.name}
+                                                            {
+                                                                workout.details
+                                                                    .name
+                                                            }
                                                         </span>
                                                     )}
-                                                    {workout.name.length ==
-                                                        0 && (
+                                                    {workout.details.name
+                                                        .length == 0 && (
                                                         <span>
                                                             {translate("other")}
                                                         </span>
                                                     )}
                                                 </td>
                                                 <td>
-                                                    {workout.latest_session &&
+                                                    {workout.details
+                                                        .latest_session &&
                                                         formatTimeDate(
-                                                            workout.latest_session,
+                                                            workout.details
+                                                                .latest_session,
                                                         )}
                                                 </td>
                                                 <td>
-                                                    {formatNumber(
-                                                        workout.sessions,
-                                                        0,
+                                                    {formatDuration(
+                                                        workout.details
+                                                            .avg_time,
                                                     )}
                                                 </td>
                                                 <td>
-                                                    {formatDuration(
-                                                        workout.avg_time,
-                                                    )}
+                                                    {workout.details.avg_load}
                                                 </td>
-                                                <td>{workout.avg_load}</td>
                                                 <td
                                                     onClick={(e) =>
                                                         e.stopPropagation()
                                                     }
                                                 >
-                                                    {workout.has_steps && (
+                                                    {workout.details
+                                                        .has_steps && (
                                                         <WorkoutActionsMenu
                                                             workoutName={
-                                                                workout.name
+                                                                workout.details
+                                                                    .name
                                                             }
                                                             onOpenEdit={() =>
                                                                 openEdit(
-                                                                    workout.name,
+                                                                    workout
+                                                                        .details
+                                                                        .name,
                                                                 )
                                                             }
                                                             send={true}

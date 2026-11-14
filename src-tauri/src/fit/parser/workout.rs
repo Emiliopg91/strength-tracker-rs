@@ -165,6 +165,7 @@ impl WorkoutAccumulator {
             steps: self.steps,
             notes: self.notes,
             connect_id: None,
+            connect_created_time: None,
         })
     }
 }

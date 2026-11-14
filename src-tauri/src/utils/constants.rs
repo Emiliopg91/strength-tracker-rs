@@ -36,6 +36,9 @@ pub static MTP_GARMIN_ROOT_FOLDER: &str = "GARMIN";
 pub static MTP_GARMIN_ACTIVITY_FOLDER: &str = "Activity";
 pub static MTP_GARMIN_WORKOUTS_FOLDER: &str = "Workouts";
 pub static MTP_GARMIN_NEW_FILES_FOLDER: &str = "NewFiles";
+pub static MTP_GARMIN_SCHEDULE_FILE: &str = "Schedule.fit";
+/// Days ahead, today included, whose planned workouts are sent to the devices
+pub const SCHEDULE_DAYS: i64 = 30;
 
 // Languages block
 pub static DEFAULT_LANGUAGE: Languages = Languages::English;
@@ -84,6 +87,8 @@ pub static RCLONE_CONFIG_FILE: LazyLock<PathBuf> =
 pub static PENDING_FOLDER: LazyLock<PathBuf> = LazyLock::new(|| DATA_LOCAL_DIR.join("pending"));
 pub static PENDING_UPLOAD_WORKOUTS_FOLDER: LazyLock<PathBuf> =
     LazyLock::new(|| PENDING_FOLDER.join("upload").join("workouts"));
+pub static PENDING_UPLOAD_SCHEDULES_FOLDER: LazyLock<PathBuf> =
+    LazyLock::new(|| PENDING_FOLDER.join("upload").join("schedules"));
 pub static PENDING_DOWNLOAD_SESSIONS_FOLDER: LazyLock<PathBuf> =
     LazyLock::new(|| PENDING_FOLDER.join("download").join("sessions"));
 pub static PENDING_DOWNLOAD_WORKOUTS_FOLDER: LazyLock<PathBuf> =

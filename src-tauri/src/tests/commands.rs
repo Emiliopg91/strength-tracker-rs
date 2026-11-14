@@ -64,6 +64,7 @@ fn workout(name: &str, steps: Vec<WorkoutStep>) -> Workout {
         enabled: true,
         notes: None,
         connect_id: None,
+        connect_created_time: None,
         steps,
     }
 }

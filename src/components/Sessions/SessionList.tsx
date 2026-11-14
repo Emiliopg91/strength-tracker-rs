@@ -6,16 +6,16 @@ import { I18nSettingsContext } from "@/context/I18nSettingsContext";
 import { BackendClient } from "@/utils/backend/client";
 import { SessionListItem } from "@/utils/backend/models";
 import { useContext, useState } from "react";
-import { SessionModal } from "./SessionModal";
-import { SessionRow } from "./helpers/SessionRow";
+import { SessionModal } from "./modals/SessionModal";
+import { SessionRow } from "./rows/SessionRow";
 import { BackendListener } from "@/utils/backend/listener";
 import { SessionFrontDetails, SessionUtils } from "@/utils/SessionUtils";
 import "@/styles/Sessions/SessionList.css";
 import { Button } from "@mui/material";
-import { SessionsCompareModal } from "./SessionsCompareModal";
+import { SessionsCompareModal } from "./modals/SessionsCompareModal";
 import { useFilterList } from "@/hooks/useFilterList";
 import { useBatchedRows } from "@/hooks/useBatchedRows";
-import { ImportSessionsMenu } from "./helpers/ImportSessionsMenu";
+import { ImportSessionsMenu } from "./menus/ImportSessionsMenu";
 
 export function SessionsList() {
     const { sessionsVersion } = useContext(AppContext);

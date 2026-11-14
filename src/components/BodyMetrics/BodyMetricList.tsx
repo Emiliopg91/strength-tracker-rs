@@ -3,13 +3,13 @@ import { useContext, useState } from "react";
 import { useBackendList } from "@/hooks/useBackendList";
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
 import { BodyMetricListItem } from "@/utils/backend/models";
-import { BodyMetricsDetailsModal } from "./BodyMetricsDetailsModal";
+import { BodyMetricsDetailsModal } from "./modals/BodyMetricsDetailsModal";
 import { Button } from "@mui/material";
-import { BodyMetricsAddModal } from "./BodyMetricsAddModal";
-import { BodyMetricsChart } from "./helpers/BodyMetricsChart";
-import { BodyMetricRow } from "./helpers/BodyMetricRow";
-import { BodyMetricsCompareModal } from "./BodyMetricsCompareModal";
-import { AddBodyMetricMenu } from "./helpers/AddBodyMetricMenu";
+import { BodyMetricsAddModal } from "./modals/BodyMetricsAddModal";
+import { BodyMetricsChart } from "./charts/BodyMetricsChart";
+import { BodyMetricRow } from "./rows/BodyMetricRow";
+import { BodyMetricsCompareModal } from "./modals/BodyMetricsCompareModal";
+import { AddBodyMetricMenu } from "./menus/AddBodyMetricMenu";
 import "@/styles/BodyMetrics/BodyMetrics.css";
 
 export function BodyMetricList() {

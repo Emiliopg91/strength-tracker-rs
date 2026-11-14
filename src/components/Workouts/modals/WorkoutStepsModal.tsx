@@ -10,9 +10,9 @@ import {
 import CloseIcon from "@mui/icons-material/Close";
 import { useContext, useState } from "react";
 import { WorkoutStepData, WorkoutUtils } from "@/utils/WorkoutUtils";
-import { WorkoutSetGroup } from "./helpers/WorkoutSetGroup";
-import { WorkoutSetLeaf } from "./helpers/WorkoutSetLeaf";
-import { StepTypeMenu } from "./helpers/StepTypeMenu";
+import { WorkoutSetGroup } from "../steps/WorkoutSetGroup";
+import { WorkoutSetLeaf } from "../steps/WorkoutSetLeaf";
+import { StepTypeMenu } from "../menus/StepTypeMenu";
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
 import { BackendClient } from "@/utils/backend/client";
 import { useLoadingTask } from "@/hooks/useLoadingTask";
@@ -84,6 +84,7 @@ export function WorkoutStepsModal({ workout, isEdit, onClose }: Props) {
                 steps: WorkoutUtils.toWorkoutSteps(steps, name, toKg),
                 notes,
                 connect_id: null,
+                connect_created_time: null,
             };
             withLoading(BackendClient.saveWorkout(isEdit, newWorkout)).then(
                 () => {

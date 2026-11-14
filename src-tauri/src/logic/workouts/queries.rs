@@ -13,6 +13,9 @@ use crate::{
         session_step::{SessionStepRepository, entity::columns as session_step_cols},
         workout::{Workout, WorkoutRepository, entity::columns as workout_cols},
         workout_device::{WorkoutDeviceRepository, entity::columns as workout_device_cols},
+        workout_planning::{
+            WorkoutPlanning, WorkoutPlanningRepository, entity::columns as workout_planning_cols,
+        },
         workout_step::{StepType, WorkoutStepRepository, entity::columns as workout_step_cols},
     },
     dto::workouts::{WorkoutDetails, WorkoutListItem, WorkoutSession},
@@ -298,4 +301,48 @@ pub(super) fn store_workout(
     insert.execute_in(tx)?;
 
     Ok(())
+}
+
+pub(super) fn fetch_planning(
+    conn: &rusqlite_orm::rusqlite::Connection,
+) -> rusqlite_orm::errors::Result<Vec<WorkoutPlanning>> {
+    WorkoutPlanningRepository::select().fetch_in(conn)
+}
+
+pub fn insert_planned_workout(
+    conn: &rusqlite_orm::rusqlite::Connection,
+    date: u32,
+    workout: &str,
+) -> rusqlite_orm::errors::Result<()> {
+    let mut item = WorkoutPlanning {
+        date,
+        workout: workout.to_string(),
+        workout_obj: None,
+        session: None,
+        connect_id: None,
+    };
+
+    WorkoutPlanningRepository::insert()
+        .item(&mut item)
+        .execute_in(conn)
+        .map(|_| ())
+}
+
+pub fn update_schedule_id(
+    conn: &rusqlite_orm::rusqlite::Connection,
+    date: u32,
+    workout: &str,
+    schedule_id: &str,
+) -> rusqlite_orm::errors::Result<()> {
+    WorkoutPlanningRepository::update()
+        .set(
+            workout_planning_cols::CONNECT_ID,
+            schedule_id.to_string().into(),
+        )
+        .where_(Where::And(vec![
+            Where::Eq(workout_planning_cols::DATE, date.into()),
+            Where::Eq(workout_planning_cols::WORKOUT, workout.into()),
+        ]))
+        .execute_in(conn)
+        .map(|_| ())
 }

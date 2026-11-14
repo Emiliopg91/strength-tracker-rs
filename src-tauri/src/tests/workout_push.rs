@@ -29,6 +29,7 @@ async fn setup() -> DatabasePool {
                     notes: None,
                     steps: Vec::new(),
                     connect_id: None,
+                    connect_created_time: None,
                 })
                 .execute_in(tx)?;
         }

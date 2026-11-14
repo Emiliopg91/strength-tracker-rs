@@ -1,9 +1,9 @@
 import { AppContext } from "@/context/AppContext";
 import { JSX, useContext } from "react";
-import PageContent from "./PageContent";
+import PageContent from "../layout/PageContent";
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
 import { ExerciseDetails, SessionDetails } from "@/utils/backend/models";
-import NoPageBreak from "./NoPageBreak";
+import NoPageBreak from "../layout/NoPageBreak";
 import { SessionUtils } from "@/utils/SessionUtils";
 
 type Props = {

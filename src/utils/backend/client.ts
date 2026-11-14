@@ -2,7 +2,7 @@
 
 import { invoke, InvokeArgs } from "@tauri-apps/api/core";
 
-import { AppEnvironment, BodyMetricListItem, CloudProvider, DeviceListItem, ExerciseDetails, ExerciseListItem, ProgressionSuggestion, ReportData, SessionDetails, SessionListItem, SessionStepsUpdate, Settings, Workout, WorkoutDetails, WorkoutListItem } from "./models";
+import { AppEnvironment, BodyMetricListItem, CloudProvider, DeviceListItem, ExerciseDetails, ExerciseListItem, ProgressionSuggestion, ReportData, SessionDetails, SessionListItem, SessionStepsUpdate, Settings, Workout, WorkoutDetails, WorkoutListItem, WorkoutPlanListItem } from "./models";
 
 export class BackendClient {
 
@@ -11,6 +11,12 @@ export class BackendClient {
 	// From src-tauri/src/logic/body_metrics/commands.rs:21
 	public static addBodyMeasures(measures: BodyMetricListItem): Promise<void> {
 	  return BackendClient.inner_invoke("add_body_measures", { measures }); 
+	}
+	
+
+	// From src-tauri/src/logic/workouts/commands.rs:95
+	public static addPlannedWorkout(date: number, workout: string): Promise<void> {
+	  return BackendClient.inner_invoke("add_planned_workout", { date, workout }); 
 	}
 	
 
@@ -53,6 +59,12 @@ export class BackendClient {
 	// From src-tauri/src/logic/body_metrics/commands.rs:33
 	public static deleteBodyMetric(date: number): Promise<void> {
 	  return BackendClient.inner_invoke("delete_body_metric", { date }); 
+	}
+	
+
+	// From src-tauri/src/logic/workouts/commands.rs:84
+	public static deletePlannedWorkout(date: number, workout: string): Promise<void> {
+	  return BackendClient.inner_invoke("delete_planned_workout", { date, workout }); 
 	}
 	
 
@@ -101,6 +113,18 @@ export class BackendClient {
 	// From src-tauri/src/logic/sessions/commands.rs:82
 	public static getHeatmapData(): Promise<[number, number][][]> {
 	  return BackendClient.inner_invoke("get_heatmap_data"); 
+	}
+	
+
+	// From src-tauri/src/logic/workouts/commands.rs:102
+	public static getNextPlannedWorkout(): Promise<WorkoutPlanListItem | null> {
+	  return BackendClient.inner_invoke("get_next_planned_workout"); 
+	}
+	
+
+	// From src-tauri/src/logic/workouts/commands.rs:77
+	public static getPlannedWorkouts(): Promise<WorkoutPlanListItem[]> {
+	  return BackendClient.inner_invoke("get_planned_workouts"); 
 	}
 	
 

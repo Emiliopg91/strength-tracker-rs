@@ -13,10 +13,10 @@ import CloseIcon from "@mui/icons-material/Close";
 import { BackendClient } from "@/utils/backend/client";
 import { useLoadingTask } from "@/hooks/useLoadingTask";
 import { useBackendEvent } from "@/hooks/useBackendEvent";
-import { WorkoutVolumeChart } from "./helpers/WorkoutVolumeChart";
-import { WorkoutActionsMenu } from "./helpers/WorkoutActionsMenu";
+import { WorkoutVolumeChart } from "../charts/WorkoutVolumeChart";
+import { WorkoutActionsMenu } from "../menus/WorkoutActionsMenu";
 import { BackendListener } from "@/utils/backend/listener";
-import { MuscleModel } from "../Exercises/helpers/MuscleModel";
+import { MuscleModel } from "../../Exercises/charts/MuscleModel";
 
 type Props = {
     workout: WorkoutDetails;

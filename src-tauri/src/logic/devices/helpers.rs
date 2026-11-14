@@ -8,23 +8,32 @@ use tauri_plugin_log::log::{error, info};
 
 use super::import_from_device;
 use super::queries::{
-    clear_pending, enrol_usb_device, pending_connect_devices, pending_queue, store_workout_steps,
-    workout_for_device, workouts_without_steps,
+    clear_pending, enrol_usb_device, pending_connect_devices, pending_queue, plans_between,
+    queue_workout_device, store_workout_steps, workout_for_device, workouts_on_device,
+    workouts_without_steps,
 };
 use crate::{
     ConnectLock, MtpLock, SettingsLock,
-    dao::{device::Device, settings::WeightUnit, workout::Workout},
+    dao::{
+        device::Device, settings::WeightUnit, workout::Workout, workout_device::WorkoutDevice,
+        workout_planning::WorkoutPlanning,
+    },
     dto::{
         devices::DeviceListItem,
         notifications::{NotificationDefinition, NotificationKind},
     },
-    fit::{FitFile, parser::FitParser, writer::FitWriter},
+    fit::{
+        FitFile,
+        parser::FitParser,
+        writer::{FitWriter, ToFitMessages},
+    },
     logic::{
         connect::helpers::queue_workout_on_connect, new_pending_dir,
         notifications::show_notification, pool, store_pending_files,
     },
     utils::{
         constants,
+        time::{local_midnight, today_local_midnight},
         translations::{Languages, translate, translate_and_replace},
     },
 };
@@ -149,6 +158,8 @@ pub(super) async fn on_device_connected<R: Runtime>(
         download_pending_workouts(app, serial).await;
         delete_pending_workouts(app, serial).await;
         push_pending_workouts(app, serial).await;
+        // After the workouts, so the device already has the ones the schedule points to
+        send_schedule_to_device(app, serial, false).await;
 
         imported
     })
@@ -500,4 +511,162 @@ pub(super) async fn delete_workout_from_device<R: Runtime>(
         .delete_workout(serial, &Workout::file_name_for(workout))
         .await
         .map_err(|e| e.to_string())
+}
+
+/// Serializes schedule uploads so an older schedule can't land on a device after a newer one.
+static SCHEDULE_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+/// Sends the schedule of the next days to every device plugged in by USB, even if it has no plans
+/// left, so removed plans leave the devices too.
+pub(crate) async fn send_schedule_to_connected<R: Runtime>(app: &AppHandle<R>) {
+    let mtp_client = app.state::<MtpLock>();
+    // Bound in its own statement so the MTP lock is released before sending
+    let connected = mtp_client.lock().await.get_connected_devices().await;
+    match connected {
+        Ok(devices) => {
+            for device in devices {
+                send_schedule_to_device(app, &device.serial, true).await;
+            }
+        }
+        Err(e) => error!("Error listing connected devices: {e}"),
+    }
+}
+
+/// Uploads by USB to the device `serial` the workouts planned for the next
+/// [`constants::SCHEDULE_DAYS`] days, today included. Without plans nothing is sent unless
+/// `send_empty`. Failures are only logged.
+pub(super) async fn send_schedule_to_device<R: Runtime>(
+    app: &AppHandle<R>,
+    serial: &str,
+    send_empty: bool,
+) {
+    // Held from reading the plans to the upload, so the last change is the last one sent
+    let _guard = SCHEDULE_LOCK.lock().await;
+
+    let Some(from) = today_local_midnight() else {
+        error!("Could not compute the start of today");
+        return;
+    };
+    let Some(to) = local_midnight(i64::from(from) + constants::SCHEDULE_DAYS * 86_400 + 43_200)
+    else {
+        error!("Could not compute the end of the schedule window");
+        return;
+    };
+
+    let plans = match pool(app)
+        .run_in_connection(move |conn| Ok(plans_between(conn, from, to)?))
+        .await
+    {
+        Ok(plans) => plans,
+        Err(e) => {
+            error!("Error fetching the planned workouts for {serial}: {e}");
+            return;
+        }
+    };
+    if plans.is_empty() && !send_empty {
+        return;
+    }
+
+    upload_missing_workouts(app, serial, &plans).await;
+
+    let count = plans.len();
+    match upload_schedule(app, serial, plans).await {
+        Ok(()) => info!("Schedule with {count} planned workouts sent to device {serial}"),
+        Err(e) => error!("Error sending the schedule to device {serial}: {e}"),
+    }
+}
+
+/// Uploads to the device `serial` the workouts of `plans` it lacks, so the schedule can point to
+/// them, and records them in `workout_device` as sent. A workout counts as on the device when it
+/// has an entry there not pending. Only the workouts the schedule will hold are checked. Failures
+/// are only logged.
+async fn upload_missing_workouts<R: Runtime>(
+    app: &AppHandle<R>,
+    serial: &str,
+    plans: &[WorkoutPlanning],
+) {
+    let on_device = match workouts_on_device(&pool(app), serial).await {
+        Ok(names) => names,
+        Err(e) => {
+            error!("Error fetching the workouts sent to {serial}: {e}");
+            return;
+        }
+    };
+    let mut missing: Vec<&str> = plans
+        .iter()
+        .filter_map(|p| p.workout_obj.as_ref())
+        .filter(|w| w.file_created().is_some() && !on_device.contains(&w.name))
+        .map(|w| w.name.as_str())
+        .collect();
+    missing.sort_unstable();
+    missing.dedup();
+    if missing.is_empty() {
+        return;
+    }
+
+    let (lang, weight_unit) = {
+        let state = app.state::<SettingsLock>();
+        let settings = state.read().unwrap();
+        (settings.language, settings.weight_unit)
+    };
+    for workout in missing {
+        info!("Planned workout '{workout}' missing on {serial}, uploading it");
+        if let Err(e) = send_workout_to_device(app, lang, weight_unit, workout, serial).await {
+            error!("Error uploading planned workout '{workout}' to {serial}: {e}");
+            continue;
+        }
+        let mut entry = WorkoutDevice {
+            workout: workout.to_string(),
+            device: serial.to_string(),
+            pending: false,
+        };
+        if let Err(e) = queue_workout_device(&pool(app), &mut entry).await {
+            error!("Error registering workout '{workout}' for device {serial}: {e}");
+        }
+    }
+}
+
+/// Writes `plans` as a schedule file and uploads it to the device `serial`.
+async fn upload_schedule<R: Runtime>(
+    app: &AppHandle<R>,
+    serial: &str,
+    plans: Vec<WorkoutPlanning>,
+) -> Result<(), String> {
+    let (lang, weight_unit) = {
+        let state = app.state::<SettingsLock>();
+        let settings = state.read().unwrap();
+        (settings.language, settings.weight_unit)
+    };
+
+    let dir = new_pending_dir(&constants::PENDING_UPLOAD_SCHEDULES_FOLDER, serial);
+    tokio::fs::create_dir_all(&dir)
+        .await
+        .map_err(|e| e.to_string())?;
+    let path = dir.join(constants::MTP_GARMIN_SCHEDULE_FILE);
+    // Encoding and writing the file is blocking work
+    let fit_path = path.clone();
+    let written = tokio::task::spawn_blocking(move || {
+        FitWriter::from(&plans)
+            .write(fit_path, lang, weight_unit)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .expect("FIT writing task panicked");
+    if let Err(e) = written {
+        let _ = tokio::fs::remove_dir_all(&dir).await;
+        return Err(e);
+    }
+
+    // Like workouts, through NewFiles: the device validates it and imports it once unplugged
+    let mtp_client = app.state::<MtpLock>();
+    let upload = mtp_client
+        .lock()
+        .await
+        .upload_file(serial, constants::MTP_GARMIN_NEW_FILES_FOLDER, &path)
+        .await
+        .map_err(|e| e.to_string());
+
+    let _ = tokio::fs::remove_dir_all(dir).await;
+
+    upload
 }

@@ -17,7 +17,8 @@ pub use error::{GarminError, Result};
 pub use models::{
     ActivityDetails, ActivitySummary, ActivityType, CalendarItem, CalendarItemType, CalendarMonth,
     DeviceMessage, DeviceSummary, ExerciseCandidate, ExerciseSet, ExerciseSetType, ExerciseSets,
-    WeightEntry, WeightRange, WorkoutSummary,
+    ScheduledWorkout, WeightEntry, WeightRange, WorkoutSchedule, WorkoutScheduleExport,
+    WorkoutScheduleRequest, WorkoutSummary,
 };
 pub use sso::SsoClient;
 pub use tokens::{OAuth1Token, OAuth2Token};

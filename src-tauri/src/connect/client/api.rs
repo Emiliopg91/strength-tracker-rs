@@ -1,6 +1,7 @@
 //! Authenticated Garmin Connect API client (OAuth2 bearer tokens).
 
 use bytes::Bytes;
+use chrono::NaiveDate;
 use reqwest::header::{AUTHORIZATION, USER_AGENT};
 use reqwest::{Method, RequestBuilder, StatusCode};
 use serde::{Serialize, de::DeserializeOwned};
@@ -9,7 +10,7 @@ use super::error::{GarminError, Result};
 use super::http::{self, Response};
 use super::models::{
     ActivityDescriptionUpdate, ActivityDetails, ActivitySummary, CalendarItem, CalendarMonth,
-    DeviceSummary, ExerciseSets,
+    DeviceSummary, ExerciseSets, WorkoutSchedule, WorkoutScheduleExport, WorkoutScheduleRequest,
 };
 use super::tokens::OAuth2Token;
 
@@ -31,6 +32,12 @@ pub fn calendar_month_path(year: u16, month: u8) -> Result<String> {
         year,
         month - 1
     ))
+}
+
+/// Path of the schedule of the workout `workout_id` (to create) or the schedule `schedule_id` (to
+/// read or delete). The schedule service keys both by the same segment.
+pub fn workout_schedule_path(id: u64) -> String {
+    format!("/workout-service/schedule/{}", id)
 }
 
 fn exercise_sets_path(id: u64) -> String {
@@ -111,6 +118,41 @@ impl GarminClient {
         let path = calendar_month_path(year, month)?;
         let calendar: CalendarMonth = self.get_json(token, &path).await?;
         Ok(calendar.calendar_items)
+    }
+
+    /// Schedule the workout `workout_id` on `date`.
+    pub async fn schedule_workout(
+        &self,
+        token: &OAuth2Token,
+        workout_id: u64,
+        date: NaiveDate,
+    ) -> Result<WorkoutSchedule> {
+        let body = WorkoutScheduleRequest { date };
+        self.post_json(token, &workout_schedule_path(workout_id), &body)
+            .await
+    }
+
+    /// List the workouts scheduled from `start` on, within the window Connect picks (a month).
+    pub async fn list_workout_schedules(
+        &self,
+        token: &OAuth2Token,
+        start: NaiveDate,
+    ) -> Result<WorkoutScheduleExport> {
+        let path = format!(
+            "/workout-service/schedule/export/JSON?startDate={}",
+            start.format("%Y-%m-%d")
+        );
+        self.get_json(token, &path).await
+    }
+
+    /// Delete the workout schedule `schedule_id`, leaving the workout itself untouched.
+    pub async fn delete_workout_schedule(
+        &self,
+        token: &OAuth2Token,
+        schedule_id: u64,
+    ) -> Result<()> {
+        self.delete(token, &workout_schedule_path(schedule_id))
+            .await
     }
 
     /// Make an authenticated GET request and deserialize the JSON response

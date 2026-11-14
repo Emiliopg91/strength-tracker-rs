@@ -32,6 +32,7 @@ interface I18nSettingsContextType {
     formatDuration: (seconds: number) => string;
     formatDate: (date: number) => string;
     formatTimeDate: (date: number) => string;
+    formatWeekday: (date: number) => string;
     parseLocalDateTime: (dateStr: string) => Date;
     formatNumber: (value: number, decimals: number) => string;
     formatPercent: (
@@ -78,6 +79,9 @@ const defaultValue: I18nSettingsContextType = {
         return "";
     },
     formatTimeDate: () => {
+        return "";
+    },
+    formatWeekday: () => {
         return "";
     },
     parseLocalDateTime: () => {

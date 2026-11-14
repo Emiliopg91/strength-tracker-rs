@@ -48,6 +48,16 @@ pub enum ConnectError {
     UpdateExerciseSets(u64, #[source] crate::connect::client::GarminError),
     #[error("Error sending workout '{0}' to device '{1}': {2}")]
     SendWorkout(u64, u64, #[source] crate::connect::client::GarminError),
+    #[error("Error scheduling workout '{0}' on {1}: {2}")]
+    ScheduleWorkout(
+        u64,
+        chrono::NaiveDate,
+        #[source] crate::connect::client::GarminError,
+    ),
+    #[error("Error fetching workout schedules: {0}")]
+    FetchWorkoutSchedules(#[source] crate::connect::client::GarminError),
+    #[error("Error deleting workout schedule '{0}': {1}")]
+    DeleteWorkoutSchedule(u64, #[source] crate::connect::client::GarminError),
 }
 
 pub type Result<T> = std::result::Result<T, ConnectError>;

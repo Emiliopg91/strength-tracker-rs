@@ -113,6 +113,7 @@ async fn session_roundtrip_with_relationships() {
                 notes: Some("".to_string()),
                 steps: Vec::new(),
                 connect_id: None,
+                connect_created_time: None,
             })
             .execute_in(tx)?;
         common::insert_session(tx, tx_session);

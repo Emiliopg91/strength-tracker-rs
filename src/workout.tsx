@@ -3,7 +3,7 @@ import ReactDOM from "react-dom/client";
 import "@/styles/Report/Report.css";
 import { I18nSettingsProvider } from "./context/I18nSettingsProvider";
 import { AppProvider } from "./context/AppProvider";
-import WorkoutPrintView from "./components/Workouts/WorkoutPrintView";
+import WorkoutPrintView from "./components/Workouts/views/WorkoutPrintView";
 
 const params = new URLSearchParams(window.location.search);
 const workout = params.get("workout")!;

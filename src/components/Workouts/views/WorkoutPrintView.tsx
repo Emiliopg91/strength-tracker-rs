@@ -4,7 +4,7 @@ import { BackendClient } from "@/utils/backend/client";
 import { ExerciseListItem, WorkoutDetails } from "@/utils/backend/models";
 import { LeafStep, StepGroup, WorkoutUtils } from "@/utils/WorkoutUtils";
 import { JSX, useContext, useEffect, useState } from "react";
-import NoPageBreak from "@/components/Report/helpers/NoPageBreak";
+import NoPageBreak from "@/components/Report/layout/NoPageBreak";
 
 import "@/styles/Workouts/WorkoutPrintView.css";
 

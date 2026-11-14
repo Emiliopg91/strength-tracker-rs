@@ -10,6 +10,9 @@ pub struct Workout {
     pub enabled: bool,
     pub notes: Option<String>,
     pub connect_id: Option<String>,
+    /// Creation time of the workout in Connect, UTC timestamp in seconds
+    #[serde(default)]
+    pub connect_created_time: Option<u32>,
 
     #[relationship((name, workout_step::entity::columns::WORKOUT))]
     pub steps: Vec<WorkoutStep>,

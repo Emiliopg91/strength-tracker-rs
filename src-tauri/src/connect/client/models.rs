@@ -1,4 +1,4 @@
-use chrono::{Local, NaiveDate, NaiveDateTime, TimeZone};
+use chrono::{Local, NaiveDate, NaiveDateTime, TimeZone, Utc};
 use serde::{Deserialize, Deserializer, Serialize, de::Error};
 
 /// Device entry returned from the device registration endpoint
@@ -278,6 +278,57 @@ fn local_timestamp<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<
 pub struct WorkoutSummary {
     pub workout_id: u64,
     pub workout_name: String,
+    /// Creation time in seconds since the epoch
+    #[serde(default, deserialize_with = "gmt_timestamp")]
+    pub created_date: Option<u32>,
+}
+
+/// Parses a zoneless date such as `2026-10-25T09:57:05.0` that Connect gives in GMT.
+fn gmt_timestamp<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<u32>, D::Error> {
+    let Some(date) = Option::<String>::deserialize(deserializer)? else {
+        return Ok(None);
+    };
+
+    let date =
+        NaiveDateTime::parse_from_str(&date, "%Y-%m-%dT%H:%M:%S%.f").map_err(D::Error::custom)?;
+    u32::try_from(Utc.from_utc_datetime(&date).timestamp())
+        .map(Some)
+        .map_err(D::Error::custom)
+}
+
+/// Body of a workout schedule request
+#[derive(Debug, Clone, Serialize)]
+pub struct WorkoutScheduleRequest {
+    pub date: NaiveDate,
+}
+
+/// Workout scheduled on a calendar day, returned from the schedule and schedule export endpoints
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkoutSchedule {
+    pub workout_schedule_id: u64,
+    pub calendar_date: NaiveDate,
+    #[serde(default)]
+    pub workout: Option<ScheduledWorkout>,
+}
+
+/// Workout of a schedule
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScheduledWorkout {
+    pub workout_id: u64,
+    #[serde(default)]
+    pub workout_name: Option<String>,
+}
+
+/// Workouts scheduled in the window Connect picks from the requested start date
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkoutScheduleExport {
+    #[serde(default, rename = "workoutScheduleDTOList")]
+    pub workout_schedules: Vec<WorkoutSchedule>,
+    pub start_calendar_date: NaiveDate,
+    pub end_calendar_date: NaiveDate,
 }
 
 /// Entry of the device message queue, which Connect delivers on the device's next sync

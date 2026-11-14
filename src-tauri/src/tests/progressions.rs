@@ -77,6 +77,7 @@ async fn program(db: &DatabasePool, exercise: (u16, u16), weight: f32, reps: u16
                 notes: None,
                 steps: Vec::new(),
                 connect_id: None,
+                connect_created_time: None,
             })
             .execute_in(tx)?;
 

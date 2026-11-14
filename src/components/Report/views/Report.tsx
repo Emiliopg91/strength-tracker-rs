@@ -1,13 +1,13 @@
 import { JSX, useContext, useEffect, useState } from "react";
-import Cover from "./helpers/Cover";
-import BodySection from "./helpers/BodySection";
-import ExercisesSection from "./helpers/ExercisesSection";
+import Cover from "../sections/Cover";
+import BodySection from "../sections/BodySection";
+import ExercisesSection from "../sections/ExercisesSection";
 import { AppContext } from "@/context/AppContext";
 import { BackendClient } from "@/utils/backend/client";
 import { ReportData } from "@/utils/backend/models";
-import ContentTable from "./helpers/ContentTable";
-import SessionsSection from "./helpers/SessionsSection";
-import NotesSection from "./helpers/NotesSection";
+import ContentTable from "../sections/ContentTable";
+import SessionsSection from "../sections/SessionsSection";
+import NotesSection from "../sections/NotesSection";
 
 type Props = {
     beginDate: number;

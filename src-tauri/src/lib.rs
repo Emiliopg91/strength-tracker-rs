@@ -63,8 +63,9 @@ use crate::{
             helpers::import_file_paths,
         },
         workouts::commands::{
-            get_workout_details, get_workout_list, load_workout_page, save_workout,
-            set_workout_status, workout_print_ready,
+            add_planned_workout, delete_planned_workout, get_next_planned_workout,
+            get_planned_workouts, get_workout_details, get_workout_list, load_workout_page,
+            save_workout, set_workout_status, workout_print_ready,
         },
     },
     mtp::MtpClient,
@@ -319,6 +320,10 @@ pub fn run(log_level: LevelFilter) {
             save_workout,
             load_workout_page,
             workout_print_ready,
+            get_planned_workouts,
+            delete_planned_workout,
+            add_planned_workout,
+            get_next_planned_workout,
             //Devices
             import_from_device,
             send_to_device,

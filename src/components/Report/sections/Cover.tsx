@@ -1,5 +1,5 @@
 import { JSX, useContext } from "react";
-import PageContent from "./PageContent";
+import PageContent from "../layout/PageContent";
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
 
 type Props = {

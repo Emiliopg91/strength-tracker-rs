@@ -15,10 +15,11 @@ use crate::{
             ExerciseCategory, ExerciseCategoryRepository, entity::columns as exercise_category_cols,
         },
         session::{SessionRepository, entity::columns as session_cols},
-        workout::{Workout, WorkoutRepository},
+        workout::{Workout, WorkoutRepository, entity::columns as workout_cols},
         workout_device::{
             WorkoutDevice, WorkoutDeviceRepository, entity::columns as workout_device_cols,
         },
+        workout_planning::{WorkoutPlanningRepository, entity::columns as workout_planning_cols},
         workout_step::WorkoutStep,
     },
     dto::{connect::ConnectUpdateSets, devices::DeviceListItem, sessions::SessionStepDto},
@@ -41,6 +42,22 @@ pub(crate) fn pending_connect_workouts(
         .fetch_in(conn)?
         .into_iter()
         .map(|e| e.workout)
+        .collect())
+}
+
+/// Plan schedules that still have to be uploaded to Connect.
+pub(crate) fn pending_connect_plans(
+    conn: &rusqlite_orm::rusqlite::Connection,
+) -> rusqlite_orm::errors::Result<Vec<(u32, String)>> {
+    Ok(WorkoutPlanningRepository::select()
+        .where_(Where::And(vec![Where::Null(
+            workout_planning_cols::CONNECT_ID,
+        )]))
+        .order_by(OrderBy::Asc(workout_planning_cols::DATE))
+        .order_by(OrderBy::Asc(workout_planning_cols::WORKOUT))
+        .fetch_in(conn)?
+        .into_iter()
+        .map(|e| (e.date, e.workout))
         .collect())
 }
 
@@ -279,6 +296,68 @@ pub(super) async fn insert_new_body_metrics(
         }
     }
     insert.execute(database).await
+}
+
+/// Queues `workouts` again for every device that has them, Connect aside. Their Connect id and
+/// creation time key their files on devices, so a file written before those changed is stale.
+fn requeue_on_devices(
+    conn: &rusqlite_orm::rusqlite::Connection,
+    workouts: &[String],
+) -> rusqlite_orm::errors::Result<()> {
+    if workouts.is_empty() {
+        return Ok(());
+    }
+    WorkoutDeviceRepository::update()
+        .set(workout_device_cols::PENDING, true.into())
+        .where_(Where::And(vec![
+            Where::In(
+                workout_device_cols::WORKOUT,
+                workouts.iter().map(|w| w.clone().into()).collect(),
+            ),
+            Where::NotEq(
+                workout_device_cols::DEVICE,
+                constants::CONNECT_DEVICE_SERIAL.into(),
+            ),
+        ]))
+        .execute_in(conn)?;
+    Ok(())
+}
+
+/// Stores the Connect creation time of each `(connect id, created time)` on the workout with that
+/// Connect id, skipping the ones already up to date, and queues the changed workouts again for
+/// their devices. Returns how many workouts changed.
+pub(crate) fn set_connect_created_times(
+    tx: &rusqlite_orm::rusqlite::Transaction,
+    created_times: &[(String, u32)],
+) -> rusqlite_orm::errors::Result<usize> {
+    let mut changed = Vec::new();
+    for (connect_id, created) in created_times {
+        let stale = WorkoutRepository::select()
+            .where_(Where::And(vec![
+                Where::Eq(workout_cols::CONNECT_ID, connect_id.clone().into()),
+                Where::Or(vec![
+                    Where::Null(workout_cols::CONNECT_CREATED_TIME),
+                    Where::NotEq(workout_cols::CONNECT_CREATED_TIME, (*created).into()),
+                ]),
+            ]))
+            .fetch_in(tx)?;
+        for mut workout in stale {
+            workout.connect_created_time = Some(*created);
+            workout.update_by_id_in(tx)?;
+            changed.push(workout.name);
+        }
+    }
+    requeue_on_devices(tx, &changed)?;
+    Ok(changed.len())
+}
+
+/// Saves the new Connect id and creation time of `workout` and queues it again for its devices.
+pub(crate) fn set_connect_keys(
+    tx: &rusqlite_orm::rusqlite::Transaction,
+    workout: &mut Workout,
+) -> rusqlite_orm::errors::Result<()> {
+    workout.update_by_id_in(tx)?;
+    requeue_on_devices(tx, std::slice::from_ref(&workout.name))
 }
 
 /// Connect id of the workout, `None` if it doesn't exist or hasn't been uploaded.

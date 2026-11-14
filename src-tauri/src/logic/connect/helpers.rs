@@ -2,29 +2,33 @@ use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tauri_plugin_log::log::{error, info};
 
 use super::queries::{
-    pending_connect_workouts, session_sets_for_connect, set_connect_pending, sync_connect_devices,
-    workout_connect_id, workout_with_exercises,
+    pending_connect_workouts, session_sets_for_connect, set_connect_created_times,
+    set_connect_keys, set_connect_pending, sync_connect_devices, workout_connect_id,
+    workout_with_exercises,
 };
 use crate::{
     ConnectLock, SettingsLock,
     connect::ConnectClient,
-    dao::device::Device,
+    dao::{device::Device, workout::WorkoutRepository},
     dto::{
         connect::{ConnectUpdateSets, ConnectWorkout},
         devices::DeviceListItem,
         sessions::SessionStepDto,
     },
-    logic::{pool, report_error},
+    logic::{
+        connect::queries::pending_connect_plans, pool, report_error,
+        workouts::queries::update_schedule_id,
+    },
 };
 
 /// Uploads `workout` to Connect, notifying the user if it fails.
 /// The workout is left pending of upload on failure and cleared on success.
-pub(super) async fn send_workout_connect<R: Runtime>(
+pub async fn send_workout_connect<R: Runtime>(
     app: &AppHandle<R>,
     connect: &ConnectLock,
     settings: &SettingsLock,
     workout: &str,
-) -> Result<(), String> {
+) -> Result<String, String> {
     let res = upload_workout_connect(app, connect, settings, workout).await;
     mark_connect_pending(app, &[workout.to_string()], res.is_err()).await;
     res.map_err(|e| {
@@ -66,28 +70,70 @@ pub(crate) async fn up_to_date_connect<R: Runtime>(app: &AppHandle<R>) {
         return;
     }
 
-    let pending = match pool(app)
-        .run_in_connection(move |conn| Ok(pending_connect_workouts(conn)?))
+    align_workouts_connect(app, &connect).await;
+
+    let (pending_workouts, pending_plans) = match pool(app)
+        .run_in_connection(move |conn| {
+            let wkts = pending_connect_workouts(conn)?;
+            let plans = pending_connect_plans(conn)?;
+            Ok((wkts, plans))
+        })
         .await
     {
-        Ok(pending) => pending,
+        Ok((pending_workouts, pending_plans)) => (pending_workouts, pending_plans),
         Err(e) => {
             error!("Error fetching workouts pending of upload to Connect: {e}");
             return;
         }
     };
-    if pending.is_empty() {
-        return;
+
+    if !pending_workouts.is_empty() {
+        info!(
+            "Uploading {} pending workouts to Connect",
+            pending_workouts.len()
+        );
+        let settings = app.state::<SettingsLock>();
+        for workout in pending_workouts {
+            let res = upload_workout_connect(app, &connect, &settings, &workout).await;
+            if let Err(e) = &res {
+                error!("Error uploading pending workout '{workout}' to Connect: {e}");
+            }
+            mark_connect_pending(app, std::slice::from_ref(&workout), res.is_err()).await;
+        }
     }
 
-    info!("Uploading {} pending workouts to Connect", pending.len());
-    let settings = app.state::<SettingsLock>();
-    for workout in pending {
-        let res = upload_workout_connect(app, &connect, &settings, &workout).await;
-        if let Err(e) = &res {
-            error!("Error uploading pending workout '{workout}' to Connect: {e}");
+    if !pending_plans.is_empty() {
+        info!("Uploading {} pending plans to Connect", pending_plans.len());
+        for (date, workout) in pending_plans {
+            push_plan_to_connect(app, date, &workout).await;
         }
-        mark_connect_pending(app, std::slice::from_ref(&workout), res.is_err()).await;
+    }
+}
+
+/// Copies into the database the Connect creation time of the workouts already uploaded.
+/// Failures are only logged, as the next alignment or upload retries them.
+async fn align_workouts_connect<R: Runtime>(app: &AppHandle<R>, connect: &ConnectLock) {
+    let listed = connect.lock().await.list_workouts().await;
+    let listed = match listed {
+        Ok(listed) => listed,
+        Err(e) => {
+            error!("Error listing Connect workouts to align them: {e}");
+            return;
+        }
+    };
+
+    let created_times: Vec<(String, u32)> = listed
+        .into_iter()
+        .filter_map(|w| w.created_date.map(|c| (w.workout_id.to_string(), c)))
+        .collect();
+    let res = pool(app)
+        .run_in_transaction(move |tx| Ok(set_connect_created_times(tx, &created_times)?))
+        .await;
+
+    match res {
+        Ok(0) => {}
+        Ok(changed) => info!("Aligned the Connect creation time of {changed} workouts"),
+        Err(e) => error!("Error storing the Connect creation time of workouts: {e}"),
     }
 }
 
@@ -106,12 +152,12 @@ pub(super) async fn mark_connect_pending<R: Runtime>(
     }
 }
 
-pub(super) async fn upload_workout_connect<R: Runtime>(
+pub async fn upload_workout_connect<R: Runtime>(
     app: &AppHandle<R>,
     connect: &ConnectLock,
     settings: &SettingsLock,
     workout: &str,
-) -> Result<(), String> {
+) -> Result<String, String> {
     let weight_unit = settings.read().unwrap().weight_unit;
 
     let id = workout.to_string();
@@ -123,15 +169,20 @@ pub(super) async fn upload_workout_connect<R: Runtime>(
 
     let mut client = connect.lock().await;
     let original_id = workout.connect_id.clone();
+    let original_created = workout.connect_created_time;
 
-    if workout.connect_id.is_none() {
-        workout.connect_id = client
-            .list_workouts()
-            .await
-            .map_err(|e| e.to_string())?
-            .into_iter()
-            .find(|w| w.workout_name == workout.name)
-            .map(|w| w.workout_id.to_string());
+    // The listing gives the id of a workout already in Connect under this name, and the creation
+    // time of one already uploaded
+    if workout.connect_id.is_none() || workout.connect_created_time.is_none() {
+        let listed = client.list_workouts().await.map_err(|e| e.to_string())?;
+        let found = match workout.connect_id.as_deref() {
+            Some(id) => listed.into_iter().find(|w| w.workout_id.to_string() == id),
+            None => listed.into_iter().find(|w| w.workout_name == workout.name),
+        };
+        if let Some(found) = found {
+            workout.connect_id = Some(found.workout_id.to_string());
+            workout.connect_created_time = found.created_date;
+        }
     }
 
     let payload = ConnectWorkout::from(&workout, weight_unit);
@@ -151,18 +202,20 @@ pub(super) async fn upload_workout_connect<R: Runtime>(
                 .await
                 .map_err(|e| e.to_string())?;
             workout.connect_id = Some(created.workout_id.to_string());
+            workout.connect_created_time = created.created_date;
         }
     }
     drop(client);
 
-    if workout.connect_id != original_id {
-        workout
-            .update_by_id(&pool(app))
+    let connect_id = workout.connect_id.clone().unwrap();
+    if workout.connect_id != original_id || workout.connect_created_time != original_created {
+        pool(app)
+            .run_in_transaction(move |tx| Ok(set_connect_keys(tx, &mut workout)?))
             .await
             .map_err(|e| e.to_string())?;
     }
 
-    Ok(())
+    Ok(connect_id)
 }
 
 /// Mirrors the workout-capable devices of the Connect account into the database: enrolls new
@@ -312,4 +365,91 @@ pub(super) async fn update_session_sets(
     }
 
     let _ = connect.update_session_sets(&original_sets).await;
+}
+
+pub async fn push_plan_to_connect<R: Runtime>(app: &AppHandle<R>, date: u32, workout: &str) {
+    let connect_state = app.state::<ConnectLock>();
+    let connect = connect_state.lock().await;
+    if connect.logged_user().is_some() {
+        drop(connect);
+        let workout_id = match WorkoutRepository::select_by_id(&pool(app), workout).await {
+            Err(e) => {
+                error!("Could not get workout entry {}: {}", workout, e);
+                None
+            }
+            Ok(None) => None,
+            Ok(Some(workout)) => {
+                if workout.connect_id.is_none() {
+                    send_workout_connect(
+                        app,
+                        &app.state::<ConnectLock>(),
+                        &app.state::<SettingsLock>(),
+                        &workout.name,
+                    )
+                    .await
+                    .ok()
+                } else {
+                    workout.connect_id.clone()
+                }
+            }
+        };
+
+        let Some(workout_id) = workout_id else {
+            error!("Could not push workout to Garmin Connect");
+            return;
+        };
+
+        let mut connect = connect_state.lock().await;
+        match connect
+            .schedule_workout(workout_id.parse().unwrap(), date)
+            .await
+        {
+            Ok(schedule_id) => {
+                let workout = workout.to_string();
+                let res = pool(app)
+                    .run_in_connection(move |conn| {
+                        Ok(update_schedule_id(
+                            conn,
+                            date,
+                            &workout,
+                            &schedule_id.to_string(),
+                        )?)
+                    })
+                    .await;
+
+                if let Err(e) = res {
+                    report_error(
+                        e,
+                        &app.state::<SettingsLock>(),
+                        "error_workout_schedule_connect",
+                        "Could not store Garmin Connect schedule id",
+                    );
+                } else {
+                    info!("Planning sent to Connect")
+                }
+            }
+            Err(e) => {
+                report_error(
+                    e,
+                    &app.state::<SettingsLock>(),
+                    "error_workout_schedule_connect",
+                    "Could not schedule workout in Garmin Connect",
+                );
+            }
+        }
+    }
+}
+
+pub async fn delete_plan_from_connect<R: Runtime>(app: &AppHandle<R>, schedule_id: u64) {
+    let connect_state = app.state::<ConnectLock>();
+    let mut connect = connect_state.lock().await;
+
+    if let Err(e) = connect.delete_workout_schedule(schedule_id).await {
+        report_error(
+            e,
+            &app.state::<SettingsLock>(),
+            "error_workout_unschedule_connect",
+            "Could not remove scheduled workout from Garmin Connect",
+        );
+    }
 }

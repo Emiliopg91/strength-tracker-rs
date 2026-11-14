@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use crate::dao::{session::Session, workout_step::WorkoutStep};
+use crate::dao::{session::Session, workout_planning::WorkoutPlanning, workout_step::WorkoutStep};
 
 #[derive(Serialize)]
 pub struct WorkoutListItem {
@@ -43,4 +43,21 @@ pub struct WorkoutDetails {
     pub steps: Vec<WorkoutStep>,
     pub primary_muscles: Vec<String>,
     pub secondary_muscles: Vec<String>,
+}
+
+#[derive(Serialize)]
+pub struct WorkoutPlanListItem {
+    pub date: u32,
+    pub workout: String,
+    pub session: Option<u32>,
+}
+
+impl From<&WorkoutPlanning> for WorkoutPlanListItem {
+    fn from(value: &WorkoutPlanning) -> Self {
+        Self {
+            date: value.date,
+            workout: value.workout.clone(),
+            session: value.session,
+        }
+    }
 }

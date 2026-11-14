@@ -1,7 +1,7 @@
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
 import { WorkoutListItem } from "@/utils/backend/models";
 import { useContext } from "react";
-import { WorkoutActionsMenu } from "./WorkoutActionsMenu";
+import { WorkoutActionsMenu } from "../menus/WorkoutActionsMenu";
 
 type Props = {
     workout: WorkoutListItem;

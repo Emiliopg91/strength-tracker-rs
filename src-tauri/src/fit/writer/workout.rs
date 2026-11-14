@@ -17,7 +17,7 @@ use crate::{
         workout::Workout,
         workout_step::{StepType, WorkoutStep},
     },
-    fit::writer::ToFitMessages,
+    fit::writer::{ToFitMessages, fnv1a},
     utils::translations::{Languages, translate},
 };
 
@@ -113,12 +113,13 @@ impl ToFitMessages for Workout {
             .and_then(|v| v.parse().ok())
             .unwrap_or_else(|| {
                 const BASE: u32 = 1_746_147_457;
-                // FNV-1a, stable across builds
-                let hash = self.name.bytes().fold(0x811c_9dc5_u32, |h, b| {
-                    (h ^ b as u32).wrapping_mul(0x0100_0193)
-                });
-                BASE + 1 + hash % (u32::MAX - BASE)
+                BASE + 1 + fnv1a(self.name.bytes()) % (u32::MAX - BASE)
             })
+    }
+
+    fn file_created(&self) -> Option<u32> {
+        // Devices match workouts and schedules by Connect id and creation time, as Connect writes them
+        self.connect_created_time
     }
 
     fn to_fit_messages(

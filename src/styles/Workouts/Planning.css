@@ -1,0 +1,110 @@
+.planning-layout {
+  display: flex;
+  flex-direction: row;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.planning-calendar {
+  flex-shrink: 0;
+  background-color: #262626;
+  border-radius: 8px;
+
+  /* Planned days get a dot under the number */
+  .planned-day {
+    position: relative;
+
+    &::after {
+      content: "";
+      position: absolute;
+      bottom: 3px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background-color: var(--primary-color);
+    }
+
+    &.red::after {
+      background-color: #e53935;
+    }
+
+    &.green::after {
+      background-color: #43a047;
+    }
+
+    /* The selected day is filled with the primary color, so its dot turns white */
+    &.Mui-selected::after {
+      background-color: white;
+    }
+  }
+}
+
+.planning-day {
+  flex: 1;
+  min-width: 0;
+  background-color: #262626;
+  border-radius: 8px;
+  padding: 12px 16px;
+  align-self: stretch;
+}
+
+.planning-day-title {
+  font-size: 1.1rem;
+  font-weight: 500;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  text-transform: capitalize;
+}
+
+.planning-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 32px 0;
+  opacity: 0.5;
+}
+
+.planning-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.planning-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+.planning-item-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--primary-color);
+  flex-shrink: 0;
+}
+
+.planning-item-dot.red {
+  background-color: #e53935;
+}
+
+.planning-item-dot.green {
+  background-color: #43a047;
+}
+
+.planning-item-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan-modal-date {
+  margin-bottom: 16px;
+  opacity: 0.7;
+}

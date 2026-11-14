@@ -161,6 +161,12 @@ export function I18nSettingsProvider({
     const formatTimeDate = (date: number) =>
         format(date * 1000, TIME_DATE_FORMAT, { locale });
 
+    // Capitalized, as Spanish day names are lowercase
+    const formatWeekday = (date: number) => {
+        const day = format(date * 1000, "EEEE", { locale });
+        return day.charAt(0).toUpperCase() + day.slice(1);
+    };
+
     const parseLocalDateTime = (dateStr: string) => {
         const local = parse(dateStr, TIME_DATE_FORMAT, new Date(), {
             locale,
@@ -228,6 +234,7 @@ export function I18nSettingsProvider({
         formatDuration,
         formatDate,
         formatTimeDate,
+        formatWeekday,
         parseLocalDateTime,
         formatNumber,
         formatPercent,

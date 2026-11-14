@@ -1,6 +1,6 @@
 use rustyfit::profile::{
     mesgdef,
-    typedef::{Intensity, MesgNum},
+    typedef::{self, Bool, Intensity, Manufacturer, MesgNum},
 };
 
 use crate::{
@@ -9,6 +9,7 @@ use crate::{
         session::Session,
         settings::WeightUnit,
         workout::Workout,
+        workout_planning::WorkoutPlanning,
         workout_step::{StepType, WorkoutStep},
     },
     fit::{
@@ -24,6 +25,7 @@ fn written_intensity(kind: Intensity) -> Intensity {
         enabled: true,
         notes: None,
         connect_id: None,
+        connect_created_time: None,
         steps: vec![WorkoutStep::active(
             "Push",
             0,
@@ -71,6 +73,7 @@ fn step_without_exercise_writes_no_exercise_category() {
         enabled: true,
         notes: None,
         connect_id: None,
+        connect_created_time: None,
         steps: vec![WorkoutStep::active(
             "Push",
             0,
@@ -276,6 +279,7 @@ fn step_time_is_in_milliseconds_only_inside_the_fit_file() {
         enabled: true,
         notes: None,
         connect_id: None,
+        connect_created_time: None,
         steps: vec![WorkoutStep::rest("Push", 0, Some(90), None)],
     };
     let messages = workout
@@ -324,4 +328,175 @@ fn generic_exercise_survives_a_fit_round_trip() {
         (step.ex_cat, step.ex_id),
         (Some(13), Some(GENERIC_EXERCISE_ID))
     );
+}
+
+fn workout_created(connect_created_time: Option<u32>) -> i64 {
+    let workout = Workout {
+        name: "Push".to_string(),
+        enabled: true,
+        notes: None,
+        connect_id: Some("1746212841".to_string()),
+        connect_created_time,
+        steps: vec![],
+    };
+
+    let id = FitWriter::from(&workout).file_id();
+    mesgdef::FileId::from(&id)
+        .time_created
+        .unix_timestamp()
+        .unwrap()
+}
+
+#[test]
+fn workout_file_id_takes_the_connect_creation_time() {
+    assert_eq!(workout_created(Some(1793401668)), 1793401668);
+}
+
+#[test]
+fn workout_file_id_without_connect_creation_time_takes_now() {
+    let before = chrono::Utc::now().timestamp();
+    let created = workout_created(None);
+
+    assert!((before..=chrono::Utc::now().timestamp()).contains(&created));
+}
+
+/// UTC timestamp of the local midnight of `day`, as plans store their date
+fn plan_date(year: i32, month: u32, day: u32) -> u32 {
+    use chrono::TimeZone;
+    let midnight = chrono::NaiveDate::from_ymd_opt(year, month, day)
+        .unwrap()
+        .and_hms_opt(0, 0, 0)
+        .unwrap();
+    chrono::Local
+        .from_local_datetime(&midnight)
+        .earliest()
+        .unwrap()
+        .timestamp() as u32
+}
+
+fn plan(
+    date: u32,
+    connect_id: Option<&str>,
+    created: Option<u32>,
+    session: Option<u32>,
+) -> WorkoutPlanning {
+    WorkoutPlanning {
+        date,
+        workout: "Progresion 2 - Torso".to_string(),
+        session,
+        connect_id: None,
+        workout_obj: Some(Workout {
+            name: "Progresion 2 - Torso".to_string(),
+            enabled: true,
+            notes: None,
+            connect_id: connect_id.map(str::to_string),
+            connect_created_time: created,
+            steps: vec![],
+        }),
+    }
+}
+
+fn written_schedules(plans: Vec<WorkoutPlanning>) -> Vec<mesgdef::Schedule> {
+    plans
+        .to_fit_messages(Languages::English, WeightUnit::Kilograms)
+        .unwrap()
+        .iter()
+        .map(mesgdef::Schedule::from)
+        .collect()
+}
+
+#[test]
+fn schedule_is_written_as_connect_does() {
+    // Values of the Schedule.fit a device got from Connect for this plan
+    let plans = vec![plan(
+        plan_date(2026, 11, 16),
+        Some("1746212841"),
+        Some(1793401668),
+        None,
+    )];
+
+    let schedules = written_schedules(plans);
+
+    assert_eq!(schedules.len(), 1);
+    let schedule = &schedules[0];
+    assert_eq!(schedule.manufacturer, Manufacturer::GARMIN);
+    assert_eq!(schedule.product, 65534);
+    assert_eq!(schedule.serial_number, 1746212841);
+    assert_eq!(schedule.time_created.0, 1162336068);
+    assert_eq!(schedule.scheduled_time.0, 1163764800);
+    assert_eq!(schedule.completed, Bool::FALSE);
+    assert_eq!(schedule.r#type, typedef::Schedule::WORKOUT);
+}
+
+#[test]
+fn fulfilled_plan_is_written_as_completed() {
+    let date = plan_date(2026, 11, 16);
+    let plans = vec![plan(
+        date,
+        Some("1746212841"),
+        Some(1793401668),
+        Some(date + 3600),
+    )];
+
+    assert_eq!(written_schedules(plans)[0].completed, Bool::TRUE);
+}
+
+#[test]
+fn plan_without_connect_creation_time_is_left_out() {
+    let date = plan_date(2026, 11, 16);
+    let plans = vec![
+        plan(date, None, None, None),
+        plan(date, Some("1746212841"), None, None),
+    ];
+
+    assert!(written_schedules(plans).is_empty());
+}
+
+#[test]
+fn schedule_file_key_follows_its_content() {
+    let monday = vec![plan(plan_date(2026, 11, 16), Some("1"), Some(1), None)];
+    let tuesday = vec![plan(plan_date(2026, 11, 17), Some("1"), Some(1), None)];
+
+    assert_eq!(monday.file_type(), typedef::File::SCHEDULES);
+    assert_ne!(monday.file_key(), tuesday.file_key());
+    assert_ne!(Vec::<WorkoutPlanning>::new().file_key(), 0);
+}
+
+fn written_training_file(connect_created_time: Option<u32>) -> (Session, mesgdef::TrainingFile) {
+    let mut session = parse_fixture("strength_1");
+    session.workout_obj = Some(Workout {
+        name: session.name.clone(),
+        enabled: true,
+        notes: None,
+        connect_id: Some("1746212841".to_string()),
+        connect_created_time,
+        steps: vec![],
+    });
+    let messages = session
+        .to_fit_messages(Languages::English, WeightUnit::Kilograms)
+        .unwrap();
+    let msg = messages
+        .iter()
+        .find(|msg| msg.num == MesgNum::TRAINING_FILE)
+        .unwrap();
+    let training_file = mesgdef::TrainingFile::from(msg);
+    (session, training_file)
+}
+
+#[test]
+fn session_points_to_the_workout_file_by_its_keys() {
+    let (_, training_file) = written_training_file(Some(1793401668));
+
+    assert_eq!(training_file.r#type, typedef::File::WORKOUT);
+    assert_eq!(training_file.manufacturer, Manufacturer::GARMIN);
+    assert_eq!(training_file.product, 65534);
+    assert_eq!(training_file.serial_number, 1746212841);
+    assert_eq!(training_file.time_created.0, 1162336068);
+}
+
+#[test]
+fn session_without_connect_creation_time_points_to_its_date() {
+    let (session, training_file) = written_training_file(None);
+
+    assert_eq!(training_file.time_created.0, session.date - 631_065_600);
 }

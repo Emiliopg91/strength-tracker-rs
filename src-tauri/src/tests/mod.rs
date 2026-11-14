@@ -15,6 +15,7 @@ mod notes;
 mod parser;
 mod progressions;
 mod prs;
+mod schedule;
 mod schema;
 mod settings;
 mod translations;

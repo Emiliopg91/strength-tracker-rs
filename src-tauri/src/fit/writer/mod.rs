@@ -1,4 +1,5 @@
 pub mod errors;
+pub mod schedule;
 pub mod session;
 pub mod workout;
 
@@ -9,7 +10,7 @@ use rustyfit::{
     Encoder,
     profile::{
         mesgdef::{FileCreator, FileId},
-        typedef::{self, DateTime, Manufacturer},
+        typedef::{self, DateTime, GarminProduct, Manufacturer},
     },
     proto::{FIT, Message},
 };
@@ -21,10 +22,22 @@ use crate::{
 
 use self::errors::WriteFitFileError;
 
+/// FNV-1a hash of `bytes`, stable across builds.
+pub(crate) fn fnv1a(bytes: impl IntoIterator<Item = u8>) -> u32 {
+    bytes.into_iter().fold(0x811c_9dc5_u32, |h, b| {
+        (h ^ b as u32).wrapping_mul(0x0100_0193)
+    })
+}
+
 pub trait ToFitMessages {
     fn file_type(&self) -> typedef::File;
     /// Key that tells this file apart from others of the same type; it seeds the `file_id` serial number.
     fn file_key(&self) -> u32;
+    /// Creation time of the file as a UTC timestamp in seconds, written in `file_id`. `None` means
+    /// the time of writing.
+    fn file_created(&self) -> Option<u32> {
+        None
+    }
     fn to_fit_messages(
         &self,
         lang: Languages,
@@ -47,14 +60,18 @@ where
         Self { obj }
     }
 
-    fn file_id(&self) -> Message {
+    pub(crate) fn file_id(&self) -> Message {
         let mut id = FileId::new();
         id.r#type = self.obj.file_type();
-        id.manufacturer = Manufacturer::DEVELOPMENT;
-        id.product_name = constants::APP_NAME.clone().into();
+        id.manufacturer = Manufacturer::GARMIN;
+        id.product = GarminProduct::CONNECT.0;
         // Devices dedupe files by file_id; without a serial, files created in the same second collide
         id.serial_number = self.obj.file_key();
-        id.time_created = DateTime::from_unix_timestamp(chrono::Utc::now().timestamp());
+        let created = self
+            .obj
+            .file_created()
+            .map_or_else(|| chrono::Utc::now().timestamp(), i64::from);
+        id.time_created = DateTime::from_unix_timestamp(created);
         id.into()
     }
 

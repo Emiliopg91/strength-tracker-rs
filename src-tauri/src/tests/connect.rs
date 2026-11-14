@@ -4,9 +4,11 @@ use crate::connect::{
     calendar_months, calendar_page_items,
     client::{
         CalendarItem, CalendarItemType, CalendarMonth, ExerciseSetType, ExerciseSets,
-        api::calendar_month_path, models::ActivityDescriptionUpdate,
+        ScheduledWorkout, WorkoutSchedule, WorkoutScheduleExport, WorkoutScheduleRequest,
+        api::{calendar_month_path, workout_schedule_path},
+        models::ActivityDescriptionUpdate,
     },
-    session_activity_id,
+    next_schedule_window, session_activity_id,
 };
 use serde_json::{Value, json};
 
@@ -394,6 +396,7 @@ fn workout_envelope() {
         enabled: true,
         notes: Some("Chest day".to_string()),
         connect_id: Some("123456".to_string()),
+        connect_created_time: None,
         steps: vec![reps(0, 10, Some(60.0))],
     };
     let json = serde_json::to_value(ConnectWorkout::from(&workout, WeightUnit::Kilograms)).unwrap();
@@ -417,6 +420,7 @@ fn new_workout_omits_id_and_description() {
         enabled: true,
         notes: None,
         connect_id: None,
+        connect_created_time: None,
         steps: Vec::new(),
     };
     let json = serde_json::to_value(ConnectWorkout::from(&workout, WeightUnit::Kilograms)).unwrap();
@@ -703,4 +707,107 @@ fn generic_exercise_goes_with_its_category_only() {
 
     assert_eq!(json[0]["category"], "BENCH_PRESS");
     assert!(json[0].get("exerciseName").is_none());
+}
+
+#[test]
+fn workout_schedule_request_sends_the_plain_date() {
+    let body = WorkoutScheduleRequest {
+        date: day(2026, 11, 20),
+    };
+
+    assert_eq!(
+        serde_json::to_value(&body).unwrap(),
+        json!({"date": "2026-11-20"})
+    );
+}
+
+#[test]
+fn workout_schedule_path_is_keyed_by_id() {
+    assert_eq!(
+        workout_schedule_path(1400000123),
+        "/workout-service/schedule/1400000123"
+    );
+}
+
+#[test]
+fn workout_schedule_response_is_parsed() {
+    let json = r#"{"workoutScheduleId": 1650000001, "calendarDate": "2026-11-20", "ownerId": 1,
+        "workout": {"workoutId": 1400000123, "workoutName": "Push", "sportType": {}}}"#;
+
+    assert_eq!(
+        serde_json::from_str::<WorkoutSchedule>(json).unwrap(),
+        WorkoutSchedule {
+            workout_schedule_id: 1650000001,
+            calendar_date: day(2026, 11, 20),
+            workout: Some(ScheduledWorkout {
+                workout_id: 1400000123,
+                workout_name: Some("Push".to_string()),
+            }),
+        }
+    );
+}
+
+#[test]
+fn empty_workout_schedule_export_is_parsed() {
+    let json = r#"{"workoutScheduleDTOList": [], "startCalendarDate": "2026-11-13",
+        "endCalendarDate": "2026-12-13", "numberOfWorkouts": 0, "timeZoneOffsetInMins": 720,
+        "trainingPlanMetaDataList": null}"#;
+
+    let export: WorkoutScheduleExport = serde_json::from_str(json).unwrap();
+
+    assert!(export.workout_schedules.is_empty());
+    assert_eq!(export.start_calendar_date, day(2026, 11, 13));
+    assert_eq!(export.end_calendar_date, day(2026, 12, 13));
+}
+
+#[test]
+fn workout_schedule_export_lists_its_schedules() {
+    let json = r#"{"workoutScheduleDTOList": [
+            {"workoutScheduleId": 1, "calendarDate": "2026-11-14", "workout": {"workoutId": 10}},
+            {"workoutScheduleId": 2, "calendarDate": "2026-11-16"}
+        ], "startCalendarDate": "2026-11-13", "endCalendarDate": "2026-12-13"}"#;
+
+    let export: WorkoutScheduleExport = serde_json::from_str(json).unwrap();
+
+    let ids: Vec<_> = export
+        .workout_schedules
+        .iter()
+        .map(|s| {
+            (
+                s.workout_schedule_id,
+                s.workout.as_ref().map(|w| w.workout_id),
+            )
+        })
+        .collect();
+    assert_eq!(ids, [(1, Some(10)), (2, None)]);
+}
+
+#[test]
+fn schedule_window_with_workouts_is_followed_by_the_next_day() {
+    let json = r#"{"workoutScheduleDTOList": [{"workoutScheduleId": 1, "calendarDate": "2026-11-14"}],
+        "startCalendarDate": "2026-11-13", "endCalendarDate": "2026-12-13"}"#;
+
+    let window: WorkoutScheduleExport = serde_json::from_str(json).unwrap();
+
+    assert_eq!(next_schedule_window(&window), Some(day(2026, 12, 14)));
+}
+
+#[test]
+fn empty_schedule_window_ends_the_listing() {
+    let json = r#"{"workoutScheduleDTOList": [], "startCalendarDate": "2026-11-13",
+        "endCalendarDate": "2026-12-13"}"#;
+
+    let window: WorkoutScheduleExport = serde_json::from_str(json).unwrap();
+
+    assert_eq!(next_schedule_window(&window), None);
+}
+
+#[test]
+fn schedule_window_going_backwards_ends_the_listing() {
+    let json = r#"{"workoutScheduleDTOList": [{"workoutScheduleId": 1, "calendarDate": "2026-11-14"}],
+        "startCalendarDate": "2026-11-13", "endCalendarDate": "2026-11-12"}"#;
+
+    let window: WorkoutScheduleExport = serde_json::from_str(json).unwrap();
+
+    assert_eq!(next_schedule_window(&window), None);
 }

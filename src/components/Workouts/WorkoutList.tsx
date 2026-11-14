@@ -1,6 +1,6 @@
 import { WorkoutDetails, WorkoutListItem } from "@/utils/backend/models";
-import { WorkoutModal } from "./WorkoutModal";
-import { WorkoutRow } from "./helpers/WorkoutRow";
+import { WorkoutModal } from "./modals/WorkoutModal";
+import { WorkoutRow } from "./rows/WorkoutRow";
 import { BackendClient } from "@/utils/backend/client";
 import { useContext, useState } from "react";
 import { AppContext } from "@/context/AppContext";
@@ -9,11 +9,12 @@ import { useBackendList } from "@/hooks/useBackendList";
 import { useLoadingTask } from "@/hooks/useLoadingTask";
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
 import "@/styles/Workouts/WorkoutLists.css";
-import { WorkoutStepsModal } from "./WorkoutStepsModal";
+import { WorkoutStepsModal } from "./modals/WorkoutStepsModal";
 import { Button } from "@mui/material";
 import { WorkoutUtils } from "@/utils/WorkoutUtils";
 import { BackendListener } from "@/utils/backend/listener";
 import { useFilterList } from "@/hooks/useFilterList";
+import { PlanningModal } from "./modals/PlanningModal";
 
 export function WorkoutsList() {
     const { sessionsVersion } = useContext(AppContext);
@@ -53,6 +54,7 @@ export function WorkoutsList() {
         undefined,
     );
     const [isEdit, setIsEdit] = useState(false);
+    const [planningOpened, setPlanningOpened] = useState(false);
 
     const openEdit = (workout: WorkoutDetails | undefined, edit: boolean) => {
         setIsEdit(edit);
@@ -211,13 +213,28 @@ export function WorkoutsList() {
                 )}
             </div>
 
-            <div className="list-action-bar">
+            {planningOpened && (
+                <PlanningModal onClose={() => setPlanningOpened(false)} />
+            )}
+
+            <div
+                style={{ display: "flex", gap: 5 }}
+                className="list-action-bar equal-width-children"
+            >
                 <Button
                     className="full-width-button"
                     onClick={() => openEdit(undefined, false)}
                     variant="contained"
                 >
                     {translate("create_workout")}
+                </Button>
+                <Button
+                    className="full-width-button"
+                    onClick={() => setPlanningOpened(true)}
+                    variant="contained"
+                    disabled={!workouts.some((w) => w.enabled)}
+                >
+                    {translate("planning")}
                 </Button>
             </div>
         </>

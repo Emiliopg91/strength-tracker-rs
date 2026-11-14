@@ -3,8 +3,8 @@ import {
     ExerciseListItem,
     ProgressionSuggestion,
 } from "@/utils/backend/models";
-import { ExerciseModal } from "./ExerciseModal";
-import { ExerciseRow } from "./helpers/ExerciseRow";
+import { ExerciseModal } from "./modals/ExerciseModal";
+import { ExerciseRow } from "./rows/ExerciseRow";
 import { useContext, useState } from "react";
 import { BackendClient } from "@/utils/backend/client";
 import { AppContext } from "@/context/AppContext";

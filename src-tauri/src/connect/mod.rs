@@ -7,7 +7,7 @@ use crate::{
         client::{
             CalendarItem, CalendarItemType, DeviceMessage, DeviceSummary, ExerciseSets,
             GarminClient, GarminError, OAuth1Token, OAuth2Token, SsoClient, WeightEntry,
-            WeightRange, WorkoutSummary,
+            WeightRange, WorkoutSchedule, WorkoutScheduleExport, WorkoutSummary,
         },
         errors::{ConnectError, Result},
     },
@@ -85,6 +85,16 @@ pub fn session_activity_id(items: &[CalendarItem], timestamp: u32) -> Option<u64
                 && item.start_timestamp_local == Some(timestamp)
         })
         .and_then(|item| item.id)
+}
+
+/// Start of the schedule window that follows `window`, or `None` when `window` holds no workouts
+/// (the schedule is assumed to end there) or does not move forward.
+pub fn next_schedule_window(window: &WorkoutScheduleExport) -> Option<NaiveDate> {
+    if window.workout_schedules.is_empty() || window.end_calendar_date < window.start_calendar_date
+    {
+        return None;
+    }
+    window.end_calendar_date.succ_opt()
 }
 
 /// Asks the user for the inputs a Garmin Connect login needs. Each future resolves to `None` if
@@ -457,6 +467,97 @@ impl ConnectClient {
                 )
             })?;
         info!("Updated exercise sets of activity {}.", id);
+
+        Ok(())
+    }
+
+    /// Lists the workouts scheduled from today on. Connect serves the schedule in windows of a
+    /// month, which are walked forward until one comes back empty.
+    pub async fn list_scheduled_workouts(&mut self) -> Result<Vec<WorkoutSchedule>> {
+        let today = Local::now().date_naive();
+        info!("Listing workouts scheduled from {}...", today);
+
+        let (client, oauth2) = self.api_client(ConnectError::FetchWorkoutSchedules).await?;
+
+        let mut schedules = Vec::new();
+        let mut start = Some(today);
+        while let Some(from) = start {
+            let window = with_retry(|| client.list_workout_schedules(oauth2, from))
+                .await
+                .map_err(|e| {
+                    log_error(
+                        "Error fetching workout schedules",
+                        ConnectError::FetchWorkoutSchedules(e),
+                    )
+                })?;
+
+            start = next_schedule_window(&window);
+            schedules.extend(window.workout_schedules);
+        }
+        info!("Listed {} scheduled workouts.", schedules.len());
+
+        Ok(schedules)
+    }
+
+    /// Schedules the Connect workout `workout_id` on the local day of `timestamp`, a UTC
+    /// timestamp in seconds, returning the id of the schedule.
+    pub async fn schedule_workout(&mut self, workout_id: u64, timestamp: u32) -> Result<u64> {
+        let date = Local
+            .timestamp_opt(i64::from(timestamp), 0)
+            .single()
+            .ok_or_else(|| {
+                log_error(
+                    "Error parsing schedule timestamp",
+                    ConnectError::InvalidTimestamp(timestamp),
+                )
+            })?
+            .date_naive();
+        info!("Scheduling workout {} on {}...", workout_id, date);
+
+        let (client, oauth2) = self
+            .api_client(|e| ConnectError::ScheduleWorkout(workout_id, date, e))
+            .await?;
+        // Not retried: a request that timed out after reaching Connect would schedule it twice
+        let schedule = client
+            .schedule_workout(oauth2, workout_id, date)
+            .await
+            .map_err(|e| {
+                log_error(
+                    "Error scheduling workout",
+                    ConnectError::ScheduleWorkout(workout_id, date, e),
+                )
+            })?;
+        info!(
+            "Scheduled workout {} on {} with schedule id {}.",
+            workout_id, schedule.calendar_date, schedule.workout_schedule_id
+        );
+
+        Ok(schedule.workout_schedule_id)
+    }
+
+    /// Deletes the workout schedule `schedule_id`. A schedule already gone counts as deleted.
+    pub async fn delete_workout_schedule(&mut self, schedule_id: u64) -> Result<()> {
+        info!("Deleting workout schedule {}...", schedule_id);
+
+        let (client, oauth2) = self
+            .api_client(|e| ConnectError::DeleteWorkoutSchedule(schedule_id, e))
+            .await?;
+        // Retried: a retry after a delete that did reach Connect just finds it gone
+        match with_retry(|| client.delete_workout_schedule(oauth2, schedule_id)).await {
+            Ok(()) => info!("Deleted workout schedule {}.", schedule_id),
+            Err(GarminError::NotFound(_)) => {
+                warn!(
+                    "Workout schedule {} not found, already deleted",
+                    schedule_id
+                )
+            }
+            Err(e) => {
+                return Err(log_error(
+                    "Error deleting workout schedule",
+                    ConnectError::DeleteWorkoutSchedule(schedule_id, e),
+                ));
+            }
+        }
 
         Ok(())
     }

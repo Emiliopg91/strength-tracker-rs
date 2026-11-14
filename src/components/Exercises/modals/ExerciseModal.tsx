@@ -11,13 +11,13 @@ import {
     TextField,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
-import { ExerciseVolumeChart } from "./helpers/ExerciseVolumeChart";
+import { ExerciseVolumeChart } from "../charts/ExerciseVolumeChart";
 import { SessionUtils } from "@/utils/SessionUtils";
 import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
 import { useLoadingTask } from "@/hooks/useLoadingTask";
 import { BackendClient } from "@/utils/backend/client";
-import { WeightField } from "../Fields/WeightField";
-import { MuscleModel } from "./helpers/MuscleModel";
+import { WeightField } from "../../Fields/WeightField";
+import { MuscleModel } from "../charts/MuscleModel";
 import { AppContext } from "@/context/AppContext";
 
 type Props = {

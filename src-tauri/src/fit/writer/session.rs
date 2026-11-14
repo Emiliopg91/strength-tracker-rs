@@ -2,13 +2,12 @@ use chrono::{Local, TimeZone};
 use rustyfit::{
     profile::{
         mesgdef::{
-            Activity, DeviceInfo, Event, Lap, Record, Session as FitSession, Set,
+            Activity, DeviceInfo, Event, FileId, Lap, Record, Session as FitSession, Set,
             Sport as FitSport, TimeInZone, TrainingFile, Workout as FitWorkout,
         },
         typedef::{
-            self, DateTime, DeviceIndex, EventType, ExerciseCategory, FitBaseUnit, GarminProduct,
-            LapTrigger, LocalDateTime, Manufacturer, MesgNum, MessageIndex, SessionTrigger,
-            SetType, Sport, SubSport,
+            self, DateTime, DeviceIndex, EventType, ExerciseCategory, FitBaseUnit, LapTrigger,
+            LocalDateTime, MesgNum, MessageIndex, SessionTrigger, SetType, Sport, SubSport,
         },
     },
     proto::Message,
@@ -24,7 +23,7 @@ use crate::{
         workout::Workout,
         workout_step::{StepType, WorkoutStep},
     },
-    fit::writer::ToFitMessages,
+    fit::writer::{FitWriter, ToFitMessages},
     utils::translations::{Languages, translate},
 };
 
@@ -103,18 +102,22 @@ fn sport_message(session: &Session, lang: Languages) -> Message {
 }
 
 /// Reference to the workout file followed in the activity, which devices write next to the workout.
+/// It carries the `file_id` keys of the workout file, so it points to the same file the device has.
+/// Without a Connect creation time the workout file is stamped when written, which can't be known
+/// here, so the session date stands in.
 fn training_file_message(session: &Session, workout: &Workout) -> Message {
+    let file_id = FileId::from(&FitWriter::from(workout).file_id());
     let mut training_file = TrainingFile::new();
     training_file.timestamp = datetime(session.date);
-    training_file.r#type = typedef::File::WORKOUT;
-    training_file.time_created = datetime(session.date);
-    training_file.serial_number = workout.file_key();
-    if workout.connect_id.is_some() {
-        training_file.manufacturer = Manufacturer::GARMIN;
-        training_file.product = GarminProduct::CONNECT.0;
+    training_file.r#type = file_id.r#type;
+    training_file.manufacturer = file_id.manufacturer;
+    training_file.product = file_id.product;
+    training_file.serial_number = file_id.serial_number;
+    training_file.time_created = if workout.file_created().is_some() {
+        file_id.time_created
     } else {
-        training_file.manufacturer = Manufacturer::DEVELOPMENT;
-    }
+        datetime(session.date)
+    };
     training_file.into()
 }
 
@@ -190,6 +193,10 @@ fn workout_messages(
             .workout_obj
             .as_ref()
             .and_then(|w| w.connect_id.clone()),
+        connect_created_time: session
+            .workout_obj
+            .as_ref()
+            .and_then(|w| w.connect_created_time),
         steps: sorted_steps(session)
             .into_iter()
             .enumerate()

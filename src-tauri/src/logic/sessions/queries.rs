@@ -19,6 +19,9 @@ use crate::{
         session_lap::{SessionLapRepository, entity::columns as session_lap_cols},
         session_step::{SessionStepRepository, entity::columns as session_step_cols},
         workout::{Workout, WorkoutRepository, entity::columns as workout_cols},
+        workout_planning::{
+            WorkoutPlanningRepository, entity::columns as workout_planning_columns,
+        },
         workout_step::WorkoutStepRepository,
     },
     dto::sessions::{SessionDetails, SessionListItem, SessionStepsUpdate},
@@ -26,6 +29,7 @@ use crate::{
     logic::exercises::queries::{
         fetch_exercises_muscles, fetch_progression_suggestion, progression_suggestions, update_prs,
     },
+    utils::time::local_midnight,
 };
 
 /// Lists sessions newest first (from `min_date` on, if given), flagged with whether they have sets and records.
@@ -371,6 +375,7 @@ pub(super) fn insert_session(
                     notes: workout.notes.clone(),
                     steps: Vec::new(),
                     connect_id: None,
+                    connect_created_time: None,
                 })
                 .execute_in(tx)?;
         }
@@ -410,6 +415,19 @@ pub(super) fn insert_session(
             insert = insert.item(lap)
         }
         insert.execute_in(tx)?;
+    }
+
+    if let Some(workout) = session.workout.clone()
+        && let Some(plan_date) = local_midnight(session.date as i64)
+    {
+        WorkoutPlanningRepository::update()
+            .set(workout_planning_columns::SESSION, session.date.into())
+            .where_(Where::And(vec![
+                Where::Eq(workout_planning_columns::DATE, plan_date.into()),
+                Where::Eq(workout_planning_columns::WORKOUT, workout.into()),
+                Where::Null(workout_planning_columns::SESSION),
+            ]))
+            .execute_in(tx)?;
     }
 
     session.steps = series;

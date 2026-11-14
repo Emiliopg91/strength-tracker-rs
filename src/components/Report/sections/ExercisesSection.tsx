@@ -1,7 +1,7 @@
 import { AppContext } from "@/context/AppContext";
 import { JSX, useContext } from "react";
-import PageContent from "./PageContent";
-import NoPageBreak from "./NoPageBreak";
+import PageContent from "../layout/PageContent";
+import NoPageBreak from "../layout/NoPageBreak";
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
 import { ExerciseDetails } from "@/utils/backend/models";
 

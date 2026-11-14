@@ -240,6 +240,7 @@ export enum WeightUnit {
 
 // From src-tauri/src/dao/workout.rs:8
 export interface Workout {
+  connect_created_time: number | null;
   connect_id: string | null;
   enabled: boolean;
   name: string;
@@ -271,6 +272,13 @@ export interface WorkoutListItem {
   latest_session: number | null;
   name: string;
   sessions: number;
+}
+
+// From src-tauri/src/dto/workouts.rs:49
+export interface WorkoutPlanListItem {
+  date: number;
+  session: number | null;
+  workout: string;
 }
 
 // From src-tauri/src/dto/workouts.rs:17

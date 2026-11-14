@@ -14,8 +14,31 @@ use crate::dao::{
     workout_device::{
         WorkoutDevice, WorkoutDeviceRepository, entity::columns as workout_device_cols,
     },
+    workout_planning::{
+        WorkoutPlanning, WorkoutPlanningRepository, entity::columns as workout_planning_cols,
+    },
     workout_step::{WorkoutStepRepository, entity::columns as workout_step_cols},
 };
+
+/// Plans dated in `[from, to)`, by date and workout, with their workout loaded.
+pub(crate) fn plans_between(
+    conn: &rusqlite_orm::rusqlite::Connection,
+    from: u32,
+    to: u32,
+) -> rusqlite_orm::errors::Result<Vec<WorkoutPlanning>> {
+    let mut plans = WorkoutPlanningRepository::select()
+        .where_(Where::And(vec![
+            Where::Gte(workout_planning_cols::DATE, from.into()),
+            Where::Lt(workout_planning_cols::DATE, to.into()),
+        ]))
+        .order_by(OrderBy::Asc(workout_planning_cols::DATE))
+        .order_by(OrderBy::Asc(workout_planning_cols::WORKOUT))
+        .fetch_in(conn)?;
+    for plan in &mut plans {
+        plan.fetch_workout_obj_relationship_in(conn)?;
+    }
+    Ok(plans)
+}
 
 /// Devices linked to the Connect account where `workout` is still pending.
 pub(crate) fn pending_connect_devices(
@@ -197,6 +220,26 @@ pub(super) async fn pending_queue(
             Where::Eq(workout_device_cols::PENDING, true.into()),
         ]))
         .order_by(OrderBy::Asc(workout_device_cols::WORKOUT))
+        .fetch(db)
+        .await
+        .map(|rows| {
+            rows.iter()
+                .map(|r| r.get_text(workout_device_cols::WORKOUT.as_ref()))
+                .collect()
+        })
+}
+
+/// Names of the workouts already sent to the device `serial`, those with an entry not pending.
+pub(crate) async fn workouts_on_device(
+    db: &DatabasePool,
+    serial: &str,
+) -> rusqlite_orm::errors::Result<HashSet<String>> {
+    WorkoutDeviceRepository::select()
+        .columns(&[workout_device_cols::WORKOUT])
+        .where_(Where::And(vec![
+            Where::Eq(workout_device_cols::DEVICE, serial.into()),
+            Where::Eq(workout_device_cols::PENDING, false.into()),
+        ]))
         .fetch(db)
         .await
         .map(|rows| {
