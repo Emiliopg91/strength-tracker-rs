@@ -15,9 +15,14 @@ import { useBatchedRows } from "@/hooks/useBatchedRows";
 import { useLoadingTask } from "@/hooks/useLoadingTask";
 import "@/styles/Exercises/ExercisesList.css";
 import { Button } from "@mui/material";
+import { SessionUtils } from "@/utils/SessionUtils";
 
 /// `relevant`: it has a record or is planned in some workout; the rest of the catalog is dimmed.
-export type ExerciseListEntry = ExerciseListItem & { relevant: boolean };
+/// `bodyweight`: kg at the record's date, null when unknown or without record.
+export type ExerciseListEntry = ExerciseListItem & {
+    relevant: boolean;
+    bodyweight: number | null;
+};
 
 export function ExercisesList() {
     const loadingTask = useLoadingTask();
@@ -32,7 +37,10 @@ export function ExercisesList() {
     const { translate, formatDate } = useContext(I18nSettingsContext);
     const [exercises, setExercises] = useBackendList<ExerciseListEntry>(
         () =>
-            BackendClient.getExercises().then((data) => {
+            Promise.all([
+                BackendClient.getExercises(),
+                BackendClient.getBodyMeasures(),
+            ]).then(([data, bodyMetrics]) => {
                 const byName = (a: ExerciseListItem, b: ExerciseListItem) =>
                     exerciseName(a.category, a.id).localeCompare(
                         exerciseName(b.category, b.id),
@@ -54,12 +62,19 @@ export function ExercisesList() {
                         used: false,
                         weight: 0,
                         relevant: false,
+                        bodyweight: null,
                     }));
 
                 // Recorded or planned exercises first, then the rest of the catalog
                 return [
                     ...data
-                        .map((e) => ({ ...e, relevant: true }))
+                        .map((e) => ({
+                            ...e,
+                            relevant: true,
+                            bodyweight: e.used
+                                ? SessionUtils.bodyweightAt(bodyMetrics, e.date)
+                                : null,
+                        }))
                         .toSorted(byName),
                     ...others.toSorted(byName),
                 ];
@@ -169,15 +184,19 @@ export function ExercisesList() {
                 <colgroup>
                     <col className="col-430" />
                     <col className="col-100" />
-                    <col className="col-60" />
                     <col className="col-100" />
+                    <col className="col-60" />
+                    <col className="col-60" />
                 </colgroup>
                 <thead>
                     <tr>
                         <th className="text-center">{translate("exercise")}</th>
                         <th className="text-center">{translate("pr")}</th>
-                        <th className="text-center">{translate("rm")}</th>
                         <th className="text-center">{translate("date")}</th>
+                        <th className="text-center">{translate("rm")}</th>
+                        <th className="text-center">
+                            {translate("relative_rm")}
+                        </th>
                     </tr>
                 </thead>
                 <tbody>

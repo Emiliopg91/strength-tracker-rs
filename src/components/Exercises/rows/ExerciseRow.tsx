@@ -16,6 +16,12 @@ export function ExerciseRow({ exercise, onSelect }: Props) {
         useContext(I18nSettingsContext);
     const { exerciseName } = useContext(AppContext);
 
+    const e1rm = SessionUtils.estimate1rm(
+        exercise.weight,
+        exercise.reps,
+        exercise.unilateral,
+    );
+
     return (
         <tr
             className={`clickable-row ${exercise.relevant ? "" : "unused-exercise"}`}
@@ -37,22 +43,20 @@ export function ExerciseRow({ exercise, onSelect }: Props) {
                         " " +
                         getWeightUnit()}
             </td>
+            <td>{exercise.used && formatDate(exercise.date)}</td>
+            <td>
+                {exercise.used && exercise.weight && exercise.reps
+                    ? formatNumber(fromKg(e1rm), 0) + " " + getWeightUnit()
+                    : null}
+            </td>
             <td>
                 {exercise.used &&
-                    formatNumber(
-                        fromKg(
-                            SessionUtils.estimate1rm(
-                                exercise.weight,
-                                exercise.reps,
-                                exercise.unilateral,
-                            ),
-                        ),
-                        0,
-                    ) +
-                        " " +
-                        getWeightUnit()}
+                exercise.bodyweight &&
+                exercise.weight &&
+                exercise.reps
+                    ? formatNumber(e1rm / exercise.bodyweight, 2)
+                    : null}
             </td>
-            <td>{exercise.used && formatDate(exercise.date)}</td>
         </tr>
     );
 }

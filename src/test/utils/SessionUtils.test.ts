@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SessionUtils, WorkoutLoad } from "@/utils/SessionUtils";
 import {
+    BodyMetricListItem,
     SessionDetails,
     SessionListItem,
     SessionStepDto,
@@ -660,5 +661,33 @@ describe("SessionUtils.exerciseChartData", () => {
                 false,
             ),
         ).toEqual([]);
+    });
+});
+
+describe("SessionUtils.bodyweightAt", () => {
+    const metric = (date: number, weight: number): BodyMetricListItem => ({
+        date,
+        weight,
+        fat_ratio: 0,
+        lean_mass: 0,
+        water_ratio: 0,
+    });
+    const metrics = [metric(2000, 80), metric(1000, 82), metric(3000, 78)];
+
+    it("takes the latest measurement before the date", () => {
+        expect(SessionUtils.bodyweightAt(metrics, 2500)).toBe(80);
+        expect(SessionUtils.bodyweightAt(metrics, 5000)).toBe(78);
+    });
+
+    it("ignores a measurement on the same date", () => {
+        expect(SessionUtils.bodyweightAt(metrics, 2000)).toBe(82);
+    });
+
+    it("falls back to the latest measurement when none is before", () => {
+        expect(SessionUtils.bodyweightAt(metrics, 500)).toBe(78);
+    });
+
+    it("returns null without measurements", () => {
+        expect(SessionUtils.bodyweightAt([], 1000)).toBeNull();
     });
 });

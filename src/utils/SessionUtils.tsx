@@ -1,5 +1,6 @@
 import { Marker } from "react-leaflet";
 import {
+    BodyMetricListItem,
     ExerciseSession,
     SessionDetails,
     SessionListItem,
@@ -507,6 +508,27 @@ export class SessionUtils {
                 ),
             0,
         );
+    }
+
+    /**
+     * Bodyweight (kg) at `date`: the latest measurement before it, or the latest overall when
+     * there is none before; null without measurements.
+     */
+    public static bodyweightAt(
+        metrics: BodyMetricListItem[],
+        date: number,
+    ): number | null {
+        let before: BodyMetricListItem | null = null;
+        let latest: BodyMetricListItem | null = null;
+        for (const m of metrics) {
+            if (latest === null || m.date > latest.date) {
+                latest = m;
+            }
+            if (m.date < date && (before === null || m.date > before.date)) {
+                before = m;
+            }
+        }
+        return (before ?? latest)?.weight ?? null;
     }
 
     /**

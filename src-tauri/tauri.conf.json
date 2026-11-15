@@ -14,9 +14,9 @@
     "windows": [
       {
         "title": "Strength Tracker",
-        "width": 800,
+        "width": 830,
         "height": 780,
-        "minWidth": 800,
+        "minWidth": 830,
         "minHeight": 780,
         "visible": false,
         "resizable": true,

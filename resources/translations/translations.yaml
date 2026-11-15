@@ -184,6 +184,9 @@ rm:
 pr:
   en: PR
   es: PR
+relative_rm:
+  en: RM/BW
+  es: RM/PC
 personal_record:
   en: Personal record
   es: Record personal
