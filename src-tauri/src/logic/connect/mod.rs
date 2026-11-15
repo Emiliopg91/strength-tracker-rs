@@ -2,22 +2,27 @@ pub mod commands;
 pub mod helpers;
 pub mod queries;
 
+use std::collections::HashMap;
+
 use rusqlite_orm::errors::DatabaseError;
 use tauri::{AppHandle, Runtime};
-use tauri_plugin_log::log::info;
+use tauri_plugin_log::log::{error, info};
 
 use self::helpers::{get_devices_from_connect, queue_workout_on_connect, up_to_date_connect};
 use self::queries::{body_metric_dates, connect_import_state, insert_new_body_metrics};
 use crate::{
     ConnectLock, SettingsLock,
-    connect::client::CalendarItemType,
+    connect::{ConnectClient, client::CalendarItemType},
     dao::workout_device::WorkoutDevice,
     dto::notifications::{NotificationDefinition, NotificationKind},
     logic::{
         devices::queries::queue_workout_device,
         notifications::show_notification,
         pool, report_error,
-        sessions::helpers::{import_pending_sessions, spawn_geolocation_update},
+        sessions::{
+            helpers::{import_pending_sessions, spawn_geolocation_update},
+            queries::{pending_geolocation, set_session_name},
+        },
     },
     utils::translations::translate,
 };
@@ -65,6 +70,12 @@ pub async fn import_from_connect<R: Runtime>(
             .await
             .map_err(|e: DatabaseError| e.to_string())?;
 
+        let ids: HashMap<u32, u64> = calendar_items
+            .iter()
+            .filter_map(|e| e.start_timestamp_local.zip(e.id))
+            .collect();
+        name_from_connect_location(app, &mut connect, &imported_sessions, &ids).await;
+
         Ok(imported_sessions)
     }
     .await;
@@ -82,6 +93,42 @@ pub async fn import_from_connect<R: Runtime>(
             "error_import_sessions",
             "Error importing sessions",
         )),
+    }
+}
+
+/// Names the `imported` sessions waiting for geocoding (unnamed, with GPS) after the place Connect
+/// gives their activity, found in `ids` by start time, sparing the geocoding query. Those Connect
+/// has no place for stay pending. Failures are only logged.
+async fn name_from_connect_location<R: Runtime>(
+    app: &AppHandle<R>,
+    connect: &mut ConnectClient,
+    imported: &[u32],
+    ids: &HashMap<u32, u64>,
+) {
+    let pending = match pending_geolocation(&pool(app)).await {
+        Ok(pending) => pending,
+        Err(e) => {
+            error!("Error looking for sessions pending geolocation: {e}");
+            return;
+        }
+    };
+
+    for session in pending.iter().map(|p| p.session) {
+        let Some(id) = ids.get(&session).filter(|_| imported.contains(&session)) else {
+            continue;
+        };
+        let location = match connect.get_activity_location(*id).await {
+            Ok(Some(location)) => location,
+            Ok(None) => continue,
+            Err(e) => {
+                error!("Error fetching the location of activity {id}: {e}");
+                continue;
+            }
+        };
+        match set_session_name(&pool(app), session, &location).await {
+            Ok(_) => info!("Session @ {session} named '{location}' after its Connect location"),
+            Err(e) => error!("Error naming session {session}: {e}"),
+        }
     }
 }
 

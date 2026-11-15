@@ -41,7 +41,7 @@ const WEIGHT_EMPTY_CHUNKS_STOP: u32 = 2;
 const RETRY_ATTEMPTS: u32 = 4;
 const RETRY_BASE_DELAY: Duration = Duration::from_secs(2);
 const TOKEN_EXPIRY_MARGIN_SECS: i64 = 300;
-const CALENDAR_RECENT_DAYS: u64 = 60;
+const CALENDAR_RECENT_DAYS: u64 = 15;
 
 /// Year and month (1-12) of every calendar page covering the days from `from` to `to`.
 pub fn calendar_months(from: NaiveDate, to: NaiveDate) -> Vec<(u16, u8)> {
@@ -401,6 +401,28 @@ impl ConnectClient {
         info!("Fetched notes of activity {}.", id);
 
         Ok(activity.description.filter(|notes| !notes.is_empty()))
+    }
+
+    /// Place name Connect gives the activity `id`, from its GPS start.
+    pub async fn get_activity_location(&mut self, id: u64) -> Result<Option<String>> {
+        info!("Fetching location of activity {}...", id);
+
+        let (client, oauth2) = self
+            .api_client(|e| ConnectError::FetchActivity(id, e))
+            .await?;
+        let activity = with_retry(|| client.get_activity(oauth2, id))
+            .await
+            .map_err(|e| {
+                log_error(
+                    "Error fetching activity",
+                    ConnectError::FetchActivity(id, e),
+                )
+            })?;
+
+        Ok(activity
+            .location_name
+            .map(|name| name.trim().to_string())
+            .filter(|name| !name.is_empty()))
     }
 
     /// Replaces the notes (description) of the activity `id`; empty `notes` clear them.

@@ -766,7 +766,7 @@ pub(super) fn full_session(
 
 /// Coordinates of the unnamed sessions recorded with GPS, newest first, to name them after their
 /// location.
-pub(super) async fn pending_geolocation(
+pub(crate) async fn pending_geolocation(
     db: &DatabasePool,
 ) -> rusqlite_orm::errors::Result<Vec<SessionData>> {
     let unnamed_sessions = SessionRepository::select()
@@ -797,7 +797,7 @@ pub(super) async fn pending_geolocation(
 }
 
 /// Renames the session; returns the number of rows changed.
-pub(super) async fn set_session_name(
+pub(crate) async fn set_session_name(
     db: &DatabasePool,
     session: u32,
     name: &str,
