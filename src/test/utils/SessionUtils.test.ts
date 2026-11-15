@@ -669,7 +669,7 @@ describe("SessionUtils.bodyweightAt", () => {
         date,
         weight,
         fat_ratio: 0,
-        lean_mass: 0,
+        muscle_mass: 0,
         water_ratio: 0,
     });
     const metrics = [metric(2000, 80), metric(1000, 82), metric(3000, 78)];

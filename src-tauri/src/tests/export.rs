@@ -63,7 +63,7 @@ async fn export_contains_all_data() {
                 date: 1,
                 weight: 80.0,
                 fat_ratio: 18.0,
-                lean_mass: 62.0,
+                muscle_mass: 62.0,
                 water_ratio: 55.0,
             })
             .execute_in(tx)?;

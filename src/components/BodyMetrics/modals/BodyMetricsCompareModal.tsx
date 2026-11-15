@@ -85,11 +85,11 @@ export function BodyMetricsCompareModal({ measures, onClose }: Props) {
                             )}
                         />
                         <MetricCompareRow
-                            label={translate("lean_mass")}
+                            label={translate("muscle_mass")}
                             measures={measures}
                             render={(entry) => (
                                 <>
-                                    {formatNumber(fromKg(entry.lean_mass), 1)}{" "}
+                                    {formatNumber(fromKg(entry.muscle_mass), 1)}{" "}
                                     {getWeightUnit()}
                                 </>
                             )}

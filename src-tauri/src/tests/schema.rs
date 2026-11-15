@@ -2,13 +2,14 @@ use rusqlite_orm::{dao::Repository, database::builder::DatabaseConnectionBuilder
 
 use crate::{
     dao::{
-        session::SessionRepository, session_data::SessionDataRepository,
-        session_lap::SessionLapRepository, session_step::SessionStepRepository,
-        workout::WorkoutRepository, workout_device::WorkoutDeviceRepository,
-        workout_step::StepType,
+        body_metric::BodyMetricRepository, session::SessionRepository,
+        session_data::SessionDataRepository, session_lap::SessionLapRepository,
+        session_step::SessionStepRepository, workout::WorkoutRepository,
+        workout_device::WorkoutDeviceRepository, workout_step::StepType,
     },
     schema_ddls,
     tests::common,
+    utils::time::local_midnight,
 };
 
 #[tokio::test]
@@ -83,6 +84,40 @@ async fn migration_26_turns_rest_flag_into_kind() {
         .await
         .unwrap();
     assert!(!has_rest);
+}
+
+#[tokio::test]
+async fn body_metrics_migrate_from_lean_mass_to_muscle_mass() {
+    let db = DatabaseConnectionBuilder::default()
+        .enable_foreign_keys()
+        .build("test")
+        .unwrap();
+    let before: Vec<_> = schema_ddls()
+        .into_iter()
+        .filter(|d| d.version < 21)
+        .collect();
+    db.create_schema(&before).await.unwrap();
+
+    let midnight = local_midnight(1_700_000_000).unwrap();
+    let (early, late) = (midnight + 3_600, midnight + 7_200);
+    db.run_in_transaction(move |tx| {
+        tx.execute_batch(&format!(
+            "INSERT INTO BODY_METRIC (date, weight, fat_ratio, lean_mass, water_ratio)
+             VALUES ({early}, 81.0, 18.0, 60.0, 55.0), ({late}, 80.0, 17.0, 61.0, 56.0);"
+        ))?;
+        Ok(())
+    })
+    .await
+    .unwrap();
+
+    db.create_schema(&schema_ddls()).await.unwrap();
+
+    // Both fall on the same day: only the latest survives, moved to midnight
+    let metrics = BodyMetricRepository::select().fetch(&db).await.unwrap();
+    assert_eq!(metrics.len(), 1);
+    assert_eq!(metrics[0].date, midnight);
+    assert_eq!(metrics[0].weight, 80.0);
+    assert_eq!(metrics[0].muscle_mass, 61.0);
 }
 
 #[tokio::test]

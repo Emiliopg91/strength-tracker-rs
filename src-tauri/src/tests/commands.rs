@@ -147,7 +147,7 @@ async fn body_measures_are_added_listed_and_deleted() {
         date: 1_700_000_000,
         weight: 80.0,
         fat_ratio: 15.0,
-        lean_mass: 60.0,
+        muscle_mass: 60.0,
         water_ratio: 55.0,
     };
     let settings = app.state::<SettingsLock>();

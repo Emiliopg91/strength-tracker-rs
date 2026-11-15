@@ -202,9 +202,9 @@ relative_weight:
 fat_ratio:
   en: Fat %
   es: "% grasa"
-lean_mass:
-  en: Lean mass
-  es: Masa magra
+muscle_mass:
+  en: Muscle mass
+  es: Masa muscular
 weight:
   en: Weight
   es: Peso

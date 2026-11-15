@@ -7,7 +7,7 @@ pub struct BodyMetricListItem {
     pub date: u32,
     pub weight: f32,
     pub fat_ratio: f32,
-    pub lean_mass: f32,
+    pub muscle_mass: f32,
     pub water_ratio: f32,
 }
 
@@ -17,7 +17,7 @@ impl From<&BodyMetric> for BodyMetricListItem {
             date: value.date,
             weight: value.weight,
             fat_ratio: value.fat_ratio,
-            lean_mass: value.lean_mass,
+            muscle_mass: value.muscle_mass,
             water_ratio: value.water_ratio,
         }
     }
@@ -31,7 +31,7 @@ impl TryFrom<&BodyMetricListItem> for BodyMetric {
             date: local_midnight(value.date as i64).unwrap(),
             weight: value.weight,
             fat_ratio: value.fat_ratio,
-            lean_mass: value.lean_mass,
+            muscle_mass: value.muscle_mass,
             water_ratio: value.water_ratio,
         })
     }

@@ -16,7 +16,7 @@ import {
 type ChartDataType = {
     date: number;
     fatAvg7: number;
-    leanAvg7: number;
+    muscleAvg7: number;
     weightAvg7: number;
 }[];
 
@@ -47,8 +47,8 @@ function ChartTooltip({ active, payload, label }: TooltipContentProps) {
                 {formatNumber(fromKg(data.weightAvg7), 1)} {getWeightUnit()}
             </div>
             <div>
-                {translate("lean_mass")}:{" "}
-                {formatNumber(fromKg(data.leanAvg7), 1)} {getWeightUnit()}
+                {translate("muscle_mass")}:{" "}
+                {formatNumber(fromKg(data.muscleAvg7), 1)} {getWeightUnit()}
             </div>
         </div>
     );
@@ -69,8 +69,8 @@ type ChartModel = {
     maxDate: number;
     minWeight: number;
     maxWeight: number;
-    minLean: number;
-    maxLean: number;
+    minMuscle: number;
+    maxMuscle: number;
     minFat: number;
     maxFat: number;
 };
@@ -81,8 +81,8 @@ const EMPTY_CHART: ChartModel = {
     maxDate: 0,
     minWeight: 0,
     maxWeight: 99999,
-    minLean: 0,
-    maxLean: 99999,
+    minMuscle: 0,
+    maxMuscle: 99999,
     minFat: 0,
     maxFat: 100,
 };
@@ -99,12 +99,12 @@ function buildChartModel(metrics: BodyMetricListItem[]): ChartModel {
     let lMaxKg = 0;
     let lMinFat = 99999;
     let lMaxFat = 0;
-    let lMinLean = 99999;
-    let lMaxLean = 0;
+    let lMinMuscle = 99999;
+    let lMaxMuscle = 0;
 
     type DailyValue = {
         fat: number;
-        lean: number;
+        muscle: number;
         weight: number;
         count: number;
     };
@@ -112,20 +112,20 @@ function buildChartModel(metrics: BodyMetricListItem[]): ChartModel {
     data_c.forEach((data) => {
         lMinKg = Math.min(lMinKg, data.weight);
         lMaxKg = Math.max(lMaxKg, data.weight);
-        lMinLean = Math.min(lMinLean, data.lean_mass);
-        lMaxLean = Math.max(lMaxLean, data.lean_mass);
+        lMinMuscle = Math.min(lMinMuscle, data.muscle_mass);
+        lMaxMuscle = Math.max(lMaxMuscle, data.muscle_mass);
         lMinFat = Math.min(lMinFat, data.fat_ratio);
         lMaxFat = Math.max(lMaxFat, data.fat_ratio);
 
         const day = toDayStart(data.date * 1000);
         const entry = dailyValues.get(day) ?? {
             fat: 0,
-            lean: 0,
+            muscle: 0,
             weight: 0,
             count: 0,
         };
         entry.fat += data.fat_ratio;
-        entry.lean += data.lean_mass;
+        entry.muscle += data.muscle_mass;
         entry.weight += data.weight;
         entry.count += 1;
         dailyValues.set(day, entry);
@@ -136,7 +136,7 @@ function buildChartModel(metrics: BodyMetricListItem[]): ChartModel {
     const knownDays = [...dailyValues.keys()].sort((a, b) => a - b);
     const average = (entry: DailyValue) => ({
         fat: entry.fat / entry.count,
-        lean: entry.lean / entry.count,
+        muscle: entry.muscle / entry.count,
         weight: entry.weight / entry.count,
     });
     const interpolate = (a: number, b: number, frac: number) =>
@@ -145,7 +145,7 @@ function buildChartModel(metrics: BodyMetricListItem[]): ChartModel {
     const daily: {
         day: number;
         fat: number;
-        lean: number;
+        muscle: number;
         weight: number;
     }[] = [];
     let k = 0;
@@ -167,7 +167,7 @@ function buildChartModel(metrics: BodyMetricListItem[]): ChartModel {
             daily.push({
                 day,
                 fat: interpolate(prev.fat, next.fat, frac),
-                lean: interpolate(prev.lean, next.lean, frac),
+                muscle: interpolate(prev.muscle, next.muscle, frac),
                 weight: interpolate(prev.weight, next.weight, frac),
             });
         }
@@ -181,19 +181,19 @@ function buildChartModel(metrics: BodyMetricListItem[]): ChartModel {
             windowStart++;
         }
         let fatSum = 0;
-        let leanSum = 0;
+        let muscleSum = 0;
         let weightSum = 0;
         const windowSize = i - windowStart + 1;
         for (let j = windowStart; j <= i; j++) {
             fatSum += daily[j].fat;
-            leanSum += daily[j].lean;
+            muscleSum += daily[j].muscle;
             weightSum += daily[j].weight;
         }
 
         newChartData.push({
             date: entry.day,
             fatAvg7: fatSum / windowSize,
-            leanAvg7: leanSum / windowSize,
+            muscleAvg7: muscleSum / windowSize,
             weightAvg7: weightSum / windowSize,
         });
     }
@@ -205,8 +205,8 @@ function buildChartModel(metrics: BodyMetricListItem[]): ChartModel {
         maxDate: Math.max(...dates),
         minWeight: lMinKg,
         maxWeight: lMaxKg,
-        minLean: lMinLean,
-        maxLean: lMaxLean,
+        minMuscle: lMinMuscle,
+        maxMuscle: lMaxMuscle,
         minFat: lMinFat,
         maxFat: lMaxFat,
     };
@@ -225,8 +225,8 @@ export function BodyMetricsChart({ metrics }: Props) {
         maxDate,
         minWeight,
         maxWeight,
-        minLean,
-        maxLean,
+        minMuscle,
+        maxMuscle,
         minFat,
         maxFat,
     } = buildChartModel(metrics);
@@ -272,10 +272,10 @@ export function BodyMetricsChart({ metrics }: Props) {
                             tick={false}
                         />
                         <YAxis
-                            yAxisId="lean"
+                            yAxisId="muscle"
                             stroke="#fff"
                             width={0}
-                            domain={[minLean, maxLean]}
+                            domain={[minMuscle, maxMuscle]}
                             tick={false}
                         />
                         <Line
@@ -289,10 +289,10 @@ export function BodyMetricsChart({ metrics }: Props) {
                             isAnimationActive={false}
                         />
                         <Line
-                            yAxisId="lean"
-                            name={translate("lean_mass")}
+                            yAxisId="muscle"
+                            name={translate("muscle_mass")}
                             type="monotone"
-                            dataKey="leanAvg7"
+                            dataKey="muscleAvg7"
                             stroke="green"
                             dot={false}
                             activeDot={false}

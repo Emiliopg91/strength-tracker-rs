@@ -10,7 +10,7 @@ export enum AppEnvironment {
 export interface BodyMetricListItem {
   date: number;
   fat_ratio: number;
-  lean_mass: number;
+  muscle_mass: number;
   water_ratio: number;
   weight: number;
 }

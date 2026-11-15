@@ -84,9 +84,9 @@ export function BodyMetricsDetailsModal({
                             </td>
                         </tr>
                         <tr>
-                            <td>{translate("lean_mass")}:</td>
+                            <td>{translate("muscle_mass")}:</td>
                             <td>
-                                {formatNumber(fromKg(measures.lean_mass), 1)}{" "}
+                                {formatNumber(fromKg(measures.muscle_mass), 1)}{" "}
                                 {getWeightUnit()}
                             </td>
                         </tr>

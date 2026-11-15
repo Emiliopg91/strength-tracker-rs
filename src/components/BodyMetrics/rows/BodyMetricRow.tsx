@@ -40,7 +40,7 @@ export function BodyMetricRow({
                 {getWeightUnit()}
             </td>
             <td>
-                {formatNumber(fromKg(measure.lean_mass), 1)} {getWeightUnit()}
+                {formatNumber(fromKg(measure.muscle_mass), 1)} {getWeightUnit()}
             </td>
             <td>{formatPercent(measure.water_ratio / 100, 1)}</td>
             <td>

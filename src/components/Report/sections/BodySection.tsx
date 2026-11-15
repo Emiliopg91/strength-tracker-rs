@@ -40,7 +40,7 @@ export default function BodySection({ bodyMetrics }: Props): JSX.Element {
                                             {translate("fat_mass")}
                                         </th>
                                         <th className="text-center">
-                                            {translate("lean_mass")}
+                                            {translate("muscle_mass")}
                                         </th>
                                         <th className="text-center">
                                             {translate("water_ratio")}
@@ -80,7 +80,7 @@ export default function BodySection({ bodyMetrics }: Props): JSX.Element {
                                             </td>
                                             <td>
                                                 {formatNumber(
-                                                    fromKg(measure.lean_mass),
+                                                    fromKg(measure.muscle_mass),
                                                     1,
                                                 )}{" "}
                                                 {getWeightUnit()}

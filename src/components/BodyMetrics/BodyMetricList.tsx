@@ -72,7 +72,7 @@ export function BodyMetricList() {
                                 {translate("fat_mass")}
                             </th>
                             <th className="text-center">
-                                {translate("lean_mass")}
+                                {translate("muscle_mass")}
                             </th>
                             <th className="text-center">
                                 {translate("water_ratio")}

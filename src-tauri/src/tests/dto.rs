@@ -34,7 +34,7 @@ fn body_metric_roundtrip() {
         date: 1_700_000_000,
         weight: 80.5,
         fat_ratio: 18.2,
-        lean_mass: 62.1,
+        muscle_mass: 62.1,
         water_ratio: 55.0,
     };
 
@@ -44,7 +44,7 @@ fn body_metric_roundtrip() {
     assert_eq!(back.date, local_midnight(metric.date as i64).unwrap());
     assert_eq!(back.weight, metric.weight);
     assert_eq!(back.fat_ratio, metric.fat_ratio);
-    assert_eq!(back.lean_mass, metric.lean_mass);
+    assert_eq!(back.muscle_mass, metric.muscle_mass);
     assert_eq!(back.water_ratio, metric.water_ratio);
 }
 

@@ -22,12 +22,12 @@ type Props = {
 
 type BodyMetricsListItemForm = Omit<
     BodyMetricListItem,
-    "date" | "weight" | "fat_ratio" | "lean_mass" | "water_ratio"
+    "date" | "weight" | "fat_ratio" | "muscle_mass" | "water_ratio"
 > & {
     date: Date;
     weight: string;
     fat_ratio: string;
-    lean_mass: string;
+    muscle_mass: string;
     water_ratio: string;
 };
 
@@ -43,15 +43,15 @@ export function BodyMetricsAddModal({ latest, onClose }: Props) {
                   date: new Date(),
                   weight: String(Math.round(fromKg(latest.weight) * 10) / 10),
                   fat_ratio: String(latest.fat_ratio),
-                  lean_mass: String(
-                      Math.round(fromKg(latest.lean_mass) * 10) / 10,
+                  muscle_mass: String(
+                      Math.round(fromKg(latest.muscle_mass) * 10) / 10,
                   ),
                   water_ratio: String(latest.water_ratio),
               }
             : {
                   date: new Date(),
                   fat_ratio: "0",
-                  lean_mass: "0",
+                  muscle_mass: "0",
                   water_ratio: "0",
                   weight: "0",
               },
@@ -59,7 +59,7 @@ export function BodyMetricsAddModal({ latest, onClose }: Props) {
 
     const isInvalid = (prop: NumericField) => data[prop] == "";
     const hasErrors = (
-        ["weight", "fat_ratio", "lean_mass", "water_ratio"] as NumericField[]
+        ["weight", "fat_ratio", "muscle_mass", "water_ratio"] as NumericField[]
     ).some(isInvalid);
 
     // Invalid input is reverted on the spot. The DOM value is reset by hand because a
@@ -83,7 +83,7 @@ export function BodyMetricsAddModal({ latest, onClose }: Props) {
                 date: Math.floor(data.date.getTime() / 1000),
                 weight: toKg(parseFloat(data.weight)),
                 fat_ratio: parseFloat(data.fat_ratio),
-                lean_mass: toKg(parseFloat(data.lean_mass)),
+                muscle_mass: toKg(parseFloat(data.muscle_mass)),
                 water_ratio: parseFloat(data.water_ratio),
             }),
         ).then(() => {
@@ -151,8 +151,8 @@ export function BodyMetricsAddModal({ latest, onClose }: Props) {
                     )}
                     {numberField("fat_ratio", translate("fat_ratio"), 100)}
                     {numberField(
-                        "lean_mass",
-                        translate("lean_mass") + " (" + getWeightUnit() + ")",
+                        "muscle_mass",
+                        translate("muscle_mass") + " (" + getWeightUnit() + ")",
                         999,
                     )}
                     {numberField("water_ratio", translate("water_ratio"), 100)}
