@@ -14,7 +14,11 @@ import { Button } from "@mui/material";
 import { WorkoutUtils } from "@/utils/WorkoutUtils";
 import { BackendListener } from "@/utils/backend/listener";
 import { useFilterList } from "@/hooks/useFilterList";
-import { PlanningModal } from "./modals/PlanningModal";
+import { PlanningPanel } from "./PlanningPanel";
+import { PlanWorkoutModal } from "./modals/PlanWorkoutModal";
+import { WorkoutPlanListItem } from "@/utils/backend/models";
+import { useCurrentDay } from "@/hooks/useCurrentDay";
+import { isSameDay, startOfDay } from "date-fns";
 
 export function WorkoutsList() {
     const { sessionsVersion } = useContext(AppContext);
@@ -54,7 +58,47 @@ export function WorkoutsList() {
         undefined,
     );
     const [isEdit, setIsEdit] = useState(false);
-    const [planningOpened, setPlanningOpened] = useState(false);
+    const [planning, setPlanning] = useState(false);
+    const [selectedDay, setSelectedDay] = useState(() =>
+        startOfDay(new Date()),
+    );
+    // Re-renders at midnight so the past-day check stays current
+    const currentDay = useCurrentDay();
+    const [plans, , refreshPlans] = useBackendList(
+        BackendClient.getPlannedWorkouts,
+        [sessionsVersion],
+    );
+
+    const isPastDay = selectedDay < startOfDay(new Date(currentDay));
+    const availableWorkouts = workouts
+        .filter(
+            (w) =>
+                w.enabled &&
+                !plans.some(
+                    (p) =>
+                        p.workout == w.name &&
+                        isSameDay(new Date(p.date * 1000), selectedDay),
+                ),
+        )
+        .map((w) => w.name);
+
+    const addPlan = (workout: string) => {
+        withLoading(
+            BackendClient.addPlannedWorkout(
+                selectedDay.getTime() / 1000,
+                workout,
+            ),
+        ).then(() => {
+            setPlanning(false);
+            refreshPlans();
+        });
+    };
+
+    const removePlan = (plan: WorkoutPlanListItem) => {
+        withLoading(
+            BackendClient.deletePlannedWorkout(plan.date, plan.workout),
+        ).then(refreshPlans);
+    };
 
     const openEdit = (workout: WorkoutDetails | undefined, edit: boolean) => {
         setIsEdit(edit);
@@ -185,6 +229,7 @@ export function WorkoutsList() {
                 </table>
             </div>
 
+
             <div>
                 {workoutDetails && (
                     <WorkoutModal
@@ -213,8 +258,13 @@ export function WorkoutsList() {
                 )}
             </div>
 
-            {planningOpened && (
-                <PlanningModal onClose={() => setPlanningOpened(false)} />
+            {planning && (
+                <PlanWorkoutModal
+                    day={selectedDay}
+                    workouts={availableWorkouts}
+                    onAdd={addPlan}
+                    onClose={() => setPlanning(false)}
+                />
             )}
 
             <div
@@ -228,15 +278,16 @@ export function WorkoutsList() {
                 >
                     {translate("create_workout")}
                 </Button>
-                <Button
-                    className="full-width-button"
-                    onClick={() => setPlanningOpened(true)}
-                    variant="contained"
-                    disabled={!workouts.some((w) => w.enabled)}
-                >
-                    {translate("planning")}
-                </Button>
             </div>
+
+            <PlanningPanel
+                plans={plans}
+                selectedDay={selectedDay}
+                onSelectDay={setSelectedDay}
+                onRemove={removePlan}
+                onPlan={() => setPlanning(true)}
+                canPlan={!isPastDay && availableWorkouts.length > 0}
+            />
         </>
     );
 }

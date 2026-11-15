@@ -697,15 +697,12 @@ prompt_sudo_password_msg:
 prompt_sudo_wrong_password:
   en: Incorrect password, try again
   es: Contraseña incorrecta, inténtalo de nuevo
-planning:
-  en: Planning
-  es: Planificación
 plan_workout:
   en: Plan workout
   es: Planificar entrenamiento
 no_planned_workouts:
-  en: No workouts planned for this day
-  es: No hay entrenamientos planificados para este día
+  en: No planned workouts
+  es: No hay entrenamientos planificados
 next_planned_workout:
   en: Next planned workout
   es: Próximo entrenamiento planificado
