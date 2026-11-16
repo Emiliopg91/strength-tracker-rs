@@ -73,7 +73,7 @@ if __name__ == "__main__":
 
     print("Waiting for github release to be published...")
     t0 = time.time()
-    URL = f"https://api.github.com/repos/Emiliopg91/strength-tracker-rs/releases/tags/{version}"
+    URL = f"https://api.github.com/repos/Emiliopg91/strength-coach-for-garmin/releases/tags/{version}"
     while True:
         try:
             r = requests.get(
@@ -82,7 +82,7 @@ if __name__ == "__main__":
             )
 
             if r.status_code == 200:
-                print(f"✅ {version} published after {(int(time.time()-t0)*1000)/1000}s in https://github.com/Emiliopg91/strength-tracker-rs/releases/tag/{version}")
+                print(f"✅ {version} published after {(int(time.time()-t0)*1000)/1000}s in https://github.com/Emiliopg91/strength-coach-for-garmin/releases/tag/{version}")
                 break
 
         except requests.RequestException as e:
@@ -92,7 +92,7 @@ if __name__ == "__main__":
 
     print("Waiting for AUR to be published...")
     t0 = time.time()
-    URL = "https://aur.archlinux.org/rpc/?v=5&type=info&arg=strength-tracker-rs"
+    URL = "https://aur.archlinux.org/rpc/?v=5&type=info&arg=strength-coach-for-garmin"
     while True:
         try:
             r = requests.get(

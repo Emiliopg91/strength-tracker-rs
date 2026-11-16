@@ -40,8 +40,32 @@ trait RCloneTrait {
                 .await
                 .map_err(RCloneError::ReadConfig)?;
 
-            let marker = format!("[{}]", Self::get_provider_key());
-            Ok(content.lines().any(|l| l.trim() == marker))
+            let has_remote = |key: &str| {
+                let marker = format!("[{key}]");
+                content.lines().any(|l| l.trim() == marker)
+            };
+            if has_remote(&Self::get_provider_key()) {
+                return Ok(true);
+            }
+
+            // Remotes configured before a rename are renamed instead of authorizing again
+            for legacy in constants::LEGACY_APP_NAMES {
+                let legacy_key = format!("{legacy}-{}", Self::get_provider_suffix());
+                if has_remote(&legacy_key) {
+                    Self::run_rclone(
+                        &[
+                            OsStr::new("config"),
+                            OsStr::new("rename"),
+                            OsStr::new(&legacy_key),
+                            OsStr::new(&Self::get_provider_key()),
+                        ],
+                        RCloneError::CommandError,
+                    )
+                    .await?;
+                    return Ok(true);
+                }
+            }
+            Ok(false)
         } else {
             Ok(false)
         }

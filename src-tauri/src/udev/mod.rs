@@ -19,16 +19,18 @@ impl UdevManager {
     /// Writes the rules file and reloads udev. Must run as root.
     pub fn write_rules_file(auto_run: bool) -> Result<()> {
         let mut content =
-            include_str!("../../../resources/99-strength-tracker-rs.rules").to_string();
+            include_str!("../../../resources/99-strength-coach-for-garmin.rules").to_string();
         if auto_run {
             content.push('\n');
             content.push_str(include_str!(
-                "../../../resources/99-strength-tracker-rs-launch.rules"
+                "../../../resources/99-strength-coach-for-garmin-launch.rules"
             ));
         }
         std::fs::write(constants::RULE_FILE, content).map_err(UdevError::Write)?;
-        if std::fs::exists(constants::LEGACY_RULE_FILE).unwrap_or(false) {
-            std::fs::remove_file(constants::LEGACY_RULE_FILE).map_err(UdevError::Write)?;
+        for legacy in constants::LEGACY_RULE_FILES {
+            if std::fs::exists(legacy).unwrap_or(false) {
+                std::fs::remove_file(legacy).map_err(UdevError::Write)?;
+            }
         }
 
         UdevManager::reload()?;

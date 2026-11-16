@@ -1,9 +1,9 @@
 #!/bin/bash
 
-exec 9>/run/lock/strength-tracker-rs-launcher.lock
+exec 9>/run/lock/strength-coach-for-garmin-launcher.lock
 flock -n 9 || exit 0
 
-BIN_LOCATION=/usr/bin/strength-tracker-rs
+BIN_LOCATION=/usr/bin/strength-coach-for-garmin
 
 USER_NAME=$(loginctl list-sessions --no-legend | awk '{print $3}' | head -n1)
 if [[ -z "$USER_NAME" ]]; then

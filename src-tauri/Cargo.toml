@@ -1,10 +1,10 @@
 [package]
-name = "strength-tracker-rs"
+name = "strength-coach-for-garmin"
 version = "4.3.0"
 description = "Sync your devices and track your strength training"
 authors = ["Emiliopg91 <ojosdeserbio@gmail.com>"]
 edition = "2024"
-repository = "https://github.com/Emiliopg91/strength-tracker-rs"
+repository = "https://github.com/Emiliopg91/strength-coach-for-garmin"
 categories = ["Utilities"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -16,7 +16,7 @@ linker_messages = "allow"
 # The `_lib` suffix may seem redundant but it is necessary
 # to make the lib name unique and wouldn't conflict with the bin name.
 # This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
-name = "strength_tracker_rs_lib"
+name = "strength_coach_for_garmin_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
@@ -30,7 +30,7 @@ bytes = "^1"
 chrono = { version = "^0", features = ["serde"] }
 embedded-io-adapters = { version = "^0", features = ["std"] }
 futures-util = "^0"
-strength-tracker-rs-macros = { path = "../src-tauri-macros" }
+strength-coach-for-garmin-macros = { path = "../src-tauri-macros" }
 hmac = "^0.13"
 keyring = { version = "^3", features = ["sync-secret-service", "crypto-rust"] }
 libc = "^0"

@@ -1,10 +1,10 @@
-# Strength Tracker
+# Strength Coach for Garmin
 
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Emiliopg91/strength-tracker-rs)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Emiliopg91/strength-coach-for-garmin)
 
 **Everything Garmin Connect doesn't do for your strength training — on Linux, offline, with your data in a local file.**
 
-Your Garmin watch records every set you lift, but Garmin Connect does little with it: exercises get misdetected, sets are tedious to fix, and nothing tells you when it's time to add weight. Strength Tracker is a Linux desktop app that takes over from there. Plug in your watch, and your sessions are imported, analyzed and turned into your next workout — which goes straight back to the watch.
+Your Garmin watch records every set you lift, but Garmin Connect does little with it: exercises get misdetected, sets are tedious to fix, and nothing tells you when it's time to add weight. Strength Coach for Garmin is a Linux desktop app that takes over from there. Plug in your watch, and your sessions are imported, analyzed and turned into your next workout — which goes straight back to the watch.
 
 No account required, no cloud, no Garmin Express (which doesn't exist on Linux anyway). Just a USB cable and a SQLite database you own — with optional Garmin Connect sync for when the cable isn't at hand.
 
@@ -20,7 +20,7 @@ No account required, no cloud, no Garmin Express (which doesn't exist on Linux a
 1. **Plan** — Build strength workouts in the app and send them to your watch, by cable or wirelessly through Garmin Connect.
 2. **Train** — Follow the workout on the watch as usual.
 3. **Sync** — Plug the watch in. The app can launch itself on connect and imports new activities automatically.
-4. **Progress** — Strength Tracker checks each exercise against its rep range and suggests your next target. Apply the suggestion and the affected workouts are updated, queued for your watch and, if you're signed in, synced to Garmin Connect, ready for the next session.
+4. **Progress** — Strength Coach for Garmin checks each exercise against its rep range and suggests your next target. Apply the suggestion and the affected workouts are updated, queued for your watch and, if you're signed in, synced to Garmin Connect, ready for the next session.
 
 ## Progression, done for you
 
@@ -76,15 +76,15 @@ No account required, no cloud, no Garmin Express (which doesn't exist on Linux a
 
 ### Arch Linux (via `AUR helper`/`PKGBUILD`)
 
-Install the AUR `strength-tracker-rs` package to get latest stable version of the application and every external dependency.
+Install the AUR `strength-coach-for-garmin` package to get latest stable version of the application and every external dependency.
 
 ### From source
 
 Requirements: [Rust](https://www.rust-lang.org/tools/install), [pnpm](https://pnpm.io/), and the [Tauri prerequisites](https://tauri.app/start/prerequisites/) for your platform.
 
 ```bash
-git clone https://github.com/Emiliopg91/strength-tracker-rs.git
-cd strength-tracker-rs
+git clone https://github.com/Emiliopg91/strength-coach-for-garmin.git
+cd strength-coach-for-garmin
 pnpm install
 make build       # or: pnpm tauri build
 ```

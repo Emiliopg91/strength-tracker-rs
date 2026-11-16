@@ -1,4 +1,4 @@
-use strength_tracker_rs_macros::traced_command;
+use strength_coach_for_garmin_macros::traced_command;
 use tauri::State;
 
 /// Answers the pending prompt `id`, sent by the `prompt_requested` event, with the values entered

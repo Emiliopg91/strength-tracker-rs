@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Strength Tracker",
+  "productName": "Strength Coach for Garmin",
   "version": "4.3.0",
-  "identifier": "com.emiliopg91.strength-tracker-rs",
+  "identifier": "com.emiliopg91.strength-coach-for-garmin",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
@@ -13,7 +13,7 @@
   "app": {
     "windows": [
       {
-        "title": "Strength Tracker",
+        "title": "Strength Coach for Garmin",
         "width": 830,
         "height": 780,
         "minWidth": 830,
@@ -24,7 +24,7 @@
       },
       {
         "label": "report",
-        "title": "Strength Tracker",
+        "title": "Strength Coach for Garmin",
         "url": "report.html",
         "create": false,
         "visible": false,

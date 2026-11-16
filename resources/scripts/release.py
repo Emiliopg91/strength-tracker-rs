@@ -94,7 +94,7 @@ def generate_changelog():
         for typeEntry, typeEntries in entries.items():
             if msg.startswith(f"[{typeEntry}]"):
                 typeEntries.append(
-                    f'<td><a href="https://github.com/Emiliopg91/strength-tracker-rs/commit/{commit_hash}">{commit_hash[0:7]}</a></td><td>{msg.replace(f"[{typeEntry}]", "").strip().capitalize()}</td>'
+                    f'<td><a href="https://github.com/Emiliopg91/strength-coach-for-garmin/commit/{commit_hash}">{commit_hash[0:7]}</a></td><td>{msg.replace(f"[{typeEntry}]", "").strip().capitalize()}</td>'
                 )
 
     lines: list[str] = ["# Changes for release"]

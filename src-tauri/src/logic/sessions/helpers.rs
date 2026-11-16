@@ -271,7 +271,7 @@ pub(crate) async fn update_pending_geolocation<R: Runtime>(app: &AppHandle<R>) {
                 //
                 let resp = reqwest::Client::new()
                     .get(&url)
-                    .header(reqwest::header::USER_AGENT, "strength-tracker-rs")
+                    .header(reqwest::header::USER_AGENT, "strength-coach-for-garmin")
                     .header(reqwest::header::ACCEPT, "application/json")
                     .send()
                     .await;

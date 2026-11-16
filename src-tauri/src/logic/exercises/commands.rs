@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use strength_tracker_rs_macros::traced_command;
+use strength_coach_for_garmin_macros::traced_command;
 use tauri::{AppHandle, State};
 
 use crate::{

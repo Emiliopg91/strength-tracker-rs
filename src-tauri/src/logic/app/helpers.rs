@@ -110,7 +110,7 @@ pub(super) async fn check_for_update<R: Runtime>(app: &AppHandle<R>) {
 async fn latest_version() -> Result<Version, String> {
     let response = reqwest::Client::new()
         .get(constants::URL)
-        .header(reqwest::header::USER_AGENT, "strength-tracker-rs")
+        .header(reqwest::header::USER_AGENT, "strength-coach-for-garmin")
         .header(reqwest::header::ACCEPT, "application/vnd.github+json")
         .send()
         .await

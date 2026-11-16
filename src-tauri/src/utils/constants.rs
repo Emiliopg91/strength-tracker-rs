@@ -6,7 +6,7 @@ use tauri_plugin_log::RotationStrategy;
 use crate::utils::translations::Languages;
 
 // App block
-pub static APP_TITLE: &str = "Strength Tracker";
+pub static APP_TITLE: &str = "Strength Coach for Garmin";
 pub static APP_NAME: LazyLock<String> = LazyLock::new(|| env!("CARGO_PKG_NAME").to_string());
 pub static APP_VERSION: LazyLock<String> = LazyLock::new(|| env!("CARGO_PKG_VERSION").to_string());
 pub static APP_SEM_VERSION: LazyLock<Version> =
@@ -19,11 +19,14 @@ pub static LOCK_FILE: LazyLock<PathBuf> = LazyLock::new(|| {
     PathBuf::from(run_dir).join(format!("{}.lock", *APP_NAME))
 });
 pub static URL: &str =
-    "https://api.github.com/repos/Emiliopg91/strength-tracker-rs/releases/latest";
+    "https://api.github.com/repos/Emiliopg91/strength-coach-for-garmin/releases/latest";
 
-pub static RULE_FILE: &str = "/etc/udev/rules.d/99-strength-tracker-rs.rules";
-/// Rules file written by releases prior to the rename, removed when the new one is written.
-pub static LEGACY_RULE_FILE: &str = "/etc/udev/rules.d/99-garmin-tracker-rs.rules";
+pub static RULE_FILE: &str = "/etc/udev/rules.d/99-strength-coach-for-garmin.rules";
+/// Rules files written by releases prior to each rename, removed when the new one is written.
+pub static LEGACY_RULE_FILES: [&str; 2] = [
+    "/etc/udev/rules.d/99-strength-tracker-rs.rules",
+    "/etc/udev/rules.d/99-garmin-tracker-rs.rules",
+];
 
 /// Serial of the pseudo-device standing for the Garmin Connect account, seeded by the schema.
 /// Its `workout_device` rows track whether each workout still has to be uploaded to Connect.
@@ -64,11 +67,13 @@ pub static HOME_DIR: LazyLock<PathBuf> =
 pub static DATA_LOCAL_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     let share_dir = HOME_DIR.join(".local").join("share");
     let dir = share_dir.join(APP_NAME.as_str());
-    migrate_legacy_dir(&share_dir.join(LEGACY_APP_NAME), &dir);
+    for legacy in LEGACY_APP_NAMES {
+        migrate_legacy_dir(&share_dir.join(legacy), &dir);
+    }
     ensure_dir(dir)
 });
-/// Package name used before the rename, kept to migrate existing user data.
-static LEGACY_APP_NAME: &str = "garmin-tracker-rs";
+/// Package names used before each rename, newest first, kept to migrate existing user data.
+pub static LEGACY_APP_NAMES: [&str; 2] = ["strength-tracker-rs", "garmin-tracker-rs"];
 
 // Database block
 pub static DB_FILE: LazyLock<PathBuf> = LazyLock::new(|| DATA_LOCAL_DIR.join("database.db"));
@@ -124,7 +129,7 @@ pub static ICON_PATH: LazyLock<String> = LazyLock::new(|| {
 
     #[cfg(not(debug_assertions))]
     {
-        "/usr/share/icons/hicolor/128x128/apps/strength-tracker-rs.png".to_string()
+        "/usr/share/icons/hicolor/128x128/apps/strength-coach-for-garmin.png".to_string()
     }
 });
 

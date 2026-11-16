@@ -83,18 +83,18 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         if: steps.check_version.outputs.different == 'true'
         run: |
-          git clone ssh://aur@aur.archlinux.org/strength-tracker-rs.git strength_tracker_rs_repo
+          git clone ssh://aur@aur.archlinux.org/strength-coach-for-garmin.git strength_coach_for_garmin_repo
 
-          cd strength_tracker_rs_repo
+          cd strength_coach_for_garmin_repo
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           cp ../dist/PKGBUILD .
           cp ../dist/.SRCINFO .
-          cp ../dist/strength-tracker-rs.install .
+          cp ../dist/strength-coach-for-garmin.install .
 
-          git add PKGBUILD .SRCINFO strength-tracker-rs.install
+          git add PKGBUILD .SRCINFO strength-coach-for-garmin.install
 
           if ! git diff --cached --quiet; then
             git commit -m "Release ${VERSION}-1"

@@ -1,1 +1,0 @@
-SUBSYSTEM=="usb", ATTR{idVendor}=="091e", RUN+="/bin/sh -c 'setsid /usr/share/strength-tracker-rs/strength-tracker-rs-launcher.sh </dev/null >/dev/null 2>&1 &'"

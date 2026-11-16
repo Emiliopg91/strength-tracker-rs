@@ -2,7 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::process::exit;
-use strength_tracker_rs_lib::{check_running, force_write_mtp_rules};
+use strength_coach_for_garmin_lib::{check_running, force_write_mtp_rules};
 use tauri_plugin_log::log::LevelFilter;
 
 /// Binary entrypoint: handles the debug-only options, sets up env vars, and hands off to `run()`.
@@ -35,7 +35,7 @@ fn main() {
 
     #[cfg(debug_assertions)]
     {
-        if let Some(code) = strength_tracker_rs_lib::debug::run_option(&args) {
+        if let Some(code) = strength_coach_for_garmin_lib::debug::run_option(&args) {
             exit(code);
         }
         if std::env::var("IN_DEBUG").is_err() {
@@ -49,5 +49,5 @@ fn main() {
         LevelFilter::Info
     };
 
-    strength_tracker_rs_lib::run(log_level);
+    strength_coach_for_garmin_lib::run(log_level);
 }
