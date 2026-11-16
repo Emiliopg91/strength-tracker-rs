@@ -1,3 +1,4 @@
+import { AppContext } from "@/context/AppContext";
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
 import { useLoadingTask } from "@/hooks/useLoadingTask";
 import { BackendClient } from "@/utils/backend/client";
@@ -8,14 +9,17 @@ import { Button, Menu, MenuItem } from "@mui/material";
 export function UploadToCloudMenu() {
     const withLoading = useLoadingTask();
     const { translate } = useContext(I18nSettingsContext);
+    const { cloudUploadAvailable } = useContext(AppContext);
     const [importMenuAnchor, setImportMenuAnchor] = useState<{
         top: number;
         left: number;
     } | null>(null);
-
     const uploadToCloud = (provider: CloudProvider) => {
         withLoading(BackendClient.uploadToCloud(provider));
     };
+
+    // rclone is an optional dependency: without it the menu is not shown
+    if (!cloudUploadAvailable) return null;
 
     return (
         <>

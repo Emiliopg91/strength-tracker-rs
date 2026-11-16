@@ -3,6 +3,13 @@ use tauri::{AppHandle, State};
 
 use crate::{SettingsLock, rclone::providers::CloudProvider};
 
+/// Whether uploading to the cloud is possible, i.e. the optional rclone dependency is installed.
+#[traced_command]
+#[tauri::command]
+pub async fn is_cloud_upload_available() -> bool {
+    super::is_cloud_upload_available().await
+}
+
 /// Uploads the database file to `provider` through rclone, configuring the remote first if needed
 /// (which opens the provider's login in the browser). Notifies on success. On failure, shows a
 /// persistent error notification and rejects with the message.

@@ -5,6 +5,8 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum RCloneError {
+    #[error("rclone is not installed")]
+    NotInstalled,
     #[error("Error on authorize command: {0}")]
     Authorization(#[source] std::io::Error),
     #[error("Bad authorization token")]

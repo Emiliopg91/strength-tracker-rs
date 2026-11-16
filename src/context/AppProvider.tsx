@@ -17,6 +17,7 @@ export function AppProvider({
     const { i18nReady, translate } = useContext(I18nSettingsContext);
     const [connectUser, setConnectUser] = useState<string | null>(null);
     const [environment, setEnvironment] = useState(AppEnvironment.Release);
+    const [cloudUploadAvailable, setCloudUploadAvailable] = useState(false);
     const [backendNotified, setBackendNotified] = useState(false);
     const [sessionsVersion, setSessionsVersion] = useState(0);
     const [progressionsAvailable, setProgressionsAvailableVal] =
@@ -74,6 +75,10 @@ export function AppProvider({
                 setExerciseNotes(notes);
             })
             .catch(() => console.warn("Could not load exercises notes"));
+
+        BackendClient.isCloudUploadAvailable()
+            .then(setCloudUploadAvailable)
+            .catch(() => console.warn("Could not check rclone availability"));
 
         BackendClient.connectLoggedUser()
             .then(setConnectUser)
@@ -153,6 +158,7 @@ export function AppProvider({
         exerciseName,
         categoryName,
         connectUser,
+        cloudUploadAvailable,
         progressionsAvailable,
         unsetProgressionsAvailable,
         setProgressionsAvailable,

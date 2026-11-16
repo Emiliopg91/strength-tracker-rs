@@ -10,6 +10,10 @@ from concurrent.futures import ThreadPoolExecutor
 
 from commons import BIN_FILE, ENV_C
 
+# Packages providing the commands the app spawns, which ldd cannot see:
+# notify-send, sudo and xdg-open. udevadm, loginctl, runuser and flock come with base
+COMMAND_DEPENDENCIES = ["libnotify", "sudo", "xdg-utils"]
+
 def get_direct_deps(package: str) -> set[str]:
     """
     Obtiene las dependencias directas de un paquete usando pactree.
@@ -149,6 +153,8 @@ def do_extract() -> list[str]:
         print("WARNING: Following libraries are not owned by any package:")
         for item in unowned:
             print(f"\t{item}")
+
+    dependencies.update(COMMAND_DEPENDENCIES)
 
     print("Minimizing...")
     dependencies = sorted(minimize_packages(list(dependencies)))

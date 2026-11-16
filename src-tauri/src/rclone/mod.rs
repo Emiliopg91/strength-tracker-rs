@@ -1,11 +1,24 @@
 pub mod errors;
 pub mod providers;
 
-use std::{ffi::OsStr, marker::PhantomData, path::Path, process::Output};
+use std::{
+    ffi::OsStr, marker::PhantomData, os::unix::fs::PermissionsExt, path::Path, process::Output,
+};
 
 use tokio::{fs, process::Command};
 
 use crate::{rclone::errors::RCloneError, utils::constants};
+
+/// Whether an executable `rclone` is in the `PATH`. rclone is an optional dependency, only needed
+/// to upload to the cloud. Checked on every call, so installing it doesn't need a restart.
+pub fn is_installed() -> bool {
+    std::env::var_os("PATH").is_some_and(|paths| {
+        std::env::split_paths(&paths).any(|dir| {
+            std::fs::metadata(dir.join("rclone"))
+                .is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+        })
+    })
+}
 
 pub struct RCloneClient<T> {
     _marker: PhantomData<T>,

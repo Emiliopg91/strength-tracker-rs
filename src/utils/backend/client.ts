@@ -74,7 +74,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/export/commands.rs:23
+	// From src-tauri/src/logic/export/commands.rs:30
 	public static exportDatabase(): Promise<void> {
 	  return BackendClient.inner_invoke("export_database"); 
 	}
@@ -212,6 +212,12 @@ export class BackendClient {
 	}
 	
 
+	// From src-tauri/src/logic/export/commands.rs:9
+	public static isCloudUploadAvailable(): Promise<boolean> {
+	  return BackendClient.inner_invoke("is_cloud_upload_available"); 
+	}
+	
+
 	// From src-tauri/src/logic/report/commands.rs:10
 	public static loadReport(from: number, to: number): Promise<void> {
 	  return BackendClient.inner_invoke("load_report", { from, to }); 
@@ -296,7 +302,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/export/commands.rs:11
+	// From src-tauri/src/logic/export/commands.rs:18
 	public static uploadToCloud(provider: CloudProvider): Promise<void> {
 	  return BackendClient.inner_invoke("upload_to_cloud", { provider }); 
 	}

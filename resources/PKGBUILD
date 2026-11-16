@@ -13,7 +13,8 @@ sha256sums=(
   'SKIP'
 )
 
-depends=('webkit2gtk-4.1' 'zlib-ng-compat')
+depends=('webkit2gtk-4.1' 'zlib-ng-compat' 'libnotify' 'sudo' 'xdg-utils')
+optdepends=('rclone: export to Dropbox and OneDrive')
 makedepends=('mold' 'npm' 'pnpm' 'python-toml' 'python-yaml' 'rust' 'sccache')
 
 conflicts=('garmin-tracker-rs' 'strength-tracker-rs')

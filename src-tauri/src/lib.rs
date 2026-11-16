@@ -49,7 +49,7 @@ use crate::{
             get_progression_suggestion, save_exercise_notes, set_exercise_progression,
             set_exercise_progression_parameters, set_exercise_unilateral,
         },
-        export::commands::{export_database, upload_to_cloud},
+        export::commands::{export_database, is_cloud_upload_available, upload_to_cloud},
         prompts::{
             commands::answer_prompt,
             helpers::{AppPrompter, Prompts},
@@ -341,6 +341,7 @@ pub fn run(log_level: LevelFilter) {
             delete_body_metric,
             //Export
             export_database,
+            is_cloud_upload_available,
             upload_to_cloud,
             //Report
             report_ready,

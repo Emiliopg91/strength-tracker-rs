@@ -13,12 +13,17 @@ use crate::{
         notifications::{NotificationDefinition, NotificationKind},
     },
     logic::{ask_save_path, notifications::show_notification, pool, report_error},
-    rclone::providers::CloudProvider,
+    rclone::{self, errors::RCloneError, providers::CloudProvider},
     utils::{
         constants,
         translations::{translate, translate_and_replace},
     },
 };
+
+/// Whether uploading to the cloud is possible, i.e. the optional rclone dependency is installed.
+pub async fn is_cloud_upload_available() -> bool {
+    rclone::is_installed()
+}
 
 pub async fn upload_to_cloud(
     settings: &SettingsLock,
@@ -27,6 +32,10 @@ pub async fn upload_to_cloud(
     let lang = settings.read().unwrap().language;
 
     let res: Result<(), String> = async {
+        if !rclone::is_installed() {
+            return Err(RCloneError::NotInstalled.to_string());
+        }
+
         let configured = provider.is_configured().await.map_err(|e| e.to_string())?;
 
         if !configured {

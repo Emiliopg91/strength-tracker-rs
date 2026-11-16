@@ -40,7 +40,11 @@ pub async fn notify_frontend_ready<R: Runtime>(app: &AppHandle<R>) {
     let app_cl = app.clone();
     tauri::async_runtime::spawn(async move {
         // Asked here, as the password dialog needs the frontend
-        let auto_run = app_cl.state::<SettingsLock>().read().unwrap().on_device_connect;
+        let auto_run = app_cl
+            .state::<SettingsLock>()
+            .read()
+            .unwrap()
+            .on_device_connect;
         if !std::fs::exists(constants::RULE_FILE).unwrap_or(false)
             && let Err(e) = install_udev_rules(&app_cl, auto_run).await
         {
