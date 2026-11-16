@@ -101,8 +101,9 @@ if __name__ == "__main__":
             )
 
             if r.status_code == 200:
-                response = r.json()
-                if response["results"][0]["Version"].startswith(f"{version}-1"):
+                results = r.json()["results"]
+                # Empty until the first release of the package reaches AUR
+                if results and results[0]["Version"].startswith(f"{version}-1"):
                     print(f"✅ {version} published after {(int(time.time()-t0)*1000)/1000}s!")
                     break
 

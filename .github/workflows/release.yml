@@ -98,7 +98,8 @@ jobs:
 
           if ! git diff --cached --quiet; then
             git commit -m "Release ${VERSION}-1"
-            git push
+            # Explicit refspec, as the first push to a new AUR package starts from an empty clone
+            git push origin HEAD:master
           else
             echo "No changes to publish"
           fi
