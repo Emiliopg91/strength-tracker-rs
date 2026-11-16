@@ -34,7 +34,7 @@ No account required, no cloud, no Garmin Express (which doesn't exist on Linux a
 - **Session review and editing** — Fix exercises, sets, reps and weights, add notes, and hide the exercises chart on sessions where it adds nothing.
 - **Muscles worked** — Every catalog exercise lists its primary and secondary muscles, and exercises, sessions and workouts show them on a front and back body map.
 - **Personal records** — 1RM estimation per exercise, with a desktop notification when you set a new PR.
-- **Exercise history** — Full per-session set history and volume chart for every exercise.
+- **Exercise history** — Full per-session set history and a chart of weight, reps and estimated 1RM (absolute and relative to bodyweight) for every exercise.
 - **Exercise notes** — Keep cues and setup notes per exercise; workout steps without their own notes inherit them, both on the watch and in printed workouts.
 - **Session comparison** — Compare sessions and their exercises side by side.
 - **Training load** — Daily load heatmap and workload chart on the home page.
@@ -66,7 +66,6 @@ No account required, no cloud, no Garmin Express (which doesn't exist on Linux a
 
 ## Desktop integration
 
-- **System tray** — Start minimized and keep running in the background.
 - **Launch on boot or on device connect.**
 - **Native notifications** — Localized alerts for imports, PRs and updates.
 - **English and Spanish**, metric or imperial units, all applied live.

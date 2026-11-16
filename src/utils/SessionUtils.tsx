@@ -19,6 +19,8 @@ export interface ExerciseChartPoint {
     weight: number;
     /** Average reps per set. */
     reps: number;
+    /** Best estimated 1RM of the session, in kg. */
+    e1rm: number;
     /** Estimated 1RM divided by bodyweight; null when the bodyweight is unknown. */
     relativeWeight: number | null;
 }
@@ -532,8 +534,8 @@ export class SessionUtils {
     }
 
     /**
-     * One point per session for the exercise chart: heaviest weight, average reps and estimated
-     * 1RM relative to bodyweight (null when unknown). `sessions` is keyed by
+     * One point per session for the exercise chart: heaviest weight, average reps, best estimated
+     * 1RM and that 1RM relative to bodyweight (null when unknown). `sessions` is keyed by
      * `"<workout>\n<session date>"`; sessions without sets are skipped. Points are sorted by
      * date.
      */
@@ -555,15 +557,14 @@ export class SessionUtils {
                 reps += s.reps ?? 0;
                 weight = Math.max(weight, s.weight ?? 0);
             });
+            const e1rm = SessionUtils.maxE1rm(session.series, unilateral);
             points.push({
                 date,
                 weight,
                 reps: Math.floor(reps / session.series.length),
+                e1rm,
                 relativeWeight:
-                    session.weight !== null
-                        ? SessionUtils.maxE1rm(session.series, unilateral) /
-                          session.weight
-                        : null,
+                    session.weight !== null ? e1rm / session.weight : null,
             });
         });
 

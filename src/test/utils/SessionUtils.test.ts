@@ -632,7 +632,7 @@ describe("SessionUtils.exerciseChartData", () => {
         expect(points.map((p) => p.date)).toEqual([1000, 2000, 3000]);
     });
 
-    it("takes the heaviest weight, average reps and e1RM relative to bodyweight", () => {
+    it("takes the heaviest weight, average reps, best e1RM and e1RM relative to bodyweight", () => {
         const point = SessionUtils.exerciseChartData(sessions, false).find(
             (p) => p.date === 2000,
         );
@@ -641,6 +641,7 @@ describe("SessionUtils.exerciseChartData", () => {
             date: 2000,
             weight: 60,
             reps: 10,
+            e1rm: SessionUtils.maxE1rm(sessions["Torso\n2000"].series, false),
             relativeWeight:
                 SessionUtils.maxE1rm(sessions["Torso\n2000"].series, false) /
                 80,
@@ -652,6 +653,22 @@ describe("SessionUtils.exerciseChartData", () => {
 
         expect(point.date).toBe(1000);
         expect(point.relativeWeight).toBeNull();
+        expect(point.e1rm).toBe(SessionUtils.estimate1rm(55, 10, false));
+    });
+
+    it("estimates the 1RM per side for unilateral exercises", () => {
+        const [point] = SessionUtils.exerciseChartData(
+            {
+                "Torso\n1000": {
+                    series: [makeSet({ weight: 20, reps: 20 })],
+                    weight: null,
+                },
+            },
+            true,
+        );
+
+        expect(point.e1rm).toBe(SessionUtils.estimate1rm(20, 20, true));
+        expect(point.e1rm).toBe(SessionUtils.estimate1rm(20, 10, false));
     });
 
     it("skips sessions without sets", () => {

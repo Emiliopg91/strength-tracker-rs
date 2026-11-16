@@ -19,7 +19,7 @@ type Props = {
     series: Record<string, ExerciseSession>;
 };
 
-type LineKey = "weight" | "reps" | "relativeWeight";
+type LineKey = "weight" | "reps" | "e1rm" | "relativeWeight";
 
 const INACTIVE_COLOR = "#808080";
 
@@ -45,6 +45,9 @@ function ExerciseVolumeTooltip({
             </div>
             <div>
                 {translate("repetitions")}: {formatNumber(data.reps, 0)}
+            </div>
+            <div>
+                {translate("rm")}: {formatNumber(fromKg(data.e1rm), 0)}
             </div>
             {data.relativeWeight !== null && (
                 <div>
@@ -74,6 +77,7 @@ export function ExerciseVolumeChart({ series, exercise }: Props) {
     const dateDomain = domain(chartData.map(({ date }) => date));
     const weightDomain = domain(chartData.map(({ weight }) => weight));
     const repsDomain = domain(chartData.map(({ reps }) => reps));
+    const e1rmDomain = domain(chartData.map(({ e1rm }) => e1rm));
     const rmDomain = domain(
         chartData
             .map(({ relativeWeight }) => relativeWeight)
@@ -97,6 +101,7 @@ export function ExerciseVolumeChart({ series, exercise }: Props) {
     }[] = [
         { key: "weight", name: translate("weight"), color: "#0f0" },
         { key: "reps", name: translate("repetitions"), color: "#0ff" },
+        { key: "e1rm", name: translate("rm"), color: "#f0f" },
     ];
     if (anyRelative) {
         lines.push({
@@ -146,6 +151,13 @@ export function ExerciseVolumeChart({ series, exercise }: Props) {
                                     stroke="#fff"
                                     width={0}
                                     domain={repsDomain}
+                                    tick={false}
+                                />
+                                <YAxis
+                                    yAxisId="e1rm"
+                                    stroke="#fff"
+                                    width={0}
+                                    domain={e1rmDomain}
                                     tick={false}
                                 />
                                 {anyRelative && (
