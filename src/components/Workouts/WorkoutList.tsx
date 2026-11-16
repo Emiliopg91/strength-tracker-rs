@@ -229,7 +229,6 @@ export function WorkoutsList() {
                 </table>
             </div>
 
-
             <div>
                 {workoutDetails && (
                     <WorkoutModal
