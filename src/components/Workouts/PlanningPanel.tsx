@@ -12,6 +12,9 @@ import "@/styles/Workouts/Planning.css";
 // Local calendar day key, independent of the time of day
 const dayKey = (date: Date) => format(date, "yyyy-MM-dd");
 
+// A plan is done once a session of its workout was imported on its day
+const isDone = (plan: WorkoutPlanListItem) => plan.session != null;
+
 type Props = {
     plans: WorkoutPlanListItem[];
     selectedDay: Date;
@@ -54,15 +57,15 @@ export function PlanningPanel({
 
     const selectedPlans = byDay[dayKey(selectedDay)] ?? [];
 
-    // Past days are green when every plan was done and red otherwise
+    // Days are green once every plan was done, whatever the day, and past days red otherwise
     const plannedDayClasses = useMemo(() => {
         const res = new Map<string, string>();
         Object.entries(byDay).forEach(([day, list]) => {
             if (list.length == 0) return;
-            if (day >= today) {
-                res.set(day, "planned-day");
-            } else if (list.every((wp) => wp.session != null)) {
+            if (list.every(isDone)) {
                 res.set(day, "planned-day green");
+            } else if (day >= today) {
+                res.set(day, "planned-day");
             } else {
                 res.set(day, "planned-day red");
             }
@@ -74,8 +77,8 @@ export function PlanningPanel({
         dayKey(new Date(plan.date * 1000)) < today;
 
     const dotClass = (plan: WorkoutPlanListItem) => {
-        if (!isPast(plan)) return "";
-        return plan.session != null ? "green" : "red";
+        if (isDone(plan)) return "green";
+        return isPast(plan) ? "red" : "";
     };
 
     return (
@@ -121,7 +124,7 @@ export function PlanningPanel({
                                 <span className="planning-item-name">
                                     {plan.workout}
                                 </span>
-                                {!isPast(plan) && (
+                                {!isPast(plan) && !isDone(plan) && (
                                     <IconButton
                                         size="small"
                                         title={translate("delete")}

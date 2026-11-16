@@ -186,6 +186,12 @@ pub async fn remove_planned_workout<R: Runtime>(
             let entry = WorkoutPlanningRepository::select_by_id_in(conn, date, &workout)
                 .await?
                 .unwrap();
+            // Kept as the record of what was planned: the UI offers no delete for these either
+            if entry.session.is_some()
+                || today_local_midnight().is_some_and(|today| entry.date < today)
+            {
+                return Err("Past or done planned workouts can't be deleted".into());
+            }
             entry.delete_by_id_in(conn).await?;
             Ok(entry.connect_id)
         })
