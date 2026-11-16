@@ -13,15 +13,15 @@ const OTHER: u32 = 3;
 /// Inserts a session with an additional data row (`WITH_DATA`, `OTHER`) and one without it (`WITHOUT_DATA`).
 async fn setup() -> DatabasePool {
     let db = common::test_db().await;
-    db.run_in_transaction(move |tx| {
+    db.run_in_transaction(async move |tx| {
         for date in [WITH_DATA, OTHER] {
             let mut session = common::session(date);
             let mut add_data = common::additional_data(date);
             add_data.notes = Some(format!("Notes {date}"));
             session.data = Some(add_data);
-            common::insert_session(tx, session);
+            common::insert_session(tx, session).await;
         }
-        common::insert_session(tx, common::session(WITHOUT_DATA));
+        common::insert_session(tx, common::session(WITHOUT_DATA)).await;
         Ok(())
     })
     .await
@@ -31,9 +31,11 @@ async fn setup() -> DatabasePool {
 
 async fn save_notes(db: &DatabasePool, session: u32, notes: Option<&str>) {
     let notes = notes.map(str::to_string);
-    db.run_in_transaction(move |tx| Ok(update_session_notes(tx, session, notes.as_deref())?))
-        .await
-        .unwrap();
+    db.run_in_transaction(async move |tx| {
+        Ok(update_session_notes(tx, session, notes.as_deref()).await?)
+    })
+    .await
+    .unwrap();
 }
 
 async fn additional_data(db: &DatabasePool, session: u32) -> Option<SessionData> {
@@ -104,7 +106,7 @@ async fn updating_notes_keeps_other_additional_data() {
     before.heart_rates = Some(vec![120, 130, 140]);
     before.distance = Some(1234.5);
     let updated = before.clone();
-    db.run_in_transaction(move |tx| Ok(updated.update_by_id_in(tx)?))
+    db.run_in_transaction(async move |tx| Ok(updated.update_by_id_in(tx).await?))
         .await
         .unwrap();
 

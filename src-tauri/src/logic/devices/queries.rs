@@ -21,7 +21,7 @@ use crate::dao::{
 };
 
 /// Plans dated in `[from, to)`, by date and workout, with their workout loaded.
-pub(crate) fn plans_between(
+pub(crate) async fn plans_between(
     conn: &rusqlite_orm::rusqlite::Connection,
     from: u32,
     to: u32,
@@ -33,15 +33,16 @@ pub(crate) fn plans_between(
         ]))
         .order_by(OrderBy::Asc(workout_planning_cols::DATE))
         .order_by(OrderBy::Asc(workout_planning_cols::WORKOUT))
-        .fetch_in(conn)?;
+        .fetch_in(conn)
+        .await?;
     for plan in &mut plans {
-        plan.fetch_workout_obj_relationship_in(conn)?;
+        plan.fetch_workout_obj_relationship_in(conn).await?;
     }
     Ok(plans)
 }
 
 /// Devices linked to the Connect account where `workout` is still pending.
-pub(crate) fn pending_connect_devices(
+pub(crate) async fn pending_connect_devices(
     conn: &rusqlite_orm::rusqlite::Connection,
     workout: &str,
 ) -> rusqlite_orm::errors::Result<Vec<String>> {
@@ -58,61 +59,67 @@ pub(crate) fn pending_connect_devices(
                     .to_subquery(),
             ),
         ]))
-        .fetch_in(conn)?
+        .fetch_in(conn)
+        .await?
         .iter()
         .map(|r| r.get_text(workout_device_cols::DEVICE.as_ref()))
         .collect())
 }
 
 /// Registers a device plugged by USB, or flags a known one as reachable by USB.
-pub(super) fn enrol_usb_device(
-    tx: &rusqlite_orm::rusqlite::Transaction,
+pub(super) async fn enrol_usb_device(
+    tx: &rusqlite_orm::rusqlite::Transaction<'_>,
     device: &mut Device,
 ) -> rusqlite_orm::errors::Result<()> {
-    let _: () = if let Some(device) = DeviceRepository::select_by_id_in(tx, &device.serial)? {
+    let _: () = if let Some(device) = DeviceRepository::select_by_id_in(tx, &device.serial).await? {
         if !device.usb {
             DeviceRepository::update()
                 .set(device_cols::USB, true.into())
                 .where_(Where::Eq(device_cols::SERIAL, device.serial.clone().into()))
                 .execute_in(tx)
+                .await
                 .map(|_| ())?
         }
     } else {
         DeviceRepository::insert()
             .item(device)
             .execute_in(tx)
+            .await
             .map(|_| ())?
     };
     Ok(())
 }
 
 /// Stores the notes and steps of a workout downloaded from a device.
-pub(super) fn store_workout_steps(
-    tx: &rusqlite_orm::rusqlite::Transaction,
+pub(super) async fn store_workout_steps(
+    tx: &rusqlite_orm::rusqlite::Transaction<'_>,
     workout: &mut Workout,
 ) -> rusqlite_orm::errors::Result<()> {
     WorkoutRepository::update()
         .set(workout_cols::NOTES, workout.notes.clone().into())
         .where_(Where::Eq(workout_cols::NAME, workout.name.clone().into()))
-        .execute_in(tx)?;
+        .execute_in(tx)
+        .await?;
 
     let mut insert = WorkoutStepRepository::insert();
     for step in &mut workout.steps {
         insert = insert.item(step);
     }
 
-    insert.execute_in(tx)?;
+    insert.execute_in(tx).await?;
 
     Ok(())
 }
 
 /// The workout with its steps, those without notes of their own inheriting the exercise notes.
-pub(super) fn workout_for_device(
+pub(super) async fn workout_for_device(
     conn: &rusqlite_orm::rusqlite::Connection,
     name: &str,
 ) -> rusqlite_orm::errors::Result<Workout> {
-    let mut wk = WorkoutRepository::select_by_id_in(conn, name)?.unwrap();
-    wk.fetch_steps_relationship_in(conn)?;
+    let mut wk = WorkoutRepository::select_by_id_in(conn, name)
+        .await?
+        .unwrap();
+    wk.fetch_steps_relationship_in(conn).await?;
 
     // Exercise steps without their own notes inherit the exercise notes
     let pending: Vec<(usize, (u16, u16))> = wk
@@ -140,7 +147,8 @@ pub(super) fn workout_for_device(
                     .map(|(cat, id)| vec![(*cat).into(), (*id).into()])
                     .collect(),
             ))
-            .fetch_in(conn)?
+            .fetch_in(conn)
+            .await?
             .into_iter()
             .filter_map(|e| Some(((e.category, e.id), e.notes?)))
             .collect::<HashMap<_, _>>();

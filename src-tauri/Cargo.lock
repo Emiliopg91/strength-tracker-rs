@@ -3681,7 +3681,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d3cff2fda108496f77a43ecd8cb2e0e33a3957f9239c273ff649b401bb4085d"
 dependencies = [
  "r2d2",
- "rusqlite 0.42.0",
+ "rusqlite",
  "uuid",
 ]
 
@@ -3952,31 +3952,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "rusqlite"
-version = "0.43.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f172c4812a19b26d1c23cdb0070e69db335503dfa378b910eb857386e5b8beba"
-dependencies = [
- "bitflags 2.13.2",
- "fallible-iterator",
- "fallible-streaming-iterator",
- "hashlink",
- "libsqlite3-sys",
- "smallvec",
- "sqlite-wasm-rs",
-]
-
-[[package]]
 name = "rusqlite_orm"
-version = "2.1.0"
+version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "487df3ecd3ace72aa189453132ff4ea7f20aedcd8d446ef67a74bd25eaac5040"
+checksum = "12812fd9e49f048cb0788192067c606a747f28f90077f8f0ce384107703d28aa"
 dependencies = [
  "blocking",
+ "futures-lite",
  "log",
  "r2d2",
  "r2d2_sqlite",
- "rusqlite 0.43.0",
+ "rusqlite",
  "rusqlite_orm_macros",
  "serde",
  "thiserror 2.0.21",
@@ -3984,9 +3970,9 @@ dependencies = [
 
 [[package]]
 name = "rusqlite_orm_macros"
-version = "2.1.0"
+version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba8bed1157633e3fb99cf812ecb710c266fccdd9f68dc1d5d187d1856b24eb63"
+checksum = "a83ad55c43e1621751ce8d5e7bad52ce280c2fecedf31e2790213f150f22ae67"
 dependencies = [
  "proc-macro2",
  "quote",

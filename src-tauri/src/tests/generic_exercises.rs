@@ -24,13 +24,13 @@ async fn migration_29_moves_hyperextensions_to_the_generic() {
         .collect();
     db.create_schema(&before).await.unwrap();
 
-    db.run_in_transaction(move |tx| {
+    db.run_in_transaction(async move |tx| {
         let mut session = common::session(1);
         session.steps = vec![
             common::set(1, 0, (13, 1), 15, 10.0),
             common::set(1, 1, (13, 0), 12, 0.0),
         ];
-        common::insert_session(tx, session);
+        common::insert_session(tx, session).await;
         tx.execute_batch(
             "UPDATE EXERCISE SET notes = 'Slow', reps = '12-15' WHERE category = 13 AND id = 1;
              INSERT INTO WORKOUT (name, enabled) VALUES ('Back', 1), ('Chest', 1);
@@ -76,7 +76,7 @@ async fn migration_29_moves_hyperextensions_to_the_generic() {
     );
 
     let pending: Vec<(String, bool)> = db
-        .run_in_connection(move |conn| {
+        .run_in_connection(async move |conn| {
             let mut stmt =
                 conn.prepare("SELECT workout, pending FROM WORKOUT_DEVICE ORDER BY workout")?;
             let rows = stmt
@@ -116,7 +116,7 @@ async fn every_category_has_a_generic_exercise() {
 async fn catalog_skips_generics_with_a_real_exercise_of_the_same_name() {
     let db = common::test_db().await;
     let catalog = db
-        .run_in_connection(move |conn| Ok(exercises_catalog(conn)?))
+        .run_in_connection(async move |conn| Ok(exercises_catalog(conn).await?))
         .await
         .unwrap();
 

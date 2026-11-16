@@ -55,9 +55,9 @@ async fn export_contains_all_data() {
     data.heart_rates = Some(vec![120]);
     run.data = Some(data);
 
-    db.run_in_transaction(move |tx| {
-        common::insert_session(tx, strength.clone());
-        common::insert_session(tx, run.clone());
+    db.run_in_transaction(async move |tx| {
+        common::insert_session(tx, strength.clone()).await;
+        common::insert_session(tx, run.clone()).await;
         BodyMetricRepository::insert()
             .item(&mut BodyMetric {
                 date: 1,
@@ -66,7 +66,8 @@ async fn export_contains_all_data() {
                 muscle_mass: 62.0,
                 water_ratio: 55.0,
             })
-            .execute_in(tx)?;
+            .execute_in(tx)
+            .await?;
         Ok(())
     })
     .await

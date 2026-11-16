@@ -86,7 +86,7 @@ pub fn additional_data(session: u32) -> SessionData {
     }
 }
 
-pub fn insert_session(tx: &Transaction, mut session: Session) {
+pub async fn insert_session(tx: &Transaction<'_>, mut session: Session) {
     let mut sets = std::mem::take(&mut session.steps);
     let mut laps = std::mem::take(&mut session.laps);
     let additional_data = session.data.take();
@@ -94,6 +94,7 @@ pub fn insert_session(tx: &Transaction, mut session: Session) {
     SessionRepository::insert()
         .item(&mut session)
         .execute_in(tx)
+        .await
         .expect("session insert");
 
     if !sets.is_empty() {
@@ -101,7 +102,7 @@ pub fn insert_session(tx: &Transaction, mut session: Session) {
         for set in &mut sets {
             insert = insert.item(set);
         }
-        insert.execute_in(tx).expect("sets insert");
+        insert.execute_in(tx).await.expect("sets insert");
     }
 
     if !laps.is_empty() {
@@ -109,13 +110,14 @@ pub fn insert_session(tx: &Transaction, mut session: Session) {
         for lap in &mut laps {
             insert = insert.item(lap);
         }
-        insert.execute_in(tx).expect("laps insert");
+        insert.execute_in(tx).await.expect("laps insert");
     }
 
     if let Some(mut additional_data) = additional_data {
         SessionDataRepository::insert()
             .item(&mut additional_data)
             .execute_in(tx)
+            .await
             .expect("additional data insert");
     }
 }

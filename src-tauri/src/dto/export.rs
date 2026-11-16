@@ -36,28 +36,30 @@ impl Export {
         db: &DatabasePool,
         lang: Languages,
     ) -> rusqlite_orm::errors::Result<Self> {
-        db.run_in_connection(move |conn| {
-            let body_metrics = BodyMetricRepository::select().fetch_in(conn)?;
-            let mut workouts = WorkoutRepository::select().fetch_in(conn)?;
+        db.run_in_connection(async move |conn| {
+            let body_metrics = BodyMetricRepository::select().fetch_in(conn).await?;
+            let mut workouts = WorkoutRepository::select().fetch_in(conn).await?;
             let mut steps: HashMap<String, Vec<WorkoutStep>> = HashMap::new();
-            for step in WorkoutStepRepository::select().fetch_in(conn)? {
+            for step in WorkoutStepRepository::select().fetch_in(conn).await? {
                 steps.entry(step.workout.clone()).or_default().push(step);
             }
             for workout in &mut workouts {
                 workout.steps = steps.remove(&workout.name).unwrap_or_default();
             }
-            let devices = DeviceRepository::select().fetch_in(conn)?;
-            let settings = SettingsRepository::select().fetch_in(conn)?;
-            let sessions = SessionRepository::select().fetch_in(conn)?;
+            let devices = DeviceRepository::select().fetch_in(conn).await?;
+            let settings = SettingsRepository::select().fetch_in(conn).await?;
+            let sessions = SessionRepository::select().fetch_in(conn).await?;
             let laps = SessionLapRepository::select()
-                .fetch_in(conn)?
+                .fetch_in(conn)
+                .await?
                 .into_iter()
                 .map(LapExport::from)
                 .collect();
 
             let mut additional_datas: HashMap<u32, SessionData> = HashMap::new();
             SessionDataRepository::select()
-                .fetch_in(conn)?
+                .fetch_in(conn)
+                .await?
                 .into_iter()
                 .for_each(|ad| {
                     additional_datas.insert(ad.session, ad);
@@ -67,7 +69,8 @@ impl Export {
 
             let mut series: HashMap<u32, Vec<SessionStep>> = HashMap::new();
             SessionStepRepository::select()
-                .fetch_in(conn)?
+                .fetch_in(conn)
+                .await?
                 .into_iter()
                 .for_each(|s| {
                     used_exercises.insert((s.ex_cat, s.ex_id));

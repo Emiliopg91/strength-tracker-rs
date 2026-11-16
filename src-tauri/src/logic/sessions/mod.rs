@@ -37,7 +37,9 @@ pub async fn get_sessions<R: Runtime>(
 ) -> Result<Vec<SessionListItem>, String> {
     info!("Getting sessions list...");
     pool(app)
-        .run_in_connection(move |conn| Ok(fetch_sessions(conn, limit, None, None, None)?))
+        .run_in_connection(async move |conn| {
+            Ok(fetch_sessions(conn, limit, None, None, None).await?)
+        })
         .await
         .inspect(|l| info!("Retreived {} sessions", l.len()))
         .map_err(|e| {
@@ -65,7 +67,9 @@ pub async fn get_session_details<R: Runtime>(
     );
 
     let res = pool(app)
-        .run_in_connection(move |conn| Ok(fetch_session_details(conn, timestamp, true, true)?))
+        .run_in_connection(async move |conn| {
+            Ok(fetch_session_details(conn, timestamp, true, true).await?)
+        })
         .await;
 
     match res {
@@ -158,7 +162,7 @@ pub async fn save_session_changes<R: Runtime>(
     let (timestamp, sets) = (details.timestamp, details.sets.clone());
 
     let res = pool(app)
-        .run_in_transaction(move |tx| Ok(apply_session_changes(tx, &details)?))
+        .run_in_transaction(async move |tx| Ok(apply_session_changes(tx, &details).await?))
         .await;
 
     match res {

@@ -24,11 +24,12 @@ use crate::{
 };
 
 /// Every workout with its session stats (count, average time and load, latest date), by name.
-pub(super) fn workout_list(
+pub(super) async fn workout_list(
     conn: &rusqlite_orm::rusqlite::Connection,
 ) -> rusqlite_orm::errors::Result<Vec<WorkoutListItem>> {
     let workouts: Vec<_> = WorkoutRepository::select()
-        .fetch_in(conn)?
+        .fetch_in(conn)
+        .await?
         .into_iter()
         .collect();
 
@@ -41,7 +42,8 @@ pub(super) fn workout_list(
         ])
         .where_(Where::NotNull(session_cols::WORKOUT))
         .order_by(OrderBy::Desc(session_cols::DATE))
-        .fetch_in(conn)?;
+        .fetch_in(conn)
+        .await?;
 
     let mut workout_stats = HashMap::new();
     workouts.iter().for_each(|w| {
@@ -73,7 +75,8 @@ pub(super) fn workout_list(
 
     let with_steps: HashSet<_> = WorkoutStepRepository::select()
         .distinct(&[workout_step_cols::WORKOUT])
-        .fetch_in(conn)?
+        .fetch_in(conn)
+        .await?
         .iter()
         .map(|r| r.get_text(workout_step_cols::WORKOUT.as_ref()))
         .collect();
@@ -97,21 +100,24 @@ pub(super) fn workout_list(
 }
 
 /// The workout with its steps, worked muscles and every session with its volume.
-pub(super) fn workout_details(
+pub(super) async fn workout_details(
     conn: &rusqlite_orm::rusqlite::Connection,
     name: &str,
 ) -> rusqlite_orm::errors::Result<WorkoutDetails> {
     info!("Getting details for workout {}", name);
 
-    let mut workout = WorkoutRepository::select_by_id_in(conn, name)?.unwrap();
-    workout.fetch_steps_relationship_in(conn)?;
+    let mut workout = WorkoutRepository::select_by_id_in(conn, name)
+        .await?
+        .unwrap();
+    workout.fetch_steps_relationship_in(conn).await?;
     workout.steps.sort_by_key(|e| e.idx);
 
     let sessions = SessionRepository::select_by_name_in(
         conn,
         name,
         Some(&[OrderBy::Desc(session_cols::DATE)]),
-    )?;
+    )
+    .await?;
 
     let mut exercises = ExerciseRepository::select()
         .where_(Where::InMultipleSub(
@@ -124,9 +130,10 @@ pub(super) fn workout_details(
                 ))
                 .to_subquery(),
         ))
-        .fetch_in(conn)?;
+        .fetch_in(conn)
+        .await?;
 
-    fetch_exercises_muscles(conn, &mut exercises)?;
+    fetch_exercises_muscles(conn, &mut exercises).await?;
     let mut primary_set = HashSet::new();
     let mut secondary_set = HashSet::new();
     for exercise in &exercises {
@@ -167,7 +174,8 @@ pub(super) fn workout_details(
                     .to_subquery(),
             ),
         ]))
-        .fetch_in(conn)?;
+        .fetch_in(conn)
+        .await?;
 
     let mut volume_by_session = HashMap::new();
     for serie in &series {
@@ -215,8 +223,8 @@ pub(super) fn workout_details(
 }
 
 /// Enables or disables the workout and queues the change for the devices that have it.
-pub(super) fn set_workout_enabled(
-    tx: &rusqlite_orm::rusqlite::Transaction,
+pub(super) async fn set_workout_enabled(
+    tx: &rusqlite_orm::rusqlite::Transaction<'_>,
     workout: &str,
     status: bool,
 ) -> rusqlite_orm::errors::Result<()> {
@@ -226,6 +234,7 @@ pub(super) fn set_workout_enabled(
         .where_(Where::Eq(workout_cols::NAME, workout.into()))
         .set(workout_cols::ENABLED, status.into())
         .execute_in(tx)
+        .await
         .map(|_| ());
 
     if res.is_ok() {
@@ -239,7 +248,8 @@ pub(super) fn set_workout_enabled(
                     constants::CONNECT_DEVICE_SERIAL.into(),
                 ),
             ]))
-            .execute_in(tx);
+            .execute_in(tx)
+            .await;
     }
 
     res
@@ -247,12 +257,16 @@ pub(super) fn set_workout_enabled(
 
 /// Inserts the workout, or replaces the notes and steps of an existing one when editing, and
 /// queues it for the devices that already have it.
-pub(super) fn store_workout(
-    tx: &rusqlite_orm::rusqlite::Transaction,
+pub(super) async fn store_workout(
+    tx: &rusqlite_orm::rusqlite::Transaction<'_>,
     workout: &Workout,
     edit: bool,
 ) -> rusqlite_orm::errors::Result<()> {
-    if edit && WorkoutRepository::select_by_id_in(tx, &workout.name)?.is_some() {
+    if edit
+        && WorkoutRepository::select_by_id_in(tx, &workout.name)
+            .await?
+            .is_some()
+    {
         WorkoutRepository::update()
             .set(
                 workout_cols::NOTES,
@@ -266,14 +280,16 @@ pub(super) fn store_workout(
                 .into(),
             )
             .where_(Where::Eq(workout_cols::NAME, workout.name.clone().into()))
-            .execute_in(tx)?;
+            .execute_in(tx)
+            .await?;
 
         WorkoutStepRepository::delete()
             .where_(Where::Eq(
                 workout_step_cols::WORKOUT,
                 workout.name.clone().into(),
             ))
-            .execute_in(tx)?;
+            .execute_in(tx)
+            .await?;
 
         // Re-send the edited workout to every device that already has it
         WorkoutDeviceRepository::update()
@@ -282,10 +298,14 @@ pub(super) fn store_workout(
                 workout_device_cols::WORKOUT,
                 workout.name.clone().into(),
             ))
-            .execute_in(tx)?;
+            .execute_in(tx)
+            .await?;
     } else {
         let mut item = workout.clone();
-        WorkoutRepository::insert().item(&mut item).execute_in(tx)?;
+        WorkoutRepository::insert()
+            .item(&mut item)
+            .execute_in(tx)
+            .await?;
     }
 
     let mut insert = WorkoutStepRepository::insert();
@@ -298,18 +318,18 @@ pub(super) fn store_workout(
         }
         insert = insert.item(step);
     }
-    insert.execute_in(tx)?;
+    insert.execute_in(tx).await?;
 
     Ok(())
 }
 
-pub(super) fn fetch_planning(
+pub(super) async fn fetch_planning(
     conn: &rusqlite_orm::rusqlite::Connection,
 ) -> rusqlite_orm::errors::Result<Vec<WorkoutPlanning>> {
-    WorkoutPlanningRepository::select().fetch_in(conn)
+    WorkoutPlanningRepository::select().fetch_in(conn).await
 }
 
-pub fn insert_planned_workout(
+pub async fn insert_planned_workout(
     conn: &rusqlite_orm::rusqlite::Connection,
     date: u32,
     workout: &str,
@@ -325,10 +345,11 @@ pub fn insert_planned_workout(
     WorkoutPlanningRepository::insert()
         .item(&mut item)
         .execute_in(conn)
+        .await
         .map(|_| ())
 }
 
-pub fn update_schedule_id(
+pub async fn update_schedule_id(
     conn: &rusqlite_orm::rusqlite::Connection,
     date: u32,
     workout: &str,
@@ -344,5 +365,6 @@ pub fn update_schedule_id(
             Where::Eq(workout_planning_cols::WORKOUT, workout.into()),
         ]))
         .execute_in(conn)
+        .await
         .map(|_| ())
 }

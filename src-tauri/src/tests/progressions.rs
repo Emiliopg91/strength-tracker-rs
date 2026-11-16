@@ -19,7 +19,7 @@ const PULL_UP: (u16, u16) = (21, 38);
 
 async fn configure(db: &DatabasePool, exercise: (u16, u16), unilateral: bool, range: &str) {
     let range = range.to_string();
-    db.run_in_transaction(move |tx| {
+    db.run_in_transaction(async move |tx| {
         ExerciseRepository::update()
             .set(exercise::entity::columns::UNILATERAL, unilateral.into())
             .set(exercise::entity::columns::REPS, range.into())
@@ -27,7 +27,8 @@ async fn configure(db: &DatabasePool, exercise: (u16, u16), unilateral: bool, ra
                 Where::Eq(exercise::entity::columns::CATEGORY, exercise.0.into()),
                 Where::Eq(exercise::entity::columns::ID, exercise.1.into()),
             ]))
-            .execute_in(tx)?;
+            .execute_in(tx)
+            .await?;
         Ok(())
     })
     .await
@@ -35,14 +36,15 @@ async fn configure(db: &DatabasePool, exercise: (u16, u16), unilateral: bool, ra
 }
 
 async fn disable_progression(db: &DatabasePool, exercise: (u16, u16)) {
-    db.run_in_transaction(move |tx| {
+    db.run_in_transaction(async move |tx| {
         ExerciseRepository::update()
             .set(exercise::entity::columns::PROGRESSION, false.into())
             .where_(Where::And(vec![
                 Where::Eq(exercise::entity::columns::CATEGORY, exercise.0.into()),
                 Where::Eq(exercise::entity::columns::ID, exercise.1.into()),
             ]))
-            .execute_in(tx)?;
+            .execute_in(tx)
+            .await?;
         Ok(())
     })
     .await
@@ -52,14 +54,14 @@ async fn disable_progression(db: &DatabasePool, exercise: (u16, u16)) {
 /// Logs a session on `date` with one set per `(reps, weight)` pair.
 async fn log_session(db: &DatabasePool, date: u32, exercise: (u16, u16), sets: &[(u16, f32)]) {
     let sets = sets.to_vec();
-    db.run_in_transaction(move |tx| {
+    db.run_in_transaction(async move |tx| {
         let mut session = common::session(date);
         session.steps = sets
             .iter()
             .enumerate()
             .map(|(idx, &(reps, weight))| common::set(date, idx as u8, exercise, reps, weight))
             .collect();
-        common::insert_session(tx, session);
+        common::insert_session(tx, session).await;
         Ok(())
     })
     .await
@@ -69,7 +71,7 @@ async fn log_session(db: &DatabasePool, date: u32, exercise: (u16, u16), sets: &
 /// Programs a workout with three sets of `exercise` at `weight` x `reps`.
 async fn program(db: &DatabasePool, exercise: (u16, u16), weight: f32, reps: u16) {
     let name = format!("Plan {}-{}", exercise.0, exercise.1);
-    db.run_in_transaction(move |tx| {
+    db.run_in_transaction(async move |tx| {
         WorkoutRepository::insert()
             .item(&mut Workout {
                 name: name.clone(),
@@ -79,7 +81,8 @@ async fn program(db: &DatabasePool, exercise: (u16, u16), weight: f32, reps: u16
                 connect_id: None,
                 connect_created_time: None,
             })
-            .execute_in(tx)?;
+            .execute_in(tx)
+            .await?;
 
         let mut steps: Vec<_> = (0..3)
             .map(|idx| {
@@ -99,7 +102,7 @@ async fn program(db: &DatabasePool, exercise: (u16, u16), weight: f32, reps: u16
         for step in &mut steps {
             insert = insert.item(step);
         }
-        insert.execute_in(tx)?;
+        insert.execute_in(tx).await?;
         Ok(())
     })
     .await
@@ -107,8 +110,8 @@ async fn program(db: &DatabasePool, exercise: (u16, u16), weight: f32, reps: u16
 }
 
 async fn suggestion(db: &DatabasePool, exercise: (u16, u16)) -> Option<ProgressionSuggestion> {
-    db.run_in_connection(move |conn| {
-        Ok(fetch_progression_suggestion(conn, exercise.0, exercise.1)?)
+    db.run_in_connection(async move |conn| {
+        Ok(fetch_progression_suggestion(conn, exercise.0, exercise.1).await?)
     })
     .await
     .unwrap()
@@ -342,10 +345,11 @@ async fn steps_of_disabled_workouts_give_no_suggestion() {
     configure(&db, BENCH, false, "8-10-12").await;
     log_session(&db, 1, BENCH, &[(12, 100.0), (11, 100.0)]).await;
     program(&db, BENCH, 100.0, 10).await;
-    db.run_in_transaction(move |tx| {
+    db.run_in_transaction(async move |tx| {
         WorkoutRepository::update()
             .set(workout::entity::columns::ENABLED, false.into())
-            .execute_in(tx)?;
+            .execute_in(tx)
+            .await?;
         Ok(())
     })
     .await
@@ -372,12 +376,13 @@ async fn light_warmup_set_in_session_does_not_block_the_suggestion() {
     let db = common::test_db().await;
     configure(&db, BENCH, false, "8-10-12").await;
     log_session(&db, 1, BENCH, &[(12, 100.0), (12, 100.0)]).await;
-    db.run_in_transaction(move |tx| {
+    db.run_in_transaction(async move |tx| {
         let mut warmup = common::set(1, 2, BENCH, 15, 40.0);
         warmup.kind = StepType::Warmup;
         SessionStepRepository::insert()
             .item(&mut warmup)
-            .execute_in(tx)?;
+            .execute_in(tx)
+            .await?;
         Ok(())
     })
     .await
@@ -393,7 +398,7 @@ async fn programmed_warmup_alone_does_not_trigger_the_suggestion() {
     configure(&db, BENCH, false, "8-10-12").await;
     log_session(&db, 1, BENCH, &[(10, 100.0), (10, 100.0)]).await;
     program(&db, BENCH, 100.0, 12).await;
-    db.run_in_transaction(move |tx| {
+    db.run_in_transaction(async move |tx| {
         WorkoutStepRepository::insert()
             .item(&mut WorkoutStep::active(
                 "Plan 0-1",
@@ -405,7 +410,8 @@ async fn programmed_warmup_alone_does_not_trigger_the_suggestion() {
                 None,
                 None,
             ))
-            .execute_in(tx)?;
+            .execute_in(tx)
+            .await?;
         Ok(())
     })
     .await
@@ -425,7 +431,7 @@ async fn progression_suggestions_lists_only_exercises_with_a_suggestion() {
     log_session(&db, 2, CABLE_ROW, &[(12, 50.0), (12, 50.0)]).await;
 
     let suggested = db
-        .run_in_connection(move |conn| Ok(progression_suggestions(conn)?))
+        .run_in_connection(async move |conn| Ok(progression_suggestions(conn).await?))
         .await
         .unwrap();
 

@@ -12,12 +12,13 @@ const SQUAT: (u16, u16) = (28, 0);
 const BENCH: (u16, u16) = (0, 0);
 
 async fn pr_sets(db: &DatabasePool) -> Vec<(u32, u8, u16, u16)> {
-    db.run_in_connection(move |conn| {
+    db.run_in_connection(async move |conn| {
         Ok(SessionStepRepository::select_by_personal_records_in(
             conn,
             true,
             Some(&[OrderBy::Asc(session_step::entity::columns::EX_CAT)]),
-        )?
+        )
+        .await?
         .into_iter()
         .map(|s| (s.session, s.idx, s.ex_cat.unwrap(), s.ex_id.unwrap()))
         .collect())
@@ -27,7 +28,7 @@ async fn pr_sets(db: &DatabasePool) -> Vec<(u32, u8, u16, u16)> {
 }
 
 async fn insert_and_update(db: &DatabasePool, sessions: Vec<(u32, Vec<SessionStep>)>) {
-    db.run_in_transaction(move |tx| {
+    db.run_in_transaction(async move |tx| {
         let mut exercises = HashSet::new();
         for (date, sets) in &sessions {
             let mut session = common::session(*date);
@@ -35,9 +36,9 @@ async fn insert_and_update(db: &DatabasePool, sessions: Vec<(u32, Vec<SessionSte
                 exercises.insert((s.ex_cat.unwrap(), s.ex_id.unwrap()));
             }
             session.steps = sets.clone();
-            common::insert_session(tx, session);
+            common::insert_session(tx, session).await;
         }
-        update_prs(tx, &exercises, &[])?;
+        update_prs(tx, &exercises, &[]).await?;
         Ok(())
     })
     .await

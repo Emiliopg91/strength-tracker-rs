@@ -29,7 +29,7 @@ pub async fn get_exercises<R: Runtime>(
 ) -> Result<Vec<ExerciseListItem>, String> {
     info!("Getting exercises list...");
     pool(app)
-        .run_in_connection(move |conn| Ok(exercise_list(conn)?))
+        .run_in_connection(async move |conn| Ok(exercise_list(conn).await?))
         .await
         .inspect(|l| info!("Retreived {} exercises", l.len()))
         .map_err(|e| {
@@ -54,7 +54,9 @@ pub async fn get_exercise_details<R: Runtime>(
         category, id
     );
     pool(app)
-        .run_in_connection(move |conn| Ok(fetch_exercise_details(conn, category, id, None)?))
+        .run_in_connection(async move |conn| {
+            Ok(fetch_exercise_details(conn, category, id, None).await?)
+        })
         .await
         .inspect(|_| info!("Found details for exercise {} - {}", category, id))
         .map_err(|e| {
@@ -71,7 +73,7 @@ pub async fn get_exercises_catalog<R: Runtime>(
     app: &AppHandle<R>,
 ) -> Result<HashMap<u16, Vec<u16>>, String> {
     pool(app)
-        .run_in_connection(move |conn| Ok(exercises_catalog(conn)?))
+        .run_in_connection(async move |conn| Ok(exercises_catalog(conn).await?))
         .await
         .map_err(|e: DatabaseError| e.to_string())
 }
@@ -154,7 +156,9 @@ pub async fn get_progression_suggestion<R: Runtime>(
     id: u16,
 ) -> Result<Option<ProgressionSuggestion>, String> {
     pool(app)
-        .run_in_connection(move |conn| Ok(fetch_progression_suggestion(conn, category, id)?))
+        .run_in_connection(async move |conn| {
+            Ok(fetch_progression_suggestion(conn, category, id).await?)
+        })
         .await
         .map_err(|e: DatabaseError| e.to_string())
 }
@@ -168,7 +172,9 @@ pub async fn apply_progression_suggestion<R: Runtime>(
     suggestion: ProgressionSuggestion,
 ) -> Result<(), String> {
     let res = pool(app)
-        .run_in_transaction(move |tx| Ok(apply_progression(tx, category, id, &suggestion)?))
+        .run_in_transaction(async move |tx| {
+            Ok(apply_progression(tx, category, id, &suggestion).await?)
+        })
         .await
         .map_err(|e| e.to_string());
 
@@ -205,7 +211,9 @@ pub async fn save_exercise_notes<R: Runtime>(
     };
 
     let workouts = pool(app)
-        .run_in_transaction(move |tx| Ok(update_exercise_notes(tx, category, id, notes.clone())?))
+        .run_in_transaction(async move |tx| {
+            Ok(update_exercise_notes(tx, category, id, notes.clone()).await?)
+        })
         .await
         .map_err(|e| e.to_string())?;
 
@@ -219,7 +227,7 @@ pub async fn save_exercise_notes<R: Runtime>(
 
 pub async fn available_any_progression_suggestions(app: &AppHandle) -> bool {
     pool(app)
-        .run_in_connection(move |conn| Ok(any_progression_suggestion(conn)?))
+        .run_in_connection(async move |conn| Ok(any_progression_suggestion(conn).await?))
         .await
         .unwrap_or(false)
 }

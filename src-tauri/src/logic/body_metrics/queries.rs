@@ -11,7 +11,7 @@ use crate::{
 };
 
 /// Lists all body measurements, newest first.
-pub(crate) fn fetch_body_measures(
+pub(crate) async fn fetch_body_measures(
     conn: &rusqlite_orm::rusqlite::Connection,
     from_to: Option<(u32, u32)>,
 ) -> rusqlite_orm::errors::Result<Vec<BodyMetricListItem>> {
@@ -25,7 +25,8 @@ pub(crate) fn fetch_body_measures(
     }
 
     Ok(query
-        .fetch_in(conn)?
+        .fetch_in(conn)
+        .await?
         .iter()
         .map(BodyMetricListItem::from)
         .collect())

@@ -64,7 +64,7 @@ pub(crate) async fn write_session_fit<R: Runtime>(
     weight_unit: WeightUnit,
 ) -> Result<(), String> {
     let session = pool(app)
-        .run_in_connection(move |conn| Ok(full_session(conn, timestamp)?))
+        .run_in_connection(async move |conn| Ok(full_session(conn, timestamp).await?))
         .await
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("Session {timestamp} not found"))?;
@@ -102,7 +102,7 @@ pub(crate) async fn import_file_paths<R: Runtime>(
     .expect("FIT reading task panicked");
 
     let res = pool(app)
-        .run_in_transaction(move |tx| Ok(import_file_list(tx, &files)?))
+        .run_in_transaction(async move |tx| Ok(import_file_list(tx, &files).await?))
         .await
         .map_err(|e| e.to_string());
 
@@ -139,8 +139,8 @@ pub(crate) async fn import_pending_sessions<R: Runtime>(
     let tx_files = Arc::clone(&files);
     let mut tx_device = device.clone();
     let res = pool(app)
-        .run_in_transaction(move |tx| {
-            let imported = import_device_files(tx, &tx_files, &mut tx_device, sync_mark)?;
+        .run_in_transaction(async move |tx| {
+            let imported = import_device_files(tx, &tx_files, &mut tx_device, sync_mark).await?;
             Ok((imported, tx_device))
         })
         .await;

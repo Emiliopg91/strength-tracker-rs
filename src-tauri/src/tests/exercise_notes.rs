@@ -25,7 +25,7 @@ async fn program(db: &DatabasePool, name: &str, steps: &[((u16, u16), Option<&st
         .iter()
         .map(|(exercise, notes)| (*exercise, notes.map(str::to_string)))
         .collect();
-    db.run_in_transaction(move |tx| {
+    db.run_in_transaction(async move |tx| {
         WorkoutRepository::insert()
             .item(&mut Workout {
                 name: name.to_string(),
@@ -35,7 +35,8 @@ async fn program(db: &DatabasePool, name: &str, steps: &[((u16, u16), Option<&st
                 connect_id: None,
                 connect_created_time: None,
             })
-            .execute_in(tx)?;
+            .execute_in(tx)
+            .await?;
 
         let mut steps: Vec<_> = steps
             .iter()
@@ -57,7 +58,7 @@ async fn program(db: &DatabasePool, name: &str, steps: &[((u16, u16), Option<&st
         for step in &mut steps {
             insert = insert.item(step);
         }
-        insert.execute_in(tx)?;
+        insert.execute_in(tx).await?;
 
         for device in [WATCH, EDGE] {
             WorkoutDeviceRepository::insert()
@@ -66,7 +67,8 @@ async fn program(db: &DatabasePool, name: &str, steps: &[((u16, u16), Option<&st
                     device: device.to_string(),
                     pending: false,
                 })
-                .execute_in(tx)?;
+                .execute_in(tx)
+                .await?;
         }
         Ok(())
     })
@@ -76,7 +78,7 @@ async fn program(db: &DatabasePool, name: &str, steps: &[((u16, u16), Option<&st
 
 async fn setup() -> DatabasePool {
     let db = common::test_db().await;
-    db.run_in_transaction(move |tx| {
+    db.run_in_transaction(async move |tx| {
         for serial in [WATCH, EDGE] {
             DeviceRepository::insert()
                 .item(&mut Device {
@@ -88,7 +90,8 @@ async fn setup() -> DatabasePool {
                     connect: false,
                     strength_workout: true,
                 })
-                .execute_in(tx)?;
+                .execute_in(tx)
+                .await?;
         }
         Ok(())
     })
@@ -99,10 +102,12 @@ async fn setup() -> DatabasePool {
 
 async fn disable(db: &DatabasePool, name: &str) {
     let name = name.to_string();
-    db.run_in_transaction(move |tx| {
-        let mut workout = WorkoutRepository::select_by_id_in(tx, &name)?.unwrap();
+    db.run_in_transaction(async move |tx| {
+        let mut workout = WorkoutRepository::select_by_id_in(tx, &name)
+            .await?
+            .unwrap();
         workout.enabled = false;
-        Ok(workout.update_by_id_in(tx)?)
+        Ok(workout.update_by_id_in(tx).await?)
     })
     .await
     .unwrap();
@@ -111,7 +116,9 @@ async fn disable(db: &DatabasePool, name: &str) {
 async fn save_notes(db: &DatabasePool, exercise: (u16, u16), notes: Option<&str>) -> Vec<String> {
     let notes = notes.map(str::to_string);
     let mut workouts = db
-        .run_in_transaction(move |tx| Ok(update_exercise_notes(tx, exercise.0, exercise.1, notes)?))
+        .run_in_transaction(async move |tx| {
+            Ok(update_exercise_notes(tx, exercise.0, exercise.1, notes).await?)
+        })
         .await
         .unwrap();
     workouts.sort();
@@ -224,10 +231,12 @@ async fn clearing_notes_queues_workouts() {
     let db = setup().await;
     program(&db, "Push", &[(BENCH, None)]).await;
     save_notes(&db, BENCH, Some("Elbows in")).await;
-    db.run_in_transaction(move |tx| {
-        let mut device = WorkoutDeviceRepository::select_by_id_in(tx, "Push", WATCH)?.unwrap();
+    db.run_in_transaction(async move |tx| {
+        let mut device = WorkoutDeviceRepository::select_by_id_in(tx, "Push", WATCH)
+            .await?
+            .unwrap();
         device.pending = false;
-        Ok(device.update_by_id_in(tx)?)
+        Ok(device.update_by_id_in(tx).await?)
     })
     .await
     .unwrap();

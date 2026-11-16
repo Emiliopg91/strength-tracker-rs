@@ -21,7 +21,7 @@ const FROM: u32 = 1_794_783_600;
 async fn setup(plans: &[(u32, &'static str)]) -> DatabasePool {
     let db = common::test_db().await;
     let plans = plans.to_vec();
-    db.run_in_transaction(move |tx| {
+    db.run_in_transaction(async move |tx| {
         for (name, id, created) in [
             ("a", "1746212841", Some(1_793_401_668)),
             ("b", "1746213483", None),
@@ -35,7 +35,8 @@ async fn setup(plans: &[(u32, &'static str)]) -> DatabasePool {
                     connect_id: Some(id.to_string()),
                     connect_created_time: created,
                 })
-                .execute_in(tx)?;
+                .execute_in(tx)
+                .await?;
         }
         for (date, workout) in plans {
             WorkoutPlanningRepository::insert()
@@ -46,7 +47,8 @@ async fn setup(plans: &[(u32, &'static str)]) -> DatabasePool {
                     connect_id: None,
                     workout_obj: None,
                 })
-                .execute_in(tx)?;
+                .execute_in(tx)
+                .await?;
         }
         Ok(())
     })
@@ -56,7 +58,7 @@ async fn setup(plans: &[(u32, &'static str)]) -> DatabasePool {
 }
 
 async fn between(db: &DatabasePool, from: u32, to: u32) -> Vec<WorkoutPlanning> {
-    db.run_in_connection(move |conn| Ok(plans_between(conn, from, to)?))
+    db.run_in_connection(async move |conn| Ok(plans_between(conn, from, to).await?))
         .await
         .unwrap()
 }
@@ -93,7 +95,7 @@ async fn listed_plans_come_with_their_workout() {
 
 /// Registers the devices `watch` and `other` and links workouts to devices as `(workout, device, pending)`.
 async fn link(db: &DatabasePool, links: Vec<(&'static str, &'static str, bool)>) {
-    db.run_in_transaction(move |tx| {
+    db.run_in_transaction(async move |tx| {
         for serial in ["watch", "other", constants::CONNECT_DEVICE_SERIAL] {
             DeviceRepository::insert()
                 .or_ignore()
@@ -106,7 +108,8 @@ async fn link(db: &DatabasePool, links: Vec<(&'static str, &'static str, bool)>)
                     connect: serial == constants::CONNECT_DEVICE_SERIAL,
                     strength_workout: true,
                 })
-                .execute_in(tx)?;
+                .execute_in(tx)
+                .await?;
         }
         for (workout, device, pending) in links {
             WorkoutDeviceRepository::insert()
@@ -115,7 +118,8 @@ async fn link(db: &DatabasePool, links: Vec<(&'static str, &'static str, bool)>)
                     device: device.to_string(),
                     pending,
                 })
-                .execute_in(tx)?;
+                .execute_in(tx)
+                .await?;
         }
         Ok(())
     })
@@ -169,14 +173,15 @@ async fn new_connect_creation_time_queues_the_workout_for_its_devices() {
     .await;
 
     let changed = db
-        .run_in_transaction(|tx| {
+        .run_in_transaction(async |tx| {
             Ok(set_connect_created_times(
                 tx,
                 &[
                     ("1746213483".to_string(), 1_793_500_000),
                     ("1746212841".to_string(), 1_793_401_668),
                 ],
-            )?)
+            )
+            .await?)
         })
         .await
         .unwrap();

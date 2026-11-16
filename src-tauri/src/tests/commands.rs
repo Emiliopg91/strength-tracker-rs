@@ -90,10 +90,10 @@ async fn workout_steps(app: &App<MockRuntime>, name: &str) -> Vec<WorkoutStep> {
 
 async fn insert_session(app: &App<MockRuntime>, date: u32, reps: u16, weight: f32) {
     app.state::<DatabasePool>()
-        .run_in_transaction(move |tx| {
+        .run_in_transaction(async move |tx| {
             let mut session = common::session(date);
             session.steps = vec![common::set(date, 0, BENCH, reps, weight)];
-            common::insert_session(tx, session);
+            common::insert_session(tx, session).await;
             Ok(())
         })
         .await
@@ -196,7 +196,7 @@ async fn workout_for_an_unplugged_device_is_left_pending() {
     )
     .await;
     app.state::<DatabasePool>()
-        .run_in_transaction(move |tx| {
+        .run_in_transaction(async move |tx| {
             DeviceRepository::insert()
                 .item(&mut Device {
                     serial: "watch".to_string(),
@@ -207,7 +207,8 @@ async fn workout_for_an_unplugged_device_is_left_pending() {
                     connect: false,
                     strength_workout: true,
                 })
-                .execute_in(tx)?;
+                .execute_in(tx)
+                .await?;
             Ok(())
         })
         .await

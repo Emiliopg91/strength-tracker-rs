@@ -39,7 +39,7 @@ pub async fn get_workout_list<R: Runtime>(
 ) -> Result<Vec<WorkoutListItem>, String> {
     info!("Getting workouts list...");
     pool(app)
-        .run_in_connection(move |conn| Ok(workout_list(conn)?))
+        .run_in_connection(async move |conn| Ok(workout_list(conn).await?))
         .await
         .inspect(|l| info!("Retreived {} workouts", l.len()))
         .map_err(|e| {
@@ -60,7 +60,7 @@ pub async fn get_workout_details<R: Runtime>(
 ) -> Result<WorkoutDetails, String> {
     let name = name.to_string();
     pool(app)
-        .run_in_connection(move |conn| Ok(workout_details(conn, &name)?))
+        .run_in_connection(async move |conn| Ok(workout_details(conn, &name).await?))
         .await
         .inspect(|l| info!("Found details for workout {}", l.name))
         .map_err(|e| {
@@ -81,7 +81,7 @@ pub async fn set_workout_status<R: Runtime>(
     let name = workout;
     let workout = workout.to_string();
     let res = pool(app)
-        .run_in_transaction(move |tx| Ok(set_workout_enabled(tx, &workout, status)?))
+        .run_in_transaction(async move |tx| Ok(set_workout_enabled(tx, &workout, status).await?))
         .await
         .map_err(|e| e.to_string());
 
@@ -107,7 +107,7 @@ pub async fn save_workout<R: Runtime>(
     let name = workout.name.clone();
     let name_cl = workout.name.clone();
     let res = pool(app)
-        .run_in_transaction(move |tx| Ok(store_workout(tx, &workout, edit)?))
+        .run_in_transaction(async move |tx| Ok(store_workout(tx, &workout, edit).await?))
         .await;
 
     let lang = settings.read().unwrap().language;
@@ -167,7 +167,7 @@ pub async fn get_planned_workouts<R: Runtime>(
     app: &AppHandle<R>,
 ) -> Result<Vec<WorkoutPlanListItem>, String> {
     Ok(pool(app)
-        .run_in_connection(|conn| Ok(fetch_planning(conn)?))
+        .run_in_connection(async |conn| Ok(fetch_planning(conn).await?))
         .await
         .unwrap_or_default()
         .iter()
@@ -182,9 +182,11 @@ pub async fn remove_planned_workout<R: Runtime>(
 ) -> Result<(), String> {
     let workout = workout.to_string();
     let res = pool(app)
-        .run_in_connection(move |conn| {
-            let entry = WorkoutPlanningRepository::select_by_id_in(conn, date, &workout)?.unwrap();
-            entry.delete_by_id_in(conn)?;
+        .run_in_connection(async move |conn| {
+            let entry = WorkoutPlanningRepository::select_by_id_in(conn, date, &workout)
+                .await?
+                .unwrap();
+            entry.delete_by_id_in(conn).await?;
             Ok(entry.connect_id)
         })
         .await
@@ -211,8 +213,8 @@ pub async fn add_planned_workout<R: Runtime>(
     let workout = workout.to_string();
     let workout_cl = workout.clone();
     let res = pool(app)
-        .run_in_connection(move |conn| {
-            insert_planned_workout(conn, date, workout_cl.as_str())?;
+        .run_in_connection(async move |conn| {
+            insert_planned_workout(conn, date, workout_cl.as_str()).await?;
             Ok(())
         })
         .await

@@ -46,7 +46,7 @@ impl Settings {
             ),
         ];
         database
-            .run_in_transaction(move |tx| {
+            .run_in_transaction(async move |tx| {
                 for (name, value) in values {
                     SettingsRepository::insert()
                         .or_replace()
@@ -54,7 +54,8 @@ impl Settings {
                             name: name.to_string(),
                             value,
                         })
-                        .execute_in(tx)?;
+                        .execute_in(tx)
+                        .await?;
                 }
                 Ok(())
             })

@@ -52,7 +52,7 @@ pub async fn get_report_data<R: Runtime>(
     let lang = settings.read().unwrap().language;
 
     let res = pool(app)
-        .run_in_connection(move |conn| Ok(report_data(conn, from, to)?))
+        .run_in_connection(async move |conn| Ok(report_data(conn, from, to).await?))
         .await
         .map(|mut data| {
             // Listed by name, which depends on the language

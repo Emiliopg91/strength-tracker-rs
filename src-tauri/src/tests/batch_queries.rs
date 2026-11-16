@@ -47,10 +47,10 @@ async fn batched_muscles_match_the_relationship_fetcher() {
     let mut one_by_one = batched.clone();
 
     let (batched, one_by_one) = db
-        .run_in_connection(move |conn| {
-            fetch_exercises_muscles(conn, &mut batched)?;
+        .run_in_connection(async move |conn| {
+            fetch_exercises_muscles(conn, &mut batched).await?;
             for exercise in &mut one_by_one {
-                exercise.fetch_muscles_relationship_in(conn)?;
+                exercise.fetch_muscles_relationship_in(conn).await?;
             }
             Ok((batched, one_by_one))
         })
@@ -80,7 +80,7 @@ fn normalized(details: &[crate::dto::sessions::SessionDetails]) -> serde_json::V
 #[tokio::test]
 async fn batched_session_details_match_single_ones_in_the_given_order() {
     let db = common::test_db().await;
-    db.run_in_transaction(move |tx| {
+    db.run_in_transaction(async move |tx| {
         for (date, exercise) in [(1, BENCH), (2, CABLE_ROW)] {
             let mut session = common::session(date);
             session.steps = vec![
@@ -89,7 +89,7 @@ async fn batched_session_details_match_single_ones_in_the_given_order() {
             ];
             session.laps = vec![common::lap(date, 0, None)];
             session.data = Some(common::additional_data(date));
-            common::insert_session(tx, session);
+            common::insert_session(tx, session).await;
         }
         Ok(())
     })
@@ -97,11 +97,11 @@ async fn batched_session_details_match_single_ones_in_the_given_order() {
     .unwrap();
 
     let (batched, single) = db
-        .run_in_connection(move |conn| {
-            let batched = fetch_sessions_details(conn, &[2, 1], true, true)?;
+        .run_in_connection(async move |conn| {
+            let batched = fetch_sessions_details(conn, &[2, 1], true, true).await?;
             let single = vec![
-                fetch_session_details(conn, 2, true, true)?,
-                fetch_session_details(conn, 1, true, true)?,
+                fetch_session_details(conn, 2, true, true).await?,
+                fetch_session_details(conn, 1, true, true).await?,
             ];
             Ok((batched, single))
         })
@@ -120,7 +120,9 @@ async fn no_sessions_give_no_details() {
     let db = common::test_db().await;
 
     let details = db
-        .run_in_connection(move |conn| Ok(fetch_sessions_details(conn, &[], true, true)?))
+        .run_in_connection(async move |conn| {
+            Ok(fetch_sessions_details(conn, &[], true, true).await?)
+        })
         .await
         .unwrap();
 

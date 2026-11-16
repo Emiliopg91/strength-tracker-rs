@@ -37,7 +37,7 @@ impl TryFrom<&WeightEntry> for BodyMetric {
 ///
 /// Written against the raw table rather than the entity: later migrations rename its columns,
 /// which don't exist yet when this one runs.
-pub fn migration_21(tx: &Transaction) -> Result<(), DatabaseError> {
+pub async fn migration_21(tx: &Transaction<'_>) -> Result<(), DatabaseError> {
     tx.execute_batch(
         "CREATE TEMP TABLE BODY_METRIC_OLD AS SELECT * FROM BODY_METRIC;
          DELETE FROM BODY_METRIC;",

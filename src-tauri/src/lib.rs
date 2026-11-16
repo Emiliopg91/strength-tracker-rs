@@ -105,7 +105,7 @@ fn initialize(app: &AppHandle) -> (DatabasePool, Settings, ConnectClient, MtpCli
                 }
                 // Keeps the planner statistics current, analyzing only the tables that need it
                 if let Err(e) = database
-                    .run_in_connection(|conn| Ok(conn.execute_batch("PRAGMA optimize;")?))
+                    .run_in_connection(async |conn| Ok(conn.execute_batch("PRAGMA optimize;")?))
                     .await
                 {
                     warn!("Could not optimize database: {}", e);
@@ -126,7 +126,7 @@ fn initialize(app: &AppHandle) -> (DatabasePool, Settings, ConnectClient, MtpCli
 
                 #[cfg(debug_assertions)]
                 let _ = database
-                    .run_in_transaction(|tx| Ok(update_all_prs(tx)?))
+                    .run_in_transaction(async |tx| Ok(update_all_prs(tx).await?))
                     .await;
 
                 settings
@@ -164,7 +164,7 @@ fn schema_ddls() -> Vec<DdlVersion> {
 
     for ddl in &mut ddls {
         ddl.update_fn = match ddl.version {
-            21 => Some(|tx| migration_21(tx)),
+            21 => Some(|tx| Box::pin(migration_21(tx))),
             _ => None,
         };
     }

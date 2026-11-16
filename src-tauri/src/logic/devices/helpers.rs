@@ -123,8 +123,8 @@ pub(super) async fn on_device_connected<R: Runtime>(
     };
     let mut enrolled = device.clone();
     let enrol_res = pool(app)
-        .run_in_transaction(move |tx| {
-            enrol_usb_device(tx, &mut enrolled)?;
+        .run_in_transaction(async move |tx| {
+            enrol_usb_device(tx, &mut enrolled).await?;
             Ok(enrolled)
         })
         .await;
@@ -216,7 +216,7 @@ pub(crate) async fn send_enabled_workout_to_connect_devices<R: Runtime>(
     let _guard = PUSH_LOCK.lock().await;
     let name = workout.to_string();
     let serials = match pool(app)
-        .run_in_connection(move |conn| Ok(pending_connect_devices(conn, &name)?))
+        .run_in_connection(async move |conn| Ok(pending_connect_devices(conn, &name).await?))
         .await
     {
         Ok(serials) => serials,
@@ -403,7 +403,7 @@ pub(super) async fn store_pending_workouts<R: Runtime>(
     for (mut workout, file) in workouts_to_insert {
         let name = workout.name.clone();
         let res = db
-            .run_in_transaction(move |tx| Ok(store_workout_steps(tx, &mut workout)?))
+            .run_in_transaction(async move |tx| Ok(store_workout_steps(tx, &mut workout).await?))
             .await;
 
         if let Err(e) = res {
@@ -462,7 +462,7 @@ pub(super) async fn send_workout_to_device<R: Runtime>(
 ) -> Result<(), String> {
     let name = workout.to_string();
     let workout = pool(app)
-        .run_in_connection(move |conn| Ok(workout_for_device(conn, &name)?))
+        .run_in_connection(async move |conn| Ok(workout_for_device(conn, &name).await?))
         .await
         .map_err(|e| e.to_string())?;
 
@@ -554,7 +554,7 @@ pub(super) async fn send_schedule_to_device<R: Runtime>(
     };
 
     let plans = match pool(app)
-        .run_in_connection(move |conn| Ok(plans_between(conn, from, to)?))
+        .run_in_connection(async move |conn| Ok(plans_between(conn, from, to).await?))
         .await
     {
         Ok(plans) => plans,

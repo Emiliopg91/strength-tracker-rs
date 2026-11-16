@@ -587,8 +587,8 @@ async fn step_exercises_are_filled_with_their_category() {
     ];
 
     let steps = db
-        .run_in_connection(move |conn| {
-            crate::logic::connect::queries::fetch_step_exercises(conn, &mut steps)?;
+        .run_in_connection(async move |conn| {
+            crate::logic::connect::queries::fetch_step_exercises(conn, &mut steps).await?;
             Ok(steps)
         })
         .await

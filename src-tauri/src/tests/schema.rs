@@ -22,7 +22,7 @@ async fn schema_version_matches_last_ddl() {
         .unwrap();
 
     let version: u16 = db
-        .run_in_connection(move |conn| {
+        .run_in_connection(async move |conn| {
             Ok(conn.pragma_query_value(None, "user_version", |r| r.get(0))?)
         })
         .await
@@ -58,8 +58,8 @@ async fn migration_26_turns_rest_flag_into_kind() {
         .collect();
     db.create_schema(&before).await.unwrap();
 
-    db.run_in_transaction(move |tx| {
-        insert_legacy_session(tx, 1)?;
+    db.run_in_transaction(async move |tx| {
+        insert_legacy_session(tx, 1).await?;
         tx.execute_batch(
             "INSERT INTO SESSION_STEP (session, idx, exercise_category, exercise_id, reps, weight, pr, rest)
              VALUES (1, 0, 0, 1, 10, 50, 0, 0), (1, 1, NULL, NULL, 0, 0, 0, 1);",
@@ -76,7 +76,7 @@ async fn migration_26_turns_rest_flag_into_kind() {
     assert_eq!(kinds, [StepType::Exercise, StepType::Rest]);
 
     let has_rest: bool = db
-        .run_in_connection(move |conn| {
+        .run_in_connection(async move |conn| {
             Ok(conn
                 .prepare("SELECT 1 FROM pragma_table_info('SESSION_STEP') WHERE name = 'rest'")?
                 .exists([])?)
@@ -100,7 +100,7 @@ async fn body_metrics_migrate_from_lean_mass_to_muscle_mass() {
 
     let midnight = local_midnight(1_700_000_000).unwrap();
     let (early, late) = (midnight + 3_600, midnight + 7_200);
-    db.run_in_transaction(move |tx| {
+    db.run_in_transaction(async move |tx| {
         tx.execute_batch(&format!(
             "INSERT INTO BODY_METRIC (date, weight, fat_ratio, lean_mass, water_ratio)
              VALUES ({early}, 81.0, 18.0, 60.0, 55.0), ({late}, 80.0, 17.0, 61.0, 56.0);"
@@ -140,7 +140,7 @@ async fn session_roundtrip_with_relationships() {
     session.data = Some(data);
 
     let tx_session = session.clone();
-    db.run_in_transaction(move |tx| {
+    db.run_in_transaction(async move |tx| {
         WorkoutRepository::insert()
             .item(&mut crate::dao::workout::Workout {
                 name: "Leg day".to_string(),
@@ -150,20 +150,23 @@ async fn session_roundtrip_with_relationships() {
                 connect_id: None,
                 connect_created_time: None,
             })
-            .execute_in(tx)?;
-        common::insert_session(tx, tx_session);
+            .execute_in(tx)
+            .await?;
+        common::insert_session(tx, tx_session).await;
         Ok(())
     })
     .await
     .unwrap();
 
     let stored = db
-        .run_in_connection(move |conn| {
-            let mut s = SessionRepository::select_by_id_in(conn, 1_700_000_000_u32)?.unwrap();
-            s.fetch_steps_relationship_in(conn)?;
-            s.fetch_laps_relationship_in(conn)?;
-            s.fetch_data_relationship_in(conn)?;
-            s.fetch_workout_obj_relationship_in(conn)?;
+        .run_in_connection(async move |conn| {
+            let mut s = SessionRepository::select_by_id_in(conn, 1_700_000_000_u32)
+                .await?
+                .unwrap();
+            s.fetch_steps_relationship_in(conn).await?;
+            s.fetch_laps_relationship_in(conn).await?;
+            s.fetch_data_relationship_in(conn).await?;
+            s.fetch_workout_obj_relationship_in(conn).await?;
             Ok(s)
         })
         .await
@@ -189,20 +192,20 @@ async fn deleting_a_session_cascades() {
     session.laps = vec![common::lap(1, 0, None)];
     session.data = Some(common::additional_data(1));
 
-    db.run_in_transaction(move |tx| {
-        common::insert_session(tx, session.clone());
-        session.delete_by_id_in(tx)?;
+    db.run_in_transaction(async move |tx| {
+        common::insert_session(tx, session.clone()).await;
+        session.delete_by_id_in(tx).await?;
         Ok(())
     })
     .await
     .unwrap();
 
     let (sets, laps, data) = db
-        .run_in_connection(move |conn| {
+        .run_in_connection(async move |conn| {
             Ok((
-                SessionStepRepository::select().fetch_in(conn)?.len(),
-                SessionLapRepository::select().fetch_in(conn)?.len(),
-                SessionDataRepository::select().fetch_in(conn)?.len(),
+                SessionStepRepository::select().fetch_in(conn).await?.len(),
+                SessionLapRepository::select().fetch_in(conn).await?.len(),
+                SessionDataRepository::select().fetch_in(conn).await?.len(),
             ))
         })
         .await
@@ -219,14 +222,16 @@ async fn set_requires_known_exercise() {
     session.steps = vec![common::set(1, 0, (9999, 9999), 5, 100.0)];
 
     let res = db
-        .run_in_transaction(move |tx| {
+        .run_in_transaction(async move |tx| {
             let mut sets = std::mem::take(&mut session.steps);
             SessionRepository::insert()
                 .item(&mut session.clone())
-                .execute_in(tx)?;
+                .execute_in(tx)
+                .await?;
             SessionStepRepository::insert()
                 .item(&mut sets[0])
-                .execute_in(tx)?;
+                .execute_in(tx)
+                .await?;
             Ok(())
         })
         .await;
@@ -246,8 +251,8 @@ async fn migration_27_nulls_reps_and_weight_only_on_rest_steps() {
         .collect();
     db.create_schema(&before).await.unwrap();
 
-    db.run_in_transaction(move |tx| {
-        insert_legacy_session(tx, 1)?;
+    db.run_in_transaction(async move |tx| {
+        insert_legacy_session(tx, 1).await?;
         tx.execute_batch(
             "INSERT INTO SESSION_STEP (session, idx, exercise_category, exercise_id, reps, weight, pr, duration, kind)
              VALUES (1, 0, 0, 1, 10, 50, 1, 60, 'Exercise'),
@@ -277,7 +282,7 @@ async fn migration_27_nulls_reps_and_weight_only_on_rest_steps() {
     );
 
     let indexes: i64 = db
-        .run_in_connection(move |conn| {
+        .run_in_connection(async move |conn| {
             Ok(conn.query_row(
                 "SELECT count(*) FROM sqlite_master WHERE type = 'index' AND tbl_name = 'SESSION_STEP' AND sql IS NOT NULL",
                 [],
@@ -300,8 +305,8 @@ async fn migration_27_keeps_the_children_of_rebuilt_tables() {
         .collect();
     db.create_schema(&before).await.unwrap();
 
-    db.run_in_transaction(move |tx| {
-        insert_legacy_session(tx, 1)?;
+    db.run_in_transaction(async move |tx| {
+        insert_legacy_session(tx, 1).await?;
         tx.execute_batch(
             "INSERT INTO LAP (session, idx) VALUES (1, 0);
              INSERT INTO ADDITIONAL_DATA (session, max_hr) VALUES (1, 190);
@@ -315,7 +320,7 @@ async fn migration_27_keeps_the_children_of_rebuilt_tables() {
     .unwrap();
     let count = async |table: &str| -> i64 {
         let sql = format!("SELECT count(*) FROM {table}");
-        db.run_in_connection(move |conn| Ok(conn.query_row(&sql, [], |r| r.get(0))?))
+        db.run_in_connection(async move |conn| Ok(conn.query_row(&sql, [], |r| r.get(0))?))
             .await
             .unwrap()
     };
@@ -360,17 +365,17 @@ async fn migration_27_keeps_the_children_of_rebuilt_tables() {
 #[tokio::test]
 async fn catalogs_in_use_cannot_be_deleted() {
     let db = common::test_db().await;
-    db.run_in_transaction(move |tx| {
+    db.run_in_transaction(async move |tx| {
         let mut session = common::session(1);
         session.steps = vec![common::set(1, 0, (0, 1), 10, 50.0)];
-        common::insert_session(tx, session);
+        common::insert_session(tx, session).await;
         Ok(())
     })
     .await
     .unwrap();
     let run = async |sql: &str| {
         let sql = sql.to_string();
-        db.run_in_transaction(move |tx| {
+        db.run_in_transaction(async move |tx| {
             tx.execute_batch(&sql)?;
             Ok(())
         })
@@ -400,7 +405,7 @@ async fn migration_27_turns_workout_step_time_into_seconds() {
         .filter(|d| d.version < 27)
         .collect();
     db.create_schema(&before).await.unwrap();
-    db.run_in_transaction(move |tx| {
+    db.run_in_transaction(async move |tx| {
         tx.execute_batch(
             "INSERT INTO WORKOUT (name) VALUES ('Push');
              INSERT INTO WORKOUT_STEP (workout, idx, kind, time)
@@ -414,7 +419,7 @@ async fn migration_27_turns_workout_step_time_into_seconds() {
     db.create_schema(&schema_ddls()).await.unwrap();
 
     let mut steps = db
-        .run_in_connection(move |conn| {
+        .run_in_connection(async move |conn| {
             let mut stmt = conn.prepare("SELECT time FROM WORKOUT_STEP ORDER BY idx")?;
             let rows = stmt.query_map([], |r| r.get::<_, Option<u32>>(0))?;
             Ok(rows.collect::<Result<Vec<_>, _>>()?)
@@ -437,7 +442,7 @@ async fn migration_28_drops_chart_flag_and_cascades_workout_device() {
         .collect();
     db.create_schema(&before).await.unwrap();
 
-    db.run_in_transaction(move |tx| {
+    db.run_in_transaction(async move |tx| {
         tx.execute_batch(
             "INSERT INTO WORKOUT (name, enabled) VALUES ('a', 1), ('b', 1);
              INSERT INTO WORKOUT_DEVICE (workout, device, pending)
@@ -467,7 +472,7 @@ async fn migration_28_drops_chart_flag_and_cascades_workout_device() {
     );
 
     let has_chart_flag: bool = db
-        .run_in_connection(move |conn| {
+        .run_in_connection(async move |conn| {
             Ok(conn.query_row(
                 "SELECT COUNT(*) > 0 FROM pragma_table_info('SESSION') WHERE name = 'show_exercises_chart'",
                 [],
@@ -493,7 +498,7 @@ async fn migration_30_tunes_indexes() {
     let db = common::test_db().await;
 
     let index_sql = async |name: &'static str| {
-        db.run_in_connection(move |conn| {
+        db.run_in_connection(async move |conn| {
             Ok(conn
                 .query_row(
                     "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = ?1",
@@ -517,7 +522,7 @@ async fn migration_30_tunes_indexes() {
 
     // The ORM renders booleans as `true`, which must still reach the partial index
     let plan: Vec<String> = db
-        .run_in_connection(move |conn| {
+        .run_in_connection(async move |conn| {
             let mut stmt = conn.prepare(
                 "EXPLAIN QUERY PLAN SELECT session FROM SESSION_STEP
                  WHERE pr=true AND exercise_category IS NOT NULL AND exercise_id IS NOT NULL",
@@ -536,7 +541,7 @@ async fn migration_30_tunes_indexes() {
 
     // Lookups by the record flag alone keep SESSION_STEP_PR
     let plan: Vec<String> = db
-        .run_in_connection(move |conn| {
+        .run_in_connection(async move |conn| {
             let mut stmt =
                 conn.prepare("EXPLAIN QUERY PLAN SELECT * FROM SESSION_STEP WHERE pr=true")?;
             let rows = stmt
@@ -554,8 +559,8 @@ async fn migration_30_tunes_indexes() {
 
 /// Inserts a session with raw SQL, using only the columns that exist before migration 28:
 /// the `Session` entity tracks the latest schema, so its inserts fail on older ones.
-fn insert_legacy_session(
-    tx: &rusqlite_orm::rusqlite::Transaction,
+async fn insert_legacy_session(
+    tx: &rusqlite_orm::rusqlite::Transaction<'_>,
     date: u32,
 ) -> rusqlite_orm::rusqlite::Result<()> {
     let session = common::session(date);

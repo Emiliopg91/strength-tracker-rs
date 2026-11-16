@@ -23,7 +23,7 @@ pub async fn get_body_measures<R: Runtime>(
     info!("Getting body measures list...");
 
     pool(app)
-        .run_in_connection(move |conn| Ok(fetch_body_measures(conn, None)?))
+        .run_in_connection(async move |conn| Ok(fetch_body_measures(conn, None).await?))
         .await
         .inspect(|res| info!("Retrieved {} measures", res.len()))
         .map_err(|e| {

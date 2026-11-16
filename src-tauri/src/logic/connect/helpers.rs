@@ -73,9 +73,9 @@ pub(crate) async fn up_to_date_connect<R: Runtime>(app: &AppHandle<R>) {
     align_workouts_connect(app, &connect).await;
 
     let (pending_workouts, pending_plans) = match pool(app)
-        .run_in_connection(move |conn| {
-            let wkts = pending_connect_workouts(conn)?;
-            let plans = pending_connect_plans(conn)?;
+        .run_in_connection(async move |conn| {
+            let wkts = pending_connect_workouts(conn).await?;
+            let plans = pending_connect_plans(conn).await?;
             Ok((wkts, plans))
         })
         .await
@@ -127,7 +127,9 @@ async fn align_workouts_connect<R: Runtime>(app: &AppHandle<R>, connect: &Connec
         .filter_map(|w| w.created_date.map(|c| (w.workout_id.to_string(), c)))
         .collect();
     let res = pool(app)
-        .run_in_transaction(move |tx| Ok(set_connect_created_times(tx, &created_times)?))
+        .run_in_transaction(
+            async move |tx| Ok(set_connect_created_times(tx, &created_times).await?),
+        )
         .await;
 
     match res {
@@ -144,7 +146,9 @@ pub(super) async fn mark_connect_pending<R: Runtime>(
 ) {
     let workouts = workouts.to_vec();
     let res = pool(app)
-        .run_in_connection(move |conn| Ok(set_connect_pending(conn, &workouts, pending)?))
+        .run_in_connection(async move |conn| {
+            Ok(set_connect_pending(conn, &workouts, pending).await?)
+        })
         .await;
 
     if let Err(e) = res {
@@ -162,7 +166,7 @@ pub async fn upload_workout_connect<R: Runtime>(
 
     let id = workout.to_string();
     let mut workout = pool(app)
-        .run_in_connection(move |conn| Ok(workout_with_exercises(conn, &id)?))
+        .run_in_connection(async move |conn| Ok(workout_with_exercises(conn, &id).await?))
         .await
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("Workout {workout} not found"))?;
@@ -210,7 +214,7 @@ pub async fn upload_workout_connect<R: Runtime>(
     let connect_id = workout.connect_id.clone().unwrap();
     if workout.connect_id != original_id || workout.connect_created_time != original_created {
         pool(app)
-            .run_in_transaction(move |tx| Ok(set_connect_keys(tx, &mut workout)?))
+            .run_in_transaction(async move |tx| Ok(set_connect_keys(tx, &mut workout).await?))
             .await
             .map_err(|e| e.to_string())?;
     }
@@ -245,7 +249,7 @@ pub(crate) async fn get_devices_from_connect<R: Runtime>(app_orig: &AppHandle<R>
         .collect();
 
     let res = pool(app_orig)
-        .run_in_transaction(move |tx| Ok(sync_connect_devices(tx, &listed)?))
+        .run_in_transaction(async move |tx| Ok(sync_connect_devices(tx, &listed).await?))
         .await;
 
     match res {
@@ -306,7 +310,9 @@ pub(crate) async fn sync_session_sets_connect<R: Runtime>(
     sets: Vec<SessionStepDto>,
 ) {
     let res = pool(app)
-        .run_in_connection(move |conn| Ok(session_sets_for_connect(conn, timestamp, &sets)?))
+        .run_in_connection(async move |conn| {
+            Ok(session_sets_for_connect(conn, timestamp, &sets).await?)
+        })
         .await;
 
     let (connect_id, updates) = match res {
@@ -407,13 +413,11 @@ pub async fn push_plan_to_connect<R: Runtime>(app: &AppHandle<R>, date: u32, wor
             Ok(schedule_id) => {
                 let workout = workout.to_string();
                 let res = pool(app)
-                    .run_in_connection(move |conn| {
-                        Ok(update_schedule_id(
-                            conn,
-                            date,
-                            &workout,
-                            &schedule_id.to_string(),
-                        )?)
+                    .run_in_connection(async move |conn| {
+                        Ok(
+                            update_schedule_id(conn, date, &workout, &schedule_id.to_string())
+                                .await?,
+                        )
                     })
                     .await;
 

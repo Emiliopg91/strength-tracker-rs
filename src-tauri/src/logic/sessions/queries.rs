@@ -33,7 +33,7 @@ use crate::{
 };
 
 /// Lists sessions newest first (from `min_date` on, if given), flagged with whether they have sets and records.
-pub(super) fn fetch_sessions(
+pub(super) async fn fetch_sessions(
     conn: &rusqlite_orm::rusqlite::Connection,
     from: Option<i32>,
     to: Option<i32>,
@@ -64,9 +64,9 @@ pub(super) fn fetch_sessions(
         select_builder = select_builder.where_(Where::And(conditions))
     }
 
-    let sessions = select_builder.fetch_in(conn)?;
+    let sessions = select_builder.fetch_in(conn).await?;
 
-    let set_flags = session_set_flags(conn, from, to)?;
+    let set_flags = session_set_flags(conn, from, to).await?;
 
     Ok(sessions
         .into_iter()
@@ -82,7 +82,7 @@ pub(super) fn fetch_sessions(
 }
 
 /// Maps every session that has sets (within `[min_date, max_date]`, each bound optional) to whether any of them is a personal record.
-pub(crate) fn session_set_flags(
+pub(crate) async fn session_set_flags(
     conn: &rusqlite_orm::rusqlite::Connection,
     min_date: Option<i32>,
     max_date: Option<i32>,
@@ -103,7 +103,7 @@ pub(crate) fn session_set_flags(
     }
 
     let mut flags: HashMap<u32, bool> = HashMap::new();
-    for row in select_builder.fetch_in(conn)? {
+    for row in select_builder.fetch_in(conn).await? {
         let session = row.get_u32(session_step_cols::SESSION.as_ref());
         let pr = row.get_bool(session_step_cols::PR.as_ref());
         *flags.entry(session).or_default() |= pr;
@@ -111,14 +111,15 @@ pub(crate) fn session_set_flags(
     Ok(flags)
 }
 
-pub(crate) fn fetch_session_details(
+pub(crate) async fn fetch_session_details(
     conn: &rusqlite_orm::rusqlite::Connection,
     timestamp: u32,
     with_add_data: bool,
     with_laps: bool,
 ) -> rusqlite_orm::errors::Result<SessionDetails> {
     Ok(
-        fetch_sessions_details(conn, &[timestamp], with_add_data, with_laps)?
+        fetch_sessions_details(conn, &[timestamp], with_add_data, with_laps)
+            .await?
             .pop()
             .unwrap(),
     )
@@ -129,7 +130,7 @@ pub(crate) fn fetch_session_details(
 ///
 /// # Panics
 /// If any of the sessions doesn't exist.
-pub(crate) fn fetch_sessions_details(
+pub(crate) async fn fetch_sessions_details(
     conn: &rusqlite_orm::rusqlite::Connection,
     timestamps: &[u32],
     with_add_data: bool,
@@ -142,14 +143,16 @@ pub(crate) fn fetch_sessions_details(
 
     let mut sessions: HashMap<u32, Session> = SessionRepository::select()
         .where_(Where::In(session_cols::DATE, dates.clone()))
-        .fetch_in(conn)?
+        .fetch_in(conn)
+        .await?
         .into_iter()
         .map(|s| (s.date, s))
         .collect();
 
     for step in SessionStepRepository::select()
         .where_(Where::In(session_step_cols::SESSION, dates.clone()))
-        .fetch_in(conn)?
+        .fetch_in(conn)
+        .await?
     {
         if let Some(session) = sessions.get_mut(&step.session) {
             session.steps.push(step);
@@ -163,7 +166,8 @@ pub(crate) fn fetch_sessions_details(
                 device_cols::SERIAL,
                 serials.into_iter().map(|s| s.into()).collect(),
             ))
-            .fetch_in(conn)?
+            .fetch_in(conn)
+            .await?
             .into_iter()
             .map(|d| (d.serial.clone(), d))
             .collect();
@@ -178,7 +182,8 @@ pub(crate) fn fetch_sessions_details(
     if with_add_data {
         for add_data in SessionDataRepository::select()
             .where_(Where::In(session_data_cols::SESSION, dates.clone()))
-            .fetch_in(conn)?
+            .fetch_in(conn)
+            .await?
         {
             if let Some(session) = sessions.get_mut(&add_data.session) {
                 session.data = Some(add_data);
@@ -189,7 +194,8 @@ pub(crate) fn fetch_sessions_details(
     if with_laps {
         for lap in SessionLapRepository::select()
             .where_(Where::In(session_lap_cols::SESSION, dates))
-            .fetch_in(conn)?
+            .fetch_in(conn)
+            .await?
         {
             if let Some(session) = sessions.get_mut(&lap.session) {
                 session.laps.push(lap);
@@ -212,9 +218,10 @@ pub(crate) fn fetch_sessions_details(
                     .map(|(cat, id)| vec![(*cat).into(), (*id).into()])
                     .collect(),
             ))
-            .fetch_in(conn)?
+            .fetch_in(conn)
+            .await?
     };
-    fetch_exercises_muscles(conn, &mut exercises)?;
+    fetch_exercises_muscles(conn, &mut exercises).await?;
     let exercises: HashMap<(u16, u16), Exercise> = exercises
         .into_iter()
         .map(|e| ((e.category, e.id), e))
@@ -250,8 +257,8 @@ pub(crate) fn fetch_sessions_details(
 }
 
 /// Parses a batch of `.FIT` files in parallel and inserts each new session (plus its exercises/series/heart rate/GPS/speeds) in the given transaction, then refreshes personal records.
-pub(crate) fn import_file_list(
-    tx: &mut rusqlite_orm::rusqlite::Transaction,
+pub(crate) async fn import_file_list(
+    tx: &mut rusqlite_orm::rusqlite::Transaction<'_>,
     files: &[FitFile],
 ) -> Result<ImportedFiles, DatabaseError> {
     let mut success = Vec::new();
@@ -285,7 +292,8 @@ pub(crate) fn import_file_list(
                 session_cols::DATE,
                 sessions.iter().map(|s| s.date.into()).collect(),
             ))
-            .fetch_in(tx)?
+            .fetch_in(tx)
+            .await?
             .iter()
             .map(|row| row.get_u32(session_cols::DATE.as_ref()))
             .collect()
@@ -295,7 +303,8 @@ pub(crate) fn import_file_list(
     } else {
         DeviceRepository::select()
             .columns(&[device_cols::SERIAL])
-            .fetch_in(tx)?
+            .fetch_in(tx)
+            .await?
             .iter()
             .map(|row| row.get_text(device_cols::SERIAL.as_ref()))
             .collect()
@@ -315,7 +324,7 @@ pub(crate) fn import_file_list(
 
         // The serial recorded in the file may belong to a device that isn't registered
         session.device = session.device.take().filter(|s| known_devices.contains(s));
-        insert_session(tx, session, &mut handled_workouts)?;
+        insert_session(tx, session, &mut handled_workouts).await?;
 
         handled_exercises.extend(
             session
@@ -331,10 +340,10 @@ pub(crate) fn import_file_list(
     let mut imported_progression = false;
     let mut any_progression = None;
     if !success.is_empty() {
-        new_prs = update_prs(tx, &handled_exercises, &success)?;
+        new_prs = update_prs(tx, &handled_exercises, &success).await?;
 
         // Evaluated once: tells both whether the imported exercises progress and whether any does
-        let suggested = progression_suggestions(tx)?;
+        let suggested = progression_suggestions(tx).await?;
         imported_progression = handled_exercises.iter().any(|e| suggested.contains(e));
         any_progression = Some(!suggested.is_empty());
     }
@@ -352,8 +361,8 @@ pub(crate) fn import_file_list(
 /// Inserts a session with its sets, laps and additional data, creating its
 /// workout (and steps, if missing) when the session references one.
 /// Child collections are restored on the session after insertion.
-pub(super) fn insert_session(
-    tx: &mut rusqlite_orm::rusqlite::Transaction,
+pub(super) async fn insert_session(
+    tx: &mut rusqlite_orm::rusqlite::Transaction<'_>,
     session: &mut Session,
     handled_workouts: &mut HashSet<String>,
 ) -> Result<(), DatabaseError> {
@@ -365,7 +374,8 @@ pub(super) fn insert_session(
         let updated = WorkoutRepository::update()
             .set(workout_cols::NOTES, workout.notes.clone().into())
             .where_(Where::Eq(workout_cols::NAME, workout.name.clone().into()))
-            .execute_in(tx)?;
+            .execute_in(tx)
+            .await?;
         if updated == 0 {
             WorkoutRepository::insert()
                 .or_ignore()
@@ -377,11 +387,12 @@ pub(super) fn insert_session(
                     connect_id: None,
                     connect_created_time: None,
                 })
-                .execute_in(tx)?;
+                .execute_in(tx)
+                .await?;
         }
 
         if handled_workouts.insert(workout.name.clone())
-            && WorkoutStepRepository::count_by_workout_in(tx, &workout.name)? == 0
+            && WorkoutStepRepository::count_by_workout_in(tx, &workout.name).await? == 0
         {
             let mut insert = WorkoutStepRepository::insert();
             let mut steps = workout.steps.clone();
@@ -389,24 +400,28 @@ pub(super) fn insert_session(
                 insert = insert.item(step);
             }
 
-            insert.execute_in(tx)?;
+            insert.execute_in(tx).await?;
         }
     }
 
-    SessionRepository::insert().item(session).execute_in(tx)?;
+    SessionRepository::insert()
+        .item(session)
+        .execute_in(tx)
+        .await?;
 
     if !series.is_empty() {
         let mut insert = SessionStepRepository::insert();
         for serie in &mut series {
             insert = insert.item(serie);
         }
-        insert.execute_in(tx)?;
+        insert.execute_in(tx).await?;
     }
 
     if let Some(additional_data) = &mut add_data {
         SessionDataRepository::insert()
             .item(additional_data)
-            .execute_in(tx)?;
+            .execute_in(tx)
+            .await?;
     }
 
     if !laps.is_empty() {
@@ -414,7 +429,7 @@ pub(super) fn insert_session(
         for lap in &mut laps {
             insert = insert.item(lap)
         }
-        insert.execute_in(tx)?;
+        insert.execute_in(tx).await?;
     }
 
     if let Some(workout) = session.workout.clone()
@@ -427,7 +442,8 @@ pub(super) fn insert_session(
                 Where::Eq(workout_planning_columns::WORKOUT, workout.into()),
                 Where::Null(workout_planning_columns::SESSION),
             ]))
-            .execute_in(tx)?;
+            .execute_in(tx)
+            .await?;
     }
 
     session.steps = series;
@@ -437,8 +453,8 @@ pub(super) fn insert_session(
     Ok(())
 }
 
-pub(crate) fn update_session_notes(
-    tx: &rusqlite_orm::rusqlite::Transaction,
+pub(crate) async fn update_session_notes(
+    tx: &rusqlite_orm::rusqlite::Transaction<'_>,
     session: u32,
     notes: Option<&str>,
 ) -> rusqlite_orm::errors::Result<()> {
@@ -447,14 +463,16 @@ pub(crate) fn update_session_notes(
     let updated = SessionDataRepository::update()
         .set(session_data_cols::NOTES, notes.clone().into())
         .where_(Where::Eq(session_data_cols::SESSION, session.into()))
-        .execute_in(tx)?;
+        .execute_in(tx)
+        .await?;
 
     if updated == 0 && notes.is_some() {
         let mut add_data = SessionData::new(session);
         add_data.notes = notes;
         SessionDataRepository::insert()
             .item(&mut add_data)
-            .execute_in(tx)?;
+            .execute_in(tx)
+            .await?;
     }
 
     Ok(())
@@ -475,18 +493,20 @@ pub(crate) async fn heatmap_data(database: &DatabasePool) -> Result<Vec<Vec<(u32
         .timestamp();
 
     let res = database
-        .run_in_connection(move |conn| {
+        .run_in_connection(async move |conn| {
             let sessions = SessionRepository::select()
                 .columns(&[session_cols::DATE, session_cols::TRAINING_LOAD])
                 .where_(Where::Gte(session_cols::DATE, ts.into()))
-                .fetch_in(conn)?;
+                .fetch_in(conn)
+                .await?;
             let prs = SessionStepRepository::select()
                 .columns(&[session_step_cols::SESSION])
                 .where_(Where::And(vec![
                     Where::Eq(session_step_cols::PR, true.into()),
                     Where::Gte(session_step_cols::SESSION, ts.into()),
                 ]))
-                .fetch_in(conn)?;
+                .fetch_in(conn)
+                .await?;
 
             let mut pr_counts: HashMap<u32, u16> = HashMap::new();
             for pr in &prs {
@@ -612,11 +632,11 @@ pub(super) async fn merge_sessions(
     }
 
     database
-        .run_in_transaction(move |tx| {
-            to.delete_by_id_in(tx)?;
-            from.delete_by_id_in(tx)?;
+        .run_in_transaction(async move |tx| {
+            to.delete_by_id_in(tx).await?;
+            from.delete_by_id_in(tx).await?;
 
-            insert_session(tx, &mut to, &mut HashSet::new())?;
+            insert_session(tx, &mut to, &mut HashSet::new()).await?;
 
             let handled_exercises = to
                 .steps
@@ -631,7 +651,7 @@ pub(super) async fn merge_sessions(
                     }
                 })
                 .collect();
-            update_prs(tx, &handled_exercises, &[to.date])?;
+            update_prs(tx, &handled_exercises, &[to.date]).await?;
 
             Ok(())
         })
@@ -650,11 +670,11 @@ pub(crate) struct AppliedSessionChanges {
 
 /// Stores the edited notes and sets of a session and recomputes the records of the exercises
 /// involved.
-pub(super) fn apply_session_changes(
-    tx: &rusqlite_orm::rusqlite::Transaction,
+pub(super) async fn apply_session_changes(
+    tx: &rusqlite_orm::rusqlite::Transaction<'_>,
     details: &SessionStepsUpdate,
 ) -> rusqlite_orm::errors::Result<AppliedSessionChanges> {
-    update_session_notes(tx, details.timestamp, details.notes.as_deref())?;
+    update_session_notes(tx, details.timestamp, details.notes.as_deref()).await?;
 
     let mut exercises = HashSet::new();
 
@@ -667,7 +687,8 @@ pub(super) fn apply_session_changes(
                 details.sets.iter().map(|s| s.idx.into()).collect(),
             ),
         ]))
-        .fetch_in(tx)?
+        .fetch_in(tx)
+        .await?
         .iter()
         .for_each(|row| {
             // Rest steps have no exercise
@@ -685,17 +706,17 @@ pub(super) fn apply_session_changes(
         }
     }
 
-    let has_suggestion = |tx: &rusqlite_orm::rusqlite::Transaction, (cat, id): (u16, u16)| {
-        fetch_progression_suggestion(tx, cat, id)
+    let mut suggested_before: HashSet<(u16, u16)> = HashSet::new();
+    for &(cat, id) in &exercises {
+        if fetch_progression_suggestion(tx, cat, id)
+            .await
             .ok()
             .flatten()
             .is_some()
-    };
-    let suggested_before: HashSet<(u16, u16)> = exercises
-        .iter()
-        .copied()
-        .filter(|ex| has_suggestion(tx, *ex))
-        .collect();
+        {
+            suggested_before.insert((cat, id));
+        }
+    }
 
     for serie in &details.sets {
         SessionStepRepository::update()
@@ -707,13 +728,14 @@ pub(super) fn apply_session_changes(
                 Where::Eq(session_step_cols::SESSION, details.timestamp.into()),
                 Where::Eq(session_step_cols::IDX, serie.idx.into()),
             ]))
-            .execute_in(tx)?;
+            .execute_in(tx)
+            .await?;
     }
 
-    let new_prs = update_prs(tx, &exercises, &[details.timestamp])?;
+    let new_prs = update_prs(tx, &exercises, &[details.timestamp]).await?;
 
     // Evaluated once: tells both which exercises now progress and whether any does
-    let suggested_after = progression_suggestions(tx)?;
+    let suggested_after = progression_suggestions(tx).await?;
     let newly_suggested = exercises
         .iter()
         .any(|ex| !suggested_before.contains(ex) && suggested_after.contains(ex));
@@ -748,18 +770,18 @@ pub(super) async fn set_session_connect_id(
 }
 
 /// The session with its sets, laps, additional data and workout, `None` if it doesn't exist.
-pub(super) fn full_session(
+pub(super) async fn full_session(
     conn: &rusqlite_orm::rusqlite::Connection,
     timestamp: u32,
 ) -> rusqlite_orm::errors::Result<Option<Session>> {
-    let Some(mut session) = SessionRepository::select_by_id_in(conn, timestamp)? else {
+    let Some(mut session) = SessionRepository::select_by_id_in(conn, timestamp).await? else {
         return Ok(None);
     };
-    session.fetch_steps_relationship_in(conn)?;
-    session.fetch_laps_relationship_in(conn)?;
-    session.fetch_data_relationship_in(conn)?;
+    session.fetch_steps_relationship_in(conn).await?;
+    session.fetch_laps_relationship_in(conn).await?;
+    session.fetch_data_relationship_in(conn).await?;
     if session.workout.is_some() {
-        session.fetch_workout_obj_relationship_in(conn)?;
+        session.fetch_workout_obj_relationship_in(conn).await?;
     }
     Ok(Some(session))
 }
@@ -827,22 +849,22 @@ pub(crate) struct ImportedFiles {
 
 /// Imports the `.fit` files fetched from `device` and, with `sync_mark`, moves its last activity
 /// sync to it.
-pub(super) fn import_device_files(
-    tx: &mut rusqlite_orm::rusqlite::Transaction,
+pub(super) async fn import_device_files(
+    tx: &mut rusqlite_orm::rusqlite::Transaction<'_>,
     files: &[FitFile],
     device: &mut Device,
     sync_mark: Option<u32>,
 ) -> Result<ImportedFiles, DatabaseError> {
     let res = if !files.is_empty() {
         info!("Fetched {} activity files", files.len());
-        import_file_list(tx, files)?
+        import_file_list(tx, files).await?
     } else {
         ImportedFiles::default()
     };
 
     if let Some(mark) = sync_mark {
         device.last_activity_sync = Some(mark);
-        device.update_by_id_in(tx)?;
+        device.update_by_id_in(tx).await?;
     }
 
     Ok(res)

@@ -20,7 +20,7 @@ const STRENGTH_SUB_SPORT: u8 = 20;
 
 /// Strength sessions between `from` and `to`, with the history of every exercise trained in them
 /// and the body measurements of the period.
-pub(super) fn report_data(
+pub(super) async fn report_data(
     conn: &rusqlite_orm::rusqlite::Connection,
     from: u32,
     to: u32,
@@ -34,11 +34,12 @@ pub(super) fn report_data(
             Where::Eq(session_cols::SUB_SPORT, STRENGTH_SUB_SPORT.into()),
         ]))
         .order_by(OrderBy::Asc(session_cols::DATE))
-        .fetch_in(conn)?
+        .fetch_in(conn)
+        .await?
         .iter()
         .map(|row| row.get_u32(session_cols::DATE.as_ref()))
         .collect();
-    let session_details = fetch_sessions_details(conn, &timestamps, false, false)?;
+    let session_details = fetch_sessions_details(conn, &timestamps, false, false).await?;
 
     // Sorted and deduplicated; sets without exercise are skipped
     let trained: BTreeSet<(u16, u16)> = session_details
@@ -49,21 +50,17 @@ pub(super) fn report_data(
 
     // Loaded once, by the first exercise needing them, and shared by the rest
     let mut all_body_metrics = None;
-    let exercises: Vec<_> = trained
-        .into_iter()
-        .filter_map(|(category, id)| {
-            if let Ok(mut details) =
-                exercise_details(conn, category, id, Some((from, to)), &mut all_body_metrics)
-            {
-                details.workouts.reverse();
-                Some(details)
-            } else {
-                None
-            }
-        })
-        .collect();
+    let mut exercises = Vec::new();
+    for (category, id) in trained {
+        if let Ok(mut details) =
+            exercise_details(conn, category, id, Some((from, to)), &mut all_body_metrics).await
+        {
+            details.workouts.reverse();
+            exercises.push(details);
+        }
+    }
 
-    let mut body_metrics = fetch_body_measures(conn, Some((from, to)))?;
+    let mut body_metrics = fetch_body_measures(conn, Some((from, to))).await?;
     body_metrics.reverse();
 
     Ok(ReportData {
