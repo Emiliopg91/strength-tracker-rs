@@ -21,7 +21,6 @@ function upsert(
     return [
         ...prev,
         {
-            manufacturer: device.manufacturer,
             model: device.model,
             serial_number: device.serial_number,
             ...defaults,

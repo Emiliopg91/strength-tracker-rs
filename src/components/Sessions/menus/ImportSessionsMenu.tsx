@@ -112,7 +112,7 @@ export function ImportSessionsMenu({ onImported }: Props) {
                                 }}
                             >
                                 {translate("import_from_device", [
-                                    device.manufacturer + " " + device.model,
+                                    device.model,
                                 ])}
                             </MenuItem>
                         ))}

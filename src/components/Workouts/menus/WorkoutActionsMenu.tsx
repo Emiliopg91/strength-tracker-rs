@@ -127,9 +127,7 @@ export function WorkoutActionsMenu({
                                                 }
                                             }}
                                         >
-                                            {device.manufacturer +
-                                                " " +
-                                                device.model +
+                                            {device.model +
                                                 (viaConnect
                                                     ? " (Connect)"
                                                     : "")}

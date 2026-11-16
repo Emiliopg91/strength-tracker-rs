@@ -23,7 +23,6 @@ export enum CloudProvider {
 
 // From src-tauri/src/dto/devices.rs:6
 export interface DeviceListItem {
-  manufacturer: string;
   model: string;
   serial_number: string;
   strength_workout: boolean;

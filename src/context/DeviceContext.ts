@@ -1,7 +1,6 @@
 import { createContext } from "react";
 
 export interface AvailableDevice {
-    manufacturer: string;
     model: string;
     serial_number: string;
     usb: boolean;
