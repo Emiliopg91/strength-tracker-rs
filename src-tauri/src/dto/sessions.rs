@@ -139,66 +139,45 @@ fn round_samples(samples: Vec<Option<f64>>, scale: f64) -> Vec<Option<f64>> {
         .collect()
 }
 
+/// Max heart rate assumed for sessions that don't record one.
+const DEFAULT_MAX_HR: u8 = 189;
+
 impl From<(&Session, &[Exercise], &[SessionStep], &[SessionLap])> for SessionDetails {
-    fn from(value: (&Session, &[Exercise], &[SessionStep], &[SessionLap])) -> Self {
-        let device = value
-            .0
-            .device_obj
-            .as_ref()
-            .map(|dev| format!("Garmin {}", dev.model));
-
-        let mut heart_rates = Vec::new();
-        let mut max_hr = 189;
-        let mut gps_coordinates = Vec::new();
-        let mut speeds = Vec::new();
-        let mut distance = None;
-        let mut notes = String::new();
-
-        if let Some(add_data) = &value.0.data {
-            distance = add_data.distance.map(|d| d / 1000_f64);
-            if let Some(hr_data) = add_data.get_heart_rates() {
-                heart_rates = hr_data;
-            }
-            if let Some(coords) = add_data.get_coordinates_semicircle() {
-                gps_coordinates = coords;
-            }
-            if let Some(spds) = add_data.get_speeds() {
-                speeds = round_samples(spds, 1000.0);
-            }
-            if let Some(nts) = add_data.notes.clone() {
-                notes = nts
-            }
-            if let Some(hr) = add_data.max_hr {
-                max_hr = hr;
-            }
-        }
-
-        let (primary_muscles, secondary_muscles) = split_muscles(value.1);
-
-        let sets = value.2.iter().map(SessionStepDto::from).collect();
-        let laps = value.3.iter().map(SessionLapDto::from).collect();
+    fn from(
+        (session, exercises, steps, laps): (&Session, &[Exercise], &[SessionStep], &[SessionLap]),
+    ) -> Self {
+        let data = session.data.as_ref();
+        let (primary_muscles, secondary_muscles) = split_muscles(exercises);
 
         Self {
-            name: value.0.name.clone(),
-            timestamp: value.0.date,
-            total_elapsed_time: value.0.total_elapsed_time,
-            active_time: value.0.active_time,
-            active_calories: value.0.active_calories,
-            training_load: value.0.training_load,
-            sport: value.0.sport,
-            sub_sport: value.0.sub_sport,
-            steps: sets,
-            heart_rates,
-            max_hr,
-            device,
-            laps,
-            coordinates: gps_coordinates,
-            speeds,
-            distance,
-            notes,
+            name: session.name.clone(),
+            timestamp: session.date,
+            total_elapsed_time: session.total_elapsed_time,
+            active_time: session.active_time,
+            active_calories: session.active_calories,
+            training_load: session.training_load,
+            sport: session.sport,
+            sub_sport: session.sub_sport,
+            steps: steps.iter().map(SessionStepDto::from).collect(),
+            heart_rates: data.and_then(|d| d.get_heart_rates()).unwrap_or_default(),
+            max_hr: data.and_then(|d| d.max_hr).unwrap_or(DEFAULT_MAX_HR),
+            device: session
+                .device_obj
+                .as_ref()
+                .map(|dev| format!("Garmin {}", dev.model)),
+            laps: laps.iter().map(SessionLapDto::from).collect(),
+            coordinates: data
+                .and_then(|d| d.get_coordinates_semicircle())
+                .unwrap_or_default(),
+            speeds: data
+                .and_then(|d| d.get_speeds())
+                .map(|s| round_samples(s, 1000.0))
+                .unwrap_or_default(),
+            distance: data.and_then(|d| d.distance).map(|d| d / 1000_f64),
+            notes: data.and_then(|d| d.notes.clone()).unwrap_or_default(),
             primary_muscles,
             secondary_muscles,
-            connect_id: value.0.connect_id.clone(),
+            connect_id: session.connect_id.clone(),
         }
     }
 }

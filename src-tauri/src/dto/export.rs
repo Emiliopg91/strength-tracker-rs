@@ -81,7 +81,7 @@ impl Export {
             let sessions = sessions
                 .into_iter()
                 .map(|session| {
-                    let serie = series.get(&session.date);
+                    let serie = series.get(&session.date).map(Vec::as_slice);
                     let add_data = additional_datas.get(&session.date);
 
                     SessionExport::from((&session, add_data, serie))
@@ -90,18 +90,11 @@ impl Export {
 
             let exercises = used_exercises
                 .into_iter()
-                .filter_map(|ue| {
-                    if let Some(category) = ue.0
-                        && let Some(id) = ue.1
-                    {
-                        Some(ExerciseExport {
-                            category,
-                            id,
-                            name: translate(&format!("exercise_{}_{}", category, id), lang),
-                        })
-                    } else {
-                        None
-                    }
+                .filter_map(|(category, id)| category.zip(id))
+                .map(|(category, id)| ExerciseExport {
+                    category,
+                    id,
+                    name: translate(&format!("exercise_{category}_{id}"), lang),
                 })
                 .collect();
 
@@ -144,38 +137,25 @@ pub struct SessionExport {
     pub sets: Option<Vec<SessionStepDto>>,
 }
 
-impl From<(&Session, Option<&SessionData>, Option<&Vec<SessionStep>>)> for SessionExport {
-    fn from(values: (&Session, Option<&SessionData>, Option<&Vec<SessionStep>>)) -> Self {
-        let mut heart_rates = None;
-        let mut coordinates: Option<Vec<Option<(f64, f64)>>> = None;
-        let mut series = None;
-
-        if let Some(add_data) = values.1 {
-            heart_rates = add_data.get_heart_rates();
-            coordinates = add_data.get_coordinates_degrees();
-        }
-
-        if let Some(srs) = values.2
-            && !srs.is_empty()
-        {
-            let sers = srs.iter().map(SessionStepDto::from).collect();
-
-            series = Some(sers);
-        }
-
+impl From<(&Session, Option<&SessionData>, Option<&[SessionStep]>)> for SessionExport {
+    fn from(
+        (session, data, steps): (&Session, Option<&SessionData>, Option<&[SessionStep]>),
+    ) -> Self {
         Self {
-            date: values.0.date,
-            workout: values.0.name.clone(),
-            total_elapsed_time: values.0.total_elapsed_time,
-            active_time: values.0.active_time,
-            active_calories: values.0.active_calories,
-            training_load: values.0.training_load,
-            sport: values.0.sport,
-            sub_sport: values.0.sub_sport,
-            device: values.0.device.clone(),
-            sets: series,
-            heart_rates,
-            coordinates,
+            date: session.date,
+            workout: session.name.clone(),
+            total_elapsed_time: session.total_elapsed_time,
+            active_time: session.active_time,
+            active_calories: session.active_calories,
+            training_load: session.training_load,
+            sport: session.sport,
+            sub_sport: session.sub_sport,
+            device: session.device.clone(),
+            sets: steps
+                .filter(|s| !s.is_empty())
+                .map(|s| s.iter().map(SessionStepDto::from).collect()),
+            heart_rates: data.and_then(SessionData::get_heart_rates),
+            coordinates: data.and_then(SessionData::get_coordinates_degrees),
         }
     }
 }

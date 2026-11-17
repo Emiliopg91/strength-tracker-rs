@@ -14,6 +14,15 @@ use crate::{
     },
 };
 
+/// Session stats of a workout, accumulated over its sessions.
+#[derive(Default)]
+struct WorkoutStats {
+    sessions: u32,
+    total_time: u32,
+    latest_session: Option<u32>,
+    total_load: u32,
+}
+
 /// Every workout with its session stats (count, average time and load, latest date), by name.
 pub(super) async fn workout_list(
     conn: &Connection,
@@ -21,9 +30,9 @@ pub(super) async fn workout_list(
     let workouts = Workout::get_all(conn).await?;
     let sessions = Session::get_workout_sessions(conn).await?;
 
-    let mut workout_stats: HashMap<_, _> = workouts
+    let mut workout_stats: HashMap<_, WorkoutStats> = workouts
         .iter()
-        .map(|w| (w.name.clone(), (0_u32, 0_u32, None, 0_u32)))
+        .map(|w| (w.name.clone(), WorkoutStats::default()))
         .collect();
 
     let suggested_workouts: HashSet<_> = workouts
@@ -33,27 +42,25 @@ pub(super) async fn workout_list(
         .collect();
 
     for s in &sessions {
-        let entry = workout_stats
-            .entry(s.name.clone())
-            .or_insert((0_u32, 0_u32, None, 0_u32));
-        entry.0 += 1_u32;
-        entry.1 += s.total_elapsed_time;
-        entry.2.get_or_insert(s.date);
-        entry.3 += s.training_load as u32;
+        let stats = workout_stats.entry(s.name.clone()).or_default();
+        stats.sessions += 1;
+        stats.total_time += s.total_elapsed_time;
+        stats.latest_session.get_or_insert(s.date);
+        stats.total_load += s.training_load as u32;
     }
 
     let with_steps = WorkoutStep::get_workouts_with_steps(conn).await?;
 
     let mut res: Vec<_> = workout_stats
         .into_iter()
-        .map(|wd| WorkoutListItem {
-            has_steps: with_steps.contains(&wd.0),
-            enabled: suggested_workouts.contains(&wd.0),
-            name: wd.0,
-            sessions: wd.1.0,
-            avg_time: wd.1.1.checked_div(wd.1.0).unwrap_or(0),
-            avg_load: wd.1.3.checked_div(wd.1.0).unwrap_or(0) as u16,
-            latest_session: wd.1.2,
+        .map(|(name, stats)| WorkoutListItem {
+            has_steps: with_steps.contains(&name),
+            enabled: suggested_workouts.contains(&name),
+            sessions: stats.sessions,
+            avg_time: stats.total_time.checked_div(stats.sessions).unwrap_or(0),
+            avg_load: stats.total_load.checked_div(stats.sessions).unwrap_or(0) as u16,
+            latest_session: stats.latest_session,
+            name,
         })
         .collect();
 
