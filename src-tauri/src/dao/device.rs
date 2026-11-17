@@ -191,7 +191,7 @@ impl TryFrom<&DeviceInfo> for Device {
 
         Ok(Device {
             serial: info.serial_number.clone(),
-            model: info.model.to_uppercase(),
+            model: info.model.clone(),
             last_activity_sync: None,
             last_body_metric_sync: None,
             usb: true,
@@ -205,7 +205,7 @@ impl From<&DeviceSummary> for Device {
     fn from(info: &DeviceSummary) -> Self {
         Device {
             serial: Device::serial_from_unit_id(info.unit_id),
-            model: info.display_name.to_uppercase(),
+            model: info.display_name.clone(),
             last_activity_sync: None,
             last_body_metric_sync: None,
             usb: false,
