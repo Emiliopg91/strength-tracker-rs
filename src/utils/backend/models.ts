@@ -28,13 +28,13 @@ export interface DeviceListItem {
   strength_workout: boolean;
 }
 
-// From src-tauri/src/dao/settings.rs:105
+// From src-tauri/src/dao/settings.rs:104
 export enum DistanceUnit {
 	Kilometers = "Kilometers",
 	Miles = "Miles",
 }
 
-// From src-tauri/src/dao/exercise.rs:15
+// From src-tauri/src/dao/exercise.rs:30
 export interface Exercise {
   category: number;
   exercise_category: ExerciseCategory | null;
@@ -48,7 +48,7 @@ export interface Exercise {
   weight: number;
 }
 
-// From src-tauri/src/dao/exercise_category.rs:7
+// From src-tauri/src/dao/exercise_category.rs:9
 export interface ExerciseCategory {
   id: number;
   name: string;
@@ -139,7 +139,7 @@ export interface ReportData {
   sessions: SessionDetails[];
 }
 
-// From src-tauri/src/dto/sessions.rs:101
+// From src-tauri/src/dto/sessions.rs:104
 export interface SessionDetails {
   active_calories: number;
   active_time: number;
@@ -163,14 +163,14 @@ export interface SessionDetails {
   training_load: number;
 }
 
-// From src-tauri/src/dto/sessions.rs:84
+// From src-tauri/src/dto/sessions.rs:87
 export interface SessionLapDto {
   idx: number;
   start_latitude: number | null;
   start_longitude: number | null;
 }
 
-// From src-tauri/src/dto/sessions.rs:11
+// From src-tauri/src/dto/sessions.rs:14
 export interface SessionListItem {
   active_calories: number;
   has_record: boolean;
@@ -183,13 +183,13 @@ export interface SessionListItem {
   training_load: number;
 }
 
-// From src-tauri/src/dto/sessions.rs:227
+// From src-tauri/src/dto/sessions.rs:193
 export interface SessionLocation {
   location: string;
   session: number;
 }
 
-// From src-tauri/src/dto/sessions.rs:51
+// From src-tauri/src/dto/sessions.rs:54
 export interface SessionStepDto {
   duration: number | null;
   duration_ref: number | null;
@@ -204,7 +204,7 @@ export interface SessionStepDto {
   weight_ref: number | null;
 }
 
-// From src-tauri/src/dto/sessions.rs:220
+// From src-tauri/src/dto/sessions.rs:186
 export interface SessionStepsUpdate {
   notes: string | null;
   sets: SessionStepDto[];
@@ -220,7 +220,7 @@ export interface Settings {
   weight_unit: WeightUnit;
 }
 
-// From src-tauri/src/dao/workout_step.rs:47
+// From src-tauri/src/dao/workout_step.rs:290
 export enum StepType {
 	Exercise = "Exercise",
 	Warmup = "Warmup",
@@ -231,13 +231,13 @@ export enum StepType {
 	Repeat = "Repeat",
 }
 
-// From src-tauri/src/dao/settings.rs:133
+// From src-tauri/src/dao/settings.rs:132
 export enum WeightUnit {
 	Kilograms = "Kilograms",
 	Pounds = "Pounds",
 }
 
-// From src-tauri/src/dao/workout.rs:8
+// From src-tauri/src/dao/workout.rs:24
 export interface Workout {
   connect_created_time: number | null;
   connect_id: string | null;
@@ -287,7 +287,7 @@ export interface WorkoutSession {
   volume: number;
 }
 
-// From src-tauri/src/dao/workout_step.rs:19
+// From src-tauri/src/dao/workout_step.rs:27
 export interface WorkoutStep {
   begin_idx: number | null;
   ex_cat: number | null;
