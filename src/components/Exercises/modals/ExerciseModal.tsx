@@ -150,10 +150,19 @@ export function ExerciseModal({
                 exercise.id,
                 suggestion!,
             ),
-        ).then(() => {
-            setSuggestion(null);
-            onProgressionApplied();
-        });
+        )
+            .then(() => {
+                setSuggestion(null);
+                onProgressionApplied();
+                // Applying only raises lower steps, so the resulting status may differ from the suggestion
+                return loadingTask(
+                    BackendClient.getProgressionStatus(
+                        exercise.category,
+                        exercise.id,
+                    ),
+                );
+            })
+            .then(setProgressionStatus);
     };
 
     const toggleProgression = () => {
