@@ -1,0 +1,117 @@
+---
+name: strength-coach-guide
+description: Orientation guide for the Strength Coach for Garmin repo (taurfit) — a Tauri 2 desktop app with a Rust backend and a React + TypeScript frontend that syncs Garmin watches over USB/MTP and Garmin Connect. Load it before implementing a feature, fixing a bug, reviewing a change, analyzing or explaining how something works, proposing ideas, or running/using the app locally (dev mode, debug CLI flags, database, logs). Use it whenever the task touches src/, src-tauri/, resources/ddl or resources/translations, even if the request doesn't mention the architecture.
+---
+
+# Strength Coach for Garmin — working guide
+
+A Linux-only desktop app that imports strength sessions from Garmin watches, suggests
+progressions, and pushes workouts back to the watch. Single user, offline-first, data in a local
+SQLite file. Package/binary name: `strength-coach-for-garmin` (the repo folder is `taurfit`).
+
+Read the README for the feature list. This file covers what the README doesn't: how the pieces
+fit together and the conventions the code follows.
+
+## Layout
+
+| Path | What lives there |
+|---|---|
+| `src-tauri/src/logic/<domain>/` | Backend features. `commands.rs` holds thin `#[traced_command] #[tauri::command]` wrappers; `mod.rs` holds the real logic; `helpers.rs` the shared pieces. Domains: app, body_metrics, connect, devices, exercises, export, prompts, report, sessions, workouts |
+| `src-tauri/src/dao/` | One file per table: rusqlite_orm entities + repository queries |
+| `src-tauri/src/dto/` | Types that cross the IPC boundary (serde) |
+| `src-tauri/src/fit/` | FIT parser and writer (activities in, workouts/schedules out) |
+| `src-tauri/src/mtp/`, `udev/` | USB device access and udev rules |
+| `src-tauri/src/connect/` | Garmin Connect client — own code; HTTP through the shared reqwest client in `utils/http.rs` |
+| `src-tauri/src/rclone/` | Cloud backup via the `rclone` binary |
+| `src-tauri/src/tests/` | Backend tests (`#[cfg(test)] mod tests` in `lib.rs`) |
+| `src-tauri-macros/` | `traced_command`, translation macros |
+| `src/components/<Area>/` | React UI per tab: Home, Sessions, Exercises, Workouts, BodyMetrics, Settings, Report |
+| `src/context/` | Providers: App, Device, I18nSettings, Loading |
+| `src/hooks/` | `useBackendList`, `useBackendEvent`, `useLoadingTask`, … |
+| `src/utils/backend/` | **Generated** `client.ts`, `listener.ts`, `models.ts` — never edit by hand |
+| `resources/ddl/NNN_*.sql` | Versioned schema migrations, applied at startup |
+| `resources/translations/` | `translations.yaml` (UI strings, `en`/`es`) and `catalog/*.yaml` (exercises, muscles, sports) |
+
+Extra entry points: `workout.html`/`src/workout.tsx` (printable workout) and
+`report.html`/`src/report.tsx` (printable report).
+
+## How a feature flows end to end
+
+1. **Schema** — add `resources/ddl/<next number>_<name>.sql`. If the migration needs Rust code
+   (data rewrites), register an `update_fn` for that version in `schema_ddls()` in `lib.rs`.
+2. **DAO** — extend the entity/repository in `dao/`. Use the rusqlite_orm query builder only, no
+   raw SQL strings. If the builder can't express a query, the fix belongs in the ORM (the
+   maintainer has a local copy at `rusqlite_orm/`, gitignored; the crate is used from crates.io).
+3. **Logic** — implement in `logic/<domain>/mod.rs`. Run DB work through
+   `pool(app).run_in_connection(...)` / `run_in_transaction(...)`. On errors, use
+   `report_error(e, settings, "<translation_key>", "<log message>")`: it shows a localized
+   notification and returns the message the frontend promise rejects with.
+4. **Command** — add the thin wrapper in `commands.rs` with a doc comment (it ends up in the
+   generated TS), then register it in `tauri::generate_handler![...]` in `lib.rs`.
+5. **Events** (backend → frontend) — `app.emit("event_name", payload)`. The payload must first be
+   bound to a typed local (`let payload: T = ...; app.emit("x", payload)`), because the TS
+   generator reads the type from that binding and panics otherwise.
+6. **Regenerate TS bindings** — they're written when the debug binary starts (`make run`, or
+   any debug run of `strength-coach-for-garmin` without `IN_DEBUG` set). Commit the regenerated
+   `src/utils/backend/*.ts` with the change. Diffs that only move `// From file:line` comments are
+   expected noise.
+7. **Frontend** — call `BackendClient.xxx(...)` wrapped in `useLoadingTask()` (or `withLoading`)
+   so the loading overlay shows; subscribe to events with `useBackendEvent(BackendListener.onX, cb)`.
+   When one call depends on another, chain the promises (`return loadingTask(next)` inside
+   `.then`) instead of nesting them; parallel independent calls stay unchained.
+8. **Strings** — every user-visible string is a key in `translations.yaml` with both `en` and `es`.
+   Frontend: `translate(key)` from `I18nSettingsContext`. Backend: `translate` /
+   `translate_and_replace` in `utils/translations.rs` (the map is generated by `build.rs`).
+
+## Conventions that aren't obvious from the code
+
+- **Language**: code, comments, docs and commit messages in English.
+- **Commits**: one line, `[fix|feature|improve|chore] <sentence>` (the hook also allows docs,
+  test, refactor, release…). `chore` is only for internal changes the user doesn't see. No
+  trailers. Commits go straight to `main`.
+- **Tests**: backend tests in `src-tauri/src/tests/` use an in-memory DB from
+  `tests::common::test_db()` with the real schema. Frontend tests (vitest) cover `src/utils/` and
+  the backend client/listener only — no React component tests.
+- **Notifications** go through `notify-send` (`logic/notifications.rs`) on purpose;
+  tauri-plugin-notification doesn't offer the needed control.
+- **Scope decisions** — don't propose these, they were rejected on purpose: a light theme (the app
+  is dark-only), multi-profile/multi-user support, reminder or nudge features.
+- **Garmin quirk**: the watch ignores a re-pushed workout with the same serial/time, and it
+  empties its schedule if the schedule references a mismatching `file_id`. Keep this in mind when
+  touching the workout/schedule FIT writer or the upload queue.
+- React 19 with the React Compiler: prefer `useEffectEvent` for callbacks used from effects (an
+  effect event can't be called from event handlers — call the client directly there).
+
+## Verifying a change
+
+```bash
+make lint   # eslint --fix + tsc, clippy on macros and backend
+make test   # vitest + cargo test (single-threaded)
+```
+
+For a quicker loop: `npx tsc --noEmit -p .`, `npx prettier --check <file>`,
+`cd src-tauri && cargo check` / `cargo test --lib <name> -- --test-threads=1`.
+
+## Running and using the app
+
+- `make run` — dev mode (`pnpm tauri dev`, verbose logs, sccache + mold). `make build` for a
+  release bundle.
+- Data: `~/.local/share/strength-coach-for-garmin/database.db` (SQLite) and `logs/` next to it.
+  This is the maintainer's real training data — read it freely, but never write to it, delete it
+  or run migrations against it outside the app. Copy it to the scratchpad to experiment.
+- Garmin Connect tokens live in the system keyring, not in the DB.
+- Debug-only CLI flags on the debug binary (`src-tauri/target/debug/strength-coach-for-garmin`):
+  `--decode <file.fit>...` (dump a FIT file; also `make decode FILE=...`), `--encode`,
+  `--dump` (copy a plugged device's files into `./dump`), `--dump-delete <path>`,
+  `--ls-mtp [path]`. `-v` enables debug logging.
+- Only one instance runs at a time (`utils/single_instance.rs`).
+
+## Analyzing or proposing ideas
+
+- Grep the code before claiming something is missing or proposing it as new — many features exist
+  under different names (see the README feature list too).
+- When reviewing behavior, follow the data from the React component → `BackendClient` method →
+  `commands.rs` → `logic/<domain>/mod.rs` → DAO. The `// From src-tauri/...:line` comments in the
+  generated client point to the command.
+- The maintainer is a senior Rust developer: skip basic Rust explanations and lead with the
+  finding and the concrete file/line.
