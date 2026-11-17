@@ -38,9 +38,7 @@ pub(super) async fn workout_list(
             .or_insert((0_u32, 0_u32, None, 0_u32));
         entry.0 += 1_u32;
         entry.1 += s.total_elapsed_time;
-        if entry.2.is_none() {
-            entry.2 = Some(s.date);
-        }
+        entry.2.get_or_insert(s.date);
         entry.3 += s.training_load as u32;
     });
 

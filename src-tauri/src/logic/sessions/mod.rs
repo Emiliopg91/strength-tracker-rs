@@ -73,7 +73,7 @@ pub async fn get_session_details<R: Runtime>(
     match res {
         Ok(details) => {
             info!("Found details for session {}", details.timestamp);
-            if details.connect_id.clone().is_none() {
+            if details.connect_id.is_none() {
                 let app_cl = app.clone();
                 tauri::async_runtime::spawn(async move {
                     retrieve_session_connect_id(&app_cl, details.timestamp).await;
