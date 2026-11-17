@@ -21,10 +21,10 @@ pub(super) async fn workout_list(
     let workouts = Workout::get_all(conn).await?;
     let sessions = Session::get_workout_sessions(conn).await?;
 
-    let mut workout_stats = HashMap::new();
-    workouts.iter().for_each(|w| {
-        workout_stats.insert(w.name.clone(), (0, 0, None, 0_u32));
-    });
+    let mut workout_stats: HashMap<_, _> = workouts
+        .iter()
+        .map(|w| (w.name.clone(), (0_u32, 0_u32, None, 0_u32)))
+        .collect();
 
     let suggested_workouts: HashSet<_> = workouts
         .iter()
@@ -32,7 +32,7 @@ pub(super) async fn workout_list(
         .map(|w| w.name.clone())
         .collect();
 
-    sessions.iter().for_each(|s| {
+    for s in &sessions {
         let entry = workout_stats
             .entry(s.name.clone())
             .or_insert((0_u32, 0_u32, None, 0_u32));
@@ -40,7 +40,7 @@ pub(super) async fn workout_list(
         entry.1 += s.total_elapsed_time;
         entry.2.get_or_insert(s.date);
         entry.3 += s.training_load as u32;
-    });
+    }
 
     let with_steps = WorkoutStep::get_workouts_with_steps(conn).await?;
 

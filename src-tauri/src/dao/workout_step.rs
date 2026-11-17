@@ -349,7 +349,6 @@ impl From<Intensity> for StepType {
             Intensity::RECOVERY => StepType::Recovery,
             Intensity::COOLDOWN => StepType::Cooldown,
             Intensity::REST => StepType::Rest,
-            Intensity::OTHER => StepType::Other,
             _ => StepType::Other,
         }
     }

@@ -31,7 +31,7 @@ async fn register_device(db: &DatabasePool, serial: &str) {
     db.run_in_transaction(async move |tx| {
         DeviceRepository::insert()
             .item(&mut Device {
-                serial: serial.to_string(),
+                serial: serial.clone(),
                 model: "MODEL".to_string(),
                 last_activity_sync: None,
                 last_body_metric_sync: None,

@@ -199,7 +199,7 @@ impl SsoClient {
     /// When Garmin asks for MFA, `mfa_callback` is called with the MFA method (e.g. `email`)
     /// and must resolve to the verification code, or `None` if the user cancelled.
     pub async fn login<F, Fut>(
-        &mut self,
+        &self,
         email: &str,
         password: &str,
         mfa_callback: Option<F>,
@@ -287,16 +287,16 @@ impl SsoClient {
             }
 
             _ => {
-                let message = sso_resp
-                    .response_status
-                    .map(|s| {
+                let message = sso_resp.response_status.map_or_else(
+                    || "Unknown error".to_string(),
+                    |s| {
                         if s.message.is_empty() {
                             s.response_type
                         } else {
                             format!("{}: {}", s.response_type, s.message)
                         }
-                    })
-                    .unwrap_or_else(|| "Unknown error".to_string());
+                    },
+                );
                 return Err(GarminError::auth(format!("SSO error: {}", message)));
             }
         };

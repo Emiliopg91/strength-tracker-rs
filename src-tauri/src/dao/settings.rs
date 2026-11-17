@@ -69,8 +69,7 @@ impl Settings {
     pub async fn get_language(db: &DatabasePool) -> Languages {
         Self::value(db, settings_keys::LANGUAGE)
             .await
-            .map(|v| Languages::from(v.as_str()))
-            .unwrap_or(*constants::SYSTEM_LANGUAGE)
+            .map_or(*constants::SYSTEM_LANGUAGE, |v| Languages::from(v.as_str()))
     }
 
     /// Reads whether auto-sync on device connect is enabled, defaulting to `false` if unset.

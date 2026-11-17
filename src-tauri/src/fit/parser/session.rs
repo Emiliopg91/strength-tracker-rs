@@ -81,7 +81,7 @@ impl TryFrom<FitParser> for Session {
                         }
                         MesgNum::LAP => {
                             let lap_obj = mesgdef::Lap::from(msg);
-                            handle_lap_message(lap_obj, &mut laps)?;
+                            handle_lap_message(lap_obj, &mut laps);
                         }
                         MesgNum::TIME_IN_ZONE if max_heart_rate.is_none() => {
                             let zones_obj = mesgdef::TimeInZone::from(msg);
@@ -208,20 +208,9 @@ fn set_kind(wkt_step: Option<&WorkoutStep>, has_exercise: bool) -> StepType {
     }
 }
 
-fn handle_lap_message(
-    msg: mesgdef::Lap,
-    laps: &mut Vec<crate::dao::session_lap::SessionLap>,
-) -> errors::Result<()> {
-    let start_latitude = if msg.start_position_lat != i32::MAX {
-        Some(msg.start_position_lat)
-    } else {
-        None
-    };
-    let start_longitude = if msg.start_position_long != i32::MAX {
-        Some(msg.start_position_long)
-    } else {
-        None
-    };
+fn handle_lap_message(msg: mesgdef::Lap, laps: &mut Vec<crate::dao::session_lap::SessionLap>) {
+    let start_latitude = (msg.start_position_lat != i32::MAX).then_some(msg.start_position_lat);
+    let start_longitude = (msg.start_position_long != i32::MAX).then_some(msg.start_position_long);
 
     laps.push(crate::dao::session_lap::SessionLap {
         session: 0,
@@ -229,8 +218,6 @@ fn handle_lap_message(
         start_latitude,
         start_longitude,
     });
-
-    Ok(())
 }
 
 fn handle_set_message(msg: mesgdef::Set, sets_data: &mut Vec<(usize, u16, f32, Option<u32>)>) {
@@ -251,26 +238,20 @@ fn handle_set_message(msg: mesgdef::Set, sets_data: &mut Vec<(usize, u16, f32, O
 }
 
 fn handle_step_message(msg: &mesgdef::WorkoutStep, exercises: &mut Vec<Option<Exercise>>) {
-    if msg.exercise_category.0 != u16::MAX {
-        let ex_cat = msg.exercise_category.0;
-        // An invalid name is the generic exercise of the category, stored under that same id
-        let ex_id = msg.exercise_name;
-
-        exercises.push(Some(Exercise {
-            category: ex_cat,
-            id: ex_id,
-            unilateral: false,
-            exercise_category: None,
-            progression: false,
-            reps: "".to_string(),
-            weight: 0_f32,
-            muscles: vec![],
-            notes: None,
-            name: "".to_string(),
-        }))
-    } else {
-        exercises.push(None)
-    }
+    // An invalid name is the generic exercise of the category, stored under that same id
+    let exercise = (msg.exercise_category.0 != u16::MAX).then(|| Exercise {
+        category: msg.exercise_category.0,
+        id: msg.exercise_name,
+        unilateral: false,
+        exercise_category: None,
+        progression: false,
+        reps: String::new(),
+        weight: 0_f32,
+        muscles: vec![],
+        notes: None,
+        name: String::new(),
+    });
+    exercises.push(exercise);
 }
 
 /// Accumulates the session-level scalar fields (from the `session`/`workout` FIT messages) in
@@ -316,23 +297,19 @@ impl SessionAccumulator {
             .ok_or_else(|| ParseFitFileError::MissingField("timestamp".to_string()))?
             as u32;
 
-        self.sub_sport_obj = {
-            let sport_val = msg.sport;
-            let sub_sport_val = msg.sub_sport;
-            if sport_val.0 != u8::MAX {
-                if sub_sport_val.0 != u8::MAX {
-                    Ok(SubSport {
-                        id: sub_sport_val.0,
-                        sport: sport_val.0,
-                        sport_obj: Some(Sport { id: sport_val.0 }),
-                    })
-                } else {
-                    Err(ParseFitFileError::MissingField("sub_sport".to_string()))
-                }
-            } else {
-                Err(ParseFitFileError::MissingField("sport".to_string()))
-            }
-        }?;
+        let sport = msg.sport.0;
+        if sport == u8::MAX {
+            return Err(ParseFitFileError::MissingField("sport".to_string()));
+        }
+        let sub_sport = msg.sub_sport.0;
+        if sub_sport == u8::MAX {
+            return Err(ParseFitFileError::MissingField("sub_sport".to_string()));
+        }
+        self.sub_sport_obj = SubSport {
+            id: sub_sport,
+            sport,
+            sport_obj: Some(Sport { id: sport }),
+        };
 
         self.total_elapsed_time = msg
             .total_elapsed_time_scaled()
@@ -346,21 +323,13 @@ impl SessionAccumulator {
             .map(|e| e.round() as u16)
             .ok_or_else(|| ParseFitFileError::MissingField("training_load_peak".to_string()))?;
 
-        self.total_calories = if msg.total_calories == u16::MAX {
-            Err(ParseFitFileError::MissingField(
-                "total_calories".to_string(),
-            ))
-        } else {
-            Ok(msg.total_calories)
-        }?;
+        self.total_calories = (msg.total_calories != u16::MAX)
+            .then_some(msg.total_calories)
+            .ok_or_else(|| ParseFitFileError::MissingField("total_calories".to_string()))?;
 
-        self.metabolic_calories = if msg.metabolic_calories == u16::MAX {
-            Err(ParseFitFileError::MissingField(
-                "metabolic_calories".to_string(),
-            ))
-        } else {
-            Ok(msg.metabolic_calories)
-        }?;
+        self.metabolic_calories = (msg.metabolic_calories != u16::MAX)
+            .then_some(msg.metabolic_calories)
+            .ok_or_else(|| ParseFitFileError::MissingField("metabolic_calories".to_string()))?;
 
         Ok(())
     }

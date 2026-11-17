@@ -46,16 +46,16 @@ pub const SCHEDULE_DAYS: i64 = 30;
 // Languages block
 pub static DEFAULT_LANGUAGE: Languages = Languages::English;
 pub static SYSTEM_LANGUAGE: LazyLock<Languages> = LazyLock::new(|| {
-    let mut lang_var = std::env::var("LANG").unwrap_or("C".to_string());
+    let mut lang_var = std::env::var("LANG").unwrap_or_else(|_| "C".to_string());
     lang_var = lang_var.to_lowercase();
     if lang_var == "c" {
         lang_var = Languages::English.to_string();
     }
-    if lang_var.contains(".") {
-        lang_var = lang_var.split(".").next().unwrap().into();
+    if lang_var.contains('.') {
+        lang_var = lang_var.split('.').next().unwrap().into();
     }
-    if lang_var.contains("_") {
-        lang_var = lang_var.split("_").next().unwrap().into();
+    if lang_var.contains('.') {
+        lang_var = lang_var.split('.').next().unwrap().into();
     }
 
     Languages::from(&lang_var)

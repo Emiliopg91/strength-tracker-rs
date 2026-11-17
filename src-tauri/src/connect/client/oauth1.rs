@@ -6,6 +6,7 @@ use hmac::{Hmac, KeyInit, Mac};
 use percent_encoding::{AsciiSet, CONTROLS, utf8_percent_encode};
 use sha1::Sha1;
 use std::collections::BTreeMap;
+use std::fmt::Write;
 use std::time::{SystemTime, UNIX_EPOCH};
 use url::Url;
 
@@ -76,10 +77,13 @@ impl OAuth1Signer {
             .as_secs()
             .to_string();
 
-        let nonce: String = rand::random::<[u8; 16]>()
-            .iter()
-            .map(|b| format!("{:02x}", b))
-            .collect();
+        let nonce =
+            rand::random::<[u8; 16]>()
+                .iter()
+                .fold(String::with_capacity(32), |mut nonce, b| {
+                    let _ = write!(nonce, "{b:02x}");
+                    nonce
+                });
 
         let parsed_url = Url::parse(url).expect("Invalid URL");
         let base_url = format!(
@@ -145,7 +149,7 @@ impl OAuth1Signer {
             percent_encode(&param_string)
         );
 
-        let token_secret = self.token.as_ref().map(|t| t.secret.as_str()).unwrap_or("");
+        let token_secret = self.token.as_ref().map_or("", |t| t.secret.as_str());
         let signing_key = format!(
             "{}&{}",
             percent_encode(&self.consumer.secret),

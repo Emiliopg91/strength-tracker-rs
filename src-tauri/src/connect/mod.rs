@@ -153,7 +153,7 @@ impl ConnectClient {
 
     pub async fn login(&mut self, email: &str, password: &str) -> Result<()> {
         info!("Logging in Garmin Connect for user {}...", email);
-        let mut sso = SsoClient::new()
+        let sso = SsoClient::new()
             .map_err(|e| log_error("Error creating SSO client", ConnectError::Login(e)))?;
 
         let prompter = self.prompter.clone();
@@ -266,18 +266,7 @@ impl ConnectClient {
             return Ok(Vec::new());
         }
 
-        self.refresh_token().await?;
-
-        let (Some(oauth1), Some(oauth2)) = (&self.oauth1, &self.oauth2) else {
-            return Err(ConnectError::LoginRequired());
-        };
-
-        let client = GarminClient::new(&oauth1.domain).map_err(|e| {
-            log_error(
-                "Error creating Garmin client",
-                ConnectError::FetchActivities(e),
-            )
-        })?;
+        let (client, oauth2) = self.api_client().await?;
 
         info!("Downloading {} activities...", ids.len());
         let files: Vec<Vec<FitFile>> = stream::iter(ids.iter().copied())
@@ -294,18 +283,7 @@ impl ConnectClient {
     pub async fn list_devices(&mut self) -> Result<Vec<DeviceSummary>> {
         info!("Listing devices...");
 
-        self.refresh_token().await?;
-
-        let (Some(oauth1), Some(oauth2)) = (&self.oauth1, &self.oauth2) else {
-            return Err(ConnectError::LoginRequired());
-        };
-
-        let client = GarminClient::new(&oauth1.domain).map_err(|e| {
-            log_error(
-                "Error creating Garmin client",
-                ConnectError::FetchDevices(e),
-            )
-        })?;
+        let (client, oauth2) = self.api_client().await?;
 
         let devices = with_retry(|| client.list_devices(oauth2))
             .await
@@ -319,18 +297,7 @@ impl ConnectClient {
     pub async fn list_recent_calendar_items(&mut self) -> Result<Vec<CalendarItem>> {
         info!("Listing recent calendar items...");
 
-        self.refresh_token().await?;
-
-        let (Some(oauth1), Some(oauth2)) = (&self.oauth1, &self.oauth2) else {
-            return Err(ConnectError::LoginRequired());
-        };
-
-        let client = GarminClient::new(&oauth1.domain).map_err(|e| {
-            log_error(
-                "Error creating Garmin client",
-                ConnectError::FetchCalendar(e),
-            )
-        })?;
+        let (client, oauth2) = self.api_client().await?;
 
         let to = Local::now().date_naive();
         let from = to - chrono::Days::new(CALENDAR_RECENT_DAYS);
@@ -374,7 +341,7 @@ impl ConnectClient {
             .date_naive();
         let (year, month) = (date.year() as u16, date.month() as u8);
 
-        let (client, oauth2) = self.api_client(ConnectError::FetchCalendar).await?;
+        let (client, oauth2) = self.api_client().await?;
         let page = with_retry(|| client.list_calendar_month(oauth2, year, month))
             .await
             .map_err(|e| log_error("Error fetching calendar", ConnectError::FetchCalendar(e)))?;
@@ -393,9 +360,7 @@ impl ConnectClient {
 
     /// Details of the activity `id`.
     async fn fetch_activity(&mut self, id: u64) -> Result<ActivityDetails> {
-        let (client, oauth2) = self
-            .api_client(|e| ConnectError::FetchActivity(id, e))
-            .await?;
+        let (client, oauth2) = self.api_client().await?;
         with_retry(|| client.get_activity(oauth2, id))
             .await
             .map_err(|e| {
@@ -432,9 +397,7 @@ impl ConnectClient {
     pub async fn update_activity_notes(&mut self, id: u64, notes: &str) -> Result<()> {
         info!("Updating notes of activity {}...", id);
 
-        let (client, oauth2) = self
-            .api_client(|e| ConnectError::UpdateActivity(id, e))
-            .await?;
+        let (client, oauth2) = self.api_client().await?;
         // Retried: it replaces the description, so repeating it is harmless
         with_retry(|| client.update_activity_description(oauth2, id, notes))
             .await
@@ -453,9 +416,7 @@ impl ConnectClient {
     pub async fn get_session_sets(&mut self, id: u64) -> Result<ExerciseSets> {
         info!("Fetching exercise sets of activity {}...", id);
 
-        let (client, oauth2) = self
-            .api_client(|e| ConnectError::FetchExerciseSets(id, e))
-            .await?;
+        let (client, oauth2) = self.api_client().await?;
         let sets = with_retry(|| client.get_exercise_sets(oauth2, id))
             .await
             .map_err(|e| {
@@ -479,9 +440,7 @@ impl ConnectClient {
         let id = sets.activity_id;
         info!("Updating exercise sets of activity {}...", id);
 
-        let (client, oauth2) = self
-            .api_client(|e| ConnectError::UpdateExerciseSets(id, e))
-            .await?;
+        let (client, oauth2) = self.api_client().await?;
         // Retried: it replaces the whole list, so repeating it is harmless
         with_retry(|| client.update_exercise_sets(oauth2, sets))
             .await
@@ -502,7 +461,7 @@ impl ConnectClient {
         let today = Local::now().date_naive();
         info!("Listing workouts scheduled from {}...", today);
 
-        let (client, oauth2) = self.api_client(ConnectError::FetchWorkoutSchedules).await?;
+        let (client, oauth2) = self.api_client().await?;
 
         let mut schedules = Vec::new();
         let mut start = Some(today);
@@ -539,9 +498,7 @@ impl ConnectClient {
             .date_naive();
         info!("Scheduling workout {} on {}...", workout_id, date);
 
-        let (client, oauth2) = self
-            .api_client(|e| ConnectError::ScheduleWorkout(workout_id, date, e))
-            .await?;
+        let (client, oauth2) = self.api_client().await?;
         // Not retried: a request that timed out after reaching Connect would schedule it twice
         let schedule = client
             .schedule_workout(oauth2, workout_id, date)
@@ -564,9 +521,7 @@ impl ConnectClient {
     pub async fn delete_workout_schedule(&mut self, schedule_id: u64) -> Result<()> {
         info!("Deleting workout schedule {}...", schedule_id);
 
-        let (client, oauth2) = self
-            .api_client(|e| ConnectError::DeleteWorkoutSchedule(schedule_id, e))
-            .await?;
+        let (client, oauth2) = self.api_client().await?;
         // Retried: a retry after a delete that did reach Connect just finds it gone
         match with_retry(|| client.delete_workout_schedule(oauth2, schedule_id)).await {
             Ok(()) => info!("Deleted workout schedule {}.", schedule_id),
@@ -588,19 +543,14 @@ impl ConnectClient {
     }
 
     /// Refreshes the token if needed and builds an API client for the domain of the account.
-    /// `wrap` turns a client creation failure into the error of the calling operation.
-    async fn api_client(
-        &mut self,
-        wrap: impl FnOnce(GarminError) -> ConnectError,
-    ) -> Result<(GarminClient, &OAuth2Token)> {
+    async fn api_client(&mut self) -> Result<(GarminClient, &OAuth2Token)> {
         self.refresh_token().await?;
 
         let (Some(oauth1), Some(oauth2)) = (&self.oauth1, &self.oauth2) else {
             return Err(ConnectError::LoginRequired());
         };
 
-        let client = GarminClient::new(&oauth1.domain)
-            .map_err(|e| log_error("Error creating Garmin client", wrap(e)))?;
+        let client = GarminClient::new(&oauth1.domain);
 
         Ok((client, oauth2))
     }
@@ -609,18 +559,7 @@ impl ConnectClient {
     pub async fn list_workouts(&mut self) -> Result<Vec<WorkoutSummary>> {
         info!("Listing workouts...");
 
-        self.refresh_token().await?;
-
-        let (Some(oauth1), Some(oauth2)) = (&self.oauth1, &self.oauth2) else {
-            return Err(ConnectError::LoginRequired());
-        };
-
-        let client = GarminClient::new(&oauth1.domain).map_err(|e| {
-            log_error(
-                "Error creating Garmin client",
-                ConnectError::FetchWorkouts(e),
-            )
-        })?;
+        let (client, oauth2) = self.api_client().await?;
 
         let workouts = Self::fetch_workouts(&client, oauth2).await?;
         info!("Listed {} workouts.", workouts.len());
@@ -632,18 +571,7 @@ impl ConnectClient {
     pub async fn create_workout<T: Serialize>(&mut self, workout: &T) -> Result<WorkoutSummary> {
         info!("Creating workout...");
 
-        self.refresh_token().await?;
-
-        let (Some(oauth1), Some(oauth2)) = (&self.oauth1, &self.oauth2) else {
-            return Err(ConnectError::LoginRequired());
-        };
-
-        let client = GarminClient::new(&oauth1.domain).map_err(|e| {
-            log_error(
-                "Error creating Garmin client",
-                ConnectError::CreateWorkout(e),
-            )
-        })?;
+        let (client, oauth2) = self.api_client().await?;
 
         // Not retried: a request that timed out after reaching Connect would duplicate the workout
         let created: WorkoutSummary = client
@@ -667,18 +595,7 @@ impl ConnectClient {
             fields.insert("workoutId".to_string(), id.into());
         }
 
-        self.refresh_token().await?;
-
-        let (Some(oauth1), Some(oauth2)) = (&self.oauth1, &self.oauth2) else {
-            return Err(ConnectError::LoginRequired());
-        };
-
-        let client = GarminClient::new(&oauth1.domain).map_err(|e| {
-            log_error(
-                "Error creating Garmin client",
-                ConnectError::UpdateWorkout(id, e),
-            )
-        })?;
+        let (client, oauth2) = self.api_client().await?;
 
         let path = format!("/workout-service/workout/{}", id);
         with_retry(|| client.put_json(oauth2, &path, &body))
@@ -699,18 +616,7 @@ impl ConnectClient {
     ) -> Result<()> {
         info!("Sending workout {} to device {}...", workout_id, unit_id);
 
-        self.refresh_token().await?;
-
-        let (Some(oauth1), Some(oauth2)) = (&self.oauth1, &self.oauth2) else {
-            return Err(ConnectError::LoginRequired());
-        };
-
-        let client = GarminClient::new(&oauth1.domain).map_err(|e| {
-            log_error(
-                "Error creating Garmin client",
-                ConnectError::SendWorkout(workout_id, unit_id, e),
-            )
-        })?;
+        let (client, oauth2) = self.api_client().await?;
 
         let message = [DeviceMessage {
             device_id: unit_id,
@@ -745,14 +651,7 @@ impl ConnectClient {
     pub async fn list_weight(&mut self, from: Option<u32>) -> Result<Vec<BodyMetric>> {
         info!("Listing weight entries...");
 
-        self.refresh_token().await?;
-
-        let (Some(oauth1), Some(oauth2)) = (&self.oauth1, &self.oauth2) else {
-            return Err(ConnectError::LoginRequired());
-        };
-
-        let client = GarminClient::new(&oauth1.domain)
-            .map_err(|e| log_error("Error creating Garmin client", ConnectError::FetchWeight(e)))?;
+        let (client, oauth2) = self.api_client().await?;
         let end_date = chrono::Local::now().date_naive();
 
         let entries = match from {

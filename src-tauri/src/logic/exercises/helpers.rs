@@ -325,19 +325,21 @@ pub(super) async fn exercise_list(
         .collect();
 
     // Planned exercises may not have been recorded yet, so they can lack a catalog row
-    items.extend(planned.iter().map(|key| match exercises.get(key) {
-        Some(exercise) => ExerciseListItem::from(exercise),
-        None => ExerciseListItem {
-            category: key.0,
-            id: key.1,
-            reps: 0,
-            weight: 0.0,
-            date: 0,
-            unilateral: false,
-            progression: false,
-            notes: None,
-            used: false,
-        },
+    items.extend(planned.iter().map(|key| {
+        exercises.get(key).map_or_else(
+            || ExerciseListItem {
+                category: key.0,
+                id: key.1,
+                reps: 0,
+                weight: 0.0,
+                date: 0,
+                unilateral: false,
+                progression: false,
+                notes: None,
+                used: false,
+            },
+            ExerciseListItem::from,
+        )
     }));
 
     Ok(items)

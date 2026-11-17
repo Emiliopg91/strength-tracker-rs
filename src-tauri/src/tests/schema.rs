@@ -145,7 +145,7 @@ async fn session_roundtrip_with_relationships() {
             .item(&mut crate::dao::workout::Workout {
                 name: "Leg day".to_string(),
                 enabled: true,
-                notes: Some("".to_string()),
+                notes: Some(String::new()),
                 steps: Vec::new(),
                 connect_id: None,
                 connect_created_time: None,

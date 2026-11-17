@@ -143,7 +143,7 @@ fn device_path_ignores_extra_separators() {
 
 #[test]
 fn device_root_has_no_components() {
-    assert!(device_path_components("").is_empty());
-    assert!(device_path_components("/").is_empty());
-    assert!(device_path_components(".").is_empty());
+    assert_eq!(device_path_components(""), Vec::<String>::new());
+    assert_eq!(device_path_components("/"), Vec::<String>::new());
+    assert_eq!(device_path_components("."), Vec::<String>::new());
 }

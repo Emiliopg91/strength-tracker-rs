@@ -27,7 +27,7 @@ async fn program(db: &DatabasePool, name: &str, steps: &[((u16, u16), Option<&st
     db.run_in_transaction(async move |tx| {
         WorkoutRepository::insert()
             .item(&mut Workout {
-                name: name.to_string(),
+                name: name.clone(),
                 enabled: true,
                 notes: None,
                 steps: Vec::new(),
@@ -62,7 +62,7 @@ async fn program(db: &DatabasePool, name: &str, steps: &[((u16, u16), Option<&st
         for device in [WATCH, EDGE] {
             WorkoutDeviceRepository::insert()
                 .item(&mut WorkoutDevice {
-                    workout: name.to_string(),
+                    workout: name.clone(),
                     device: device.to_string(),
                     pending: false,
                 })
@@ -177,7 +177,10 @@ async fn steps_with_own_notes_queue_nothing_but_notes_are_stored() {
     let db = setup().await;
     program(&db, "Push", &[(BENCH, Some("Slow eccentric"))]).await;
 
-    assert!(save_notes(&db, BENCH, Some("Elbows in")).await.is_empty());
+    assert_eq!(
+        save_notes(&db, BENCH, Some("Elbows in")).await,
+        Vec::<String>::new()
+    );
     assert!(none_pending(&db, "Push").await);
     assert_eq!(
         exercise_notes(&db, BENCH).await.as_deref(),

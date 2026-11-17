@@ -46,10 +46,10 @@ fn exercise_sets_path(id: u64) -> String {
 
 impl GarminClient {
     /// Create an API client for the given Garmin domain (`garmin.com` or `garmin.cn`).
-    pub fn new(domain: &str) -> Result<Self> {
-        Ok(Self {
-            base_url: format!("https://connectapi.{}", domain),
-        })
+    pub fn new(domain: &str) -> Self {
+        Self {
+            base_url: format!("https://connectapi.{domain}"),
+        }
     }
 
     /// List activities, most recent first.

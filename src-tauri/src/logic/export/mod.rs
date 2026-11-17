@@ -55,7 +55,7 @@ pub async fn upload_to_cloud(
         info!("File uploaded succesfully");
         show_notification(NotificationDefinition {
             title: translate("upload_succesful", lang),
-            body: "".to_string(),
+            body: String::new(),
             kind: NotificationKind::Temporal,
         });
     })

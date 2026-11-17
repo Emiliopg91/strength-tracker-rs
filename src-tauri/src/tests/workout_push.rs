@@ -93,7 +93,7 @@ async fn workout_without_entries_has_no_devices() {
         .await
         .unwrap();
 
-    assert!(serials.is_empty());
+    assert_eq!(serials, Vec::<String>::new());
 }
 
 async fn connect_entry(db: &DatabasePool, workout: &str) -> Option<bool> {

@@ -57,10 +57,10 @@ fn session_details_without_additional_data() {
 
     assert_eq!(details.timestamp, 1);
     assert_eq!(details.steps.len(), 1);
-    assert!(details.heart_rates.is_empty());
-    assert!(details.coordinates.is_empty());
+    assert_eq!(details.heart_rates, []);
+    assert_eq!(details.coordinates, []);
     assert!(details.distance.is_none());
-    assert!(details.notes.is_empty());
+    assert_eq!(details.notes, "");
     assert!(details.device.is_none());
 }
 

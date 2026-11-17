@@ -379,7 +379,7 @@ pub(super) async fn delete_pending_workouts<R: Runtime>(app: &AppHandle<R>, seri
                 if deleted {
                     info!("Workout '{workout}' deleted from device {serial}");
                     show_notification(NotificationDefinition {
-                        title: workout.to_string(),
+                        title: workout.clone(),
                         body: translate("ok_workout_delete", lang),
                         kind: NotificationKind::Temporal,
                     });
@@ -387,7 +387,6 @@ pub(super) async fn delete_pending_workouts<R: Runtime>(app: &AppHandle<R>, seri
             }
             Err(e) => {
                 error!("Error deleting workout '{workout}' from {serial}: {e}");
-                continue;
             }
         }
     }

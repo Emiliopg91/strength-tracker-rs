@@ -27,7 +27,7 @@ impl RCloneTrait for RCloneClient<OneDrive> {
 
         let token_line = stdout
             .lines()
-            .find(|l| l.starts_with("{"))
+            .find(|l| l.starts_with('{'))
             .ok_or_else(RCloneError::BadToken)?;
         let json_obj =
             serde_json::from_str::<Value>(token_line).map_err(RCloneError::BadJsonFormat)?;

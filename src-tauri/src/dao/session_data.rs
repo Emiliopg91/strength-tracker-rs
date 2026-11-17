@@ -96,24 +96,14 @@ impl SessionData {
                 .iter()
                 .map(|chunk| {
                     let val = f64::from_be_bytes(*chunk);
-                    if val != Self::INVALID_SPEED {
-                        Some(val)
-                    } else {
-                        None
-                    }
+                    (val != Self::INVALID_SPEED).then_some(val)
                 })
                 .collect()
         })
     }
     /// Build blob from speeds Vec
     pub fn build_speeds_blob(value: &[f64]) -> Vec<u8> {
-        let mut records = Vec::new();
-
-        value.iter().for_each(|speed| {
-            records.extend_from_slice(&(*speed).to_be_bytes());
-        });
-
-        records
+        value.iter().flat_map(|speed| speed.to_be_bytes()).collect()
     }
 
     /// Unpacks the heart rate Blob into Vec

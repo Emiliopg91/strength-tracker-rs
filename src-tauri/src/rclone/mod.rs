@@ -46,42 +46,43 @@ trait RCloneTrait {
     }
 
     async fn is_configured(&self) -> errors::Result<bool> {
-        if let Ok(exist) = fs::try_exists(constants::RCLONE_CONFIG_FILE.as_path()).await
-            && exist
-        {
-            let content = fs::read_to_string(constants::RCLONE_CONFIG_FILE.as_path())
-                .await
-                .map_err(RCloneError::ReadConfig)?;
+        if !matches!(
+            fs::try_exists(constants::RCLONE_CONFIG_FILE.as_path()).await,
+            Ok(true)
+        ) {
+            return Ok(false);
+        }
 
-            let has_remote = |key: &str| {
-                let marker = format!("[{key}]");
-                content.lines().any(|l| l.trim() == marker)
-            };
-            if has_remote(&Self::get_provider_key()) {
+        let content = fs::read_to_string(constants::RCLONE_CONFIG_FILE.as_path())
+            .await
+            .map_err(RCloneError::ReadConfig)?;
+
+        let has_remote = |key: &str| {
+            let marker = format!("[{key}]");
+            content.lines().any(|l| l.trim() == marker)
+        };
+        if has_remote(&Self::get_provider_key()) {
+            return Ok(true);
+        }
+
+        // Remotes configured before a rename are renamed instead of authorizing again
+        for legacy in constants::LEGACY_APP_NAMES {
+            let legacy_key = format!("{legacy}-{}", Self::get_provider_suffix());
+            if has_remote(&legacy_key) {
+                Self::run_rclone(
+                    &[
+                        OsStr::new("config"),
+                        OsStr::new("rename"),
+                        OsStr::new(&legacy_key),
+                        OsStr::new(&Self::get_provider_key()),
+                    ],
+                    RCloneError::CommandError,
+                )
+                .await?;
                 return Ok(true);
             }
-
-            // Remotes configured before a rename are renamed instead of authorizing again
-            for legacy in constants::LEGACY_APP_NAMES {
-                let legacy_key = format!("{legacy}-{}", Self::get_provider_suffix());
-                if has_remote(&legacy_key) {
-                    Self::run_rclone(
-                        &[
-                            OsStr::new("config"),
-                            OsStr::new("rename"),
-                            OsStr::new(&legacy_key),
-                            OsStr::new(&Self::get_provider_key()),
-                        ],
-                        RCloneError::CommandError,
-                    )
-                    .await?;
-                    return Ok(true);
-                }
-            }
-            Ok(false)
-        } else {
-            Ok(false)
         }
+        Ok(false)
     }
 
     async fn upload<P>(&self, path: P) -> errors::Result<()>

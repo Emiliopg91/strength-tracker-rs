@@ -152,7 +152,7 @@ impl From<(&Session, &[Exercise], &[SessionStep], &[SessionLap])> for SessionDet
         let mut gps_coordinates = Vec::new();
         let mut speeds = Vec::new();
         let mut distance = None;
-        let mut notes = "".to_string();
+        let mut notes = String::new();
 
         if let Some(add_data) = &value.0.data {
             distance = add_data.distance.map(|d| d / 1000_f64);

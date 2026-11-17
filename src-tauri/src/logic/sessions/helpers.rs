@@ -267,8 +267,7 @@ pub(super) fn notify_progression_available(lang: Languages) {
 fn notify_parse_error(name: &str, error: &str, lang: Languages) {
     let title = Path::new(name)
         .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| name.to_string());
+        .map_or_else(|| name.to_string(), |n| n.to_string_lossy().into_owned());
     show_notification(NotificationDefinition {
         title,
         body: translate_and_replace("error_parsing_session", &[error], lang),
@@ -590,7 +589,7 @@ pub(crate) fn parse_files(files: &[FitFile]) -> ParsedFiles {
 /// Inserts each new session parsed (plus its exercises/series/heart rate/GPS/speeds) in the given
 /// transaction, then refreshes personal records.
 pub(crate) async fn import_file_list(
-    tx: &mut Transaction<'_>,
+    tx: &Transaction<'_>,
     parsed: ParsedFiles,
 ) -> Result<ImportedFiles, DatabaseError> {
     let ParsedFiles {
@@ -612,7 +611,7 @@ pub(crate) async fn import_file_list(
     for session in &mut sessions {
         let formatted_time = match Local.timestamp_opt(session.date as i64, 0) {
             LocalResult::Single(date) => date.format("%H:%M:%S %d/%m/%Y").to_string(),
-            _ => "".to_string(),
+            _ => String::new(),
         };
         info!("Importing session {} - {}...", session.name, formatted_time);
         if existing_sessions.contains(&session.date) {
@@ -634,17 +633,19 @@ pub(crate) async fn import_file_list(
         success.push(session.date);
     }
 
-    let mut new_prs = false;
-    let mut imported_progression = false;
-    let mut any_progression = None;
-    if !success.is_empty() {
-        new_prs = SessionStep::update_prs(tx, &handled_exercises, &success).await?;
+    let (new_prs, imported_progression, any_progression) = if success.is_empty() {
+        (false, false, None)
+    } else {
+        let new_prs = SessionStep::update_prs(tx, &handled_exercises, &success).await?;
 
         // Evaluated once: tells both whether the imported exercises progress and whether any does
         let suggested = progression_suggestions(tx).await?;
-        imported_progression = handled_exercises.iter().any(|e| suggested.contains(e));
-        any_progression = Some(!suggested.is_empty());
-    }
+        (
+            new_prs,
+            handled_exercises.iter().any(|e| suggested.contains(e)),
+            Some(!suggested.is_empty()),
+        )
+    };
 
     Ok(ImportedFiles {
         sessions: success,

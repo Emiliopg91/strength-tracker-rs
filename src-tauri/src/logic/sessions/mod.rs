@@ -166,7 +166,7 @@ pub async fn save_session_changes<R: Runtime>(
             info!("Session updated succesfully");
             show_notification(NotificationDefinition {
                 title: translate("ok_update_session", lang),
-                body: "".to_string(),
+                body: String::new(),
                 kind: NotificationKind::Temporal,
             });
 

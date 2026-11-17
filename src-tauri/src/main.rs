@@ -9,28 +9,22 @@ use tauri_plugin_log::log::LevelFilter;
 fn main() {
     let args: Vec<_> = std::env::args().collect();
 
-    if args.len() > 1 {
-        match args.get(1).unwrap().as_str() {
-            "--poll" => {
-                exit(if check_running() { 1 } else { 0 });
+    match args.get(1).map(String::as_str) {
+        Some("--poll") => exit(i32::from(check_running())),
+        Some("--rules") => {
+            if let Some(auto_run) = args.get(2) {
+                exit(match force_write_mtp_rules(auto_run == "true") {
+                    Ok(()) => 0,
+                    Err(e) => {
+                        eprintln!("Error writing udev rules: {e}");
+                        1
+                    }
+                })
             }
-            "--rules" => {
-                if args.len() > 2 {
-                    let auto_run = args.get(2).unwrap() == "true";
-                    exit(match force_write_mtp_rules(auto_run) {
-                        Ok(()) => 0,
-                        Err(e) => {
-                            eprintln!("Error writing udev rules: {e}");
-                            1
-                        }
-                    })
-                } else {
-                    eprintln!("Bad usage")
-                }
-            }
-            "--on-connect" => {}
-            _ => {}
+            eprintln!("Bad usage");
         }
+        Some("--on-connect") => {}
+        _ => {}
     }
 
     #[cfg(debug_assertions)]

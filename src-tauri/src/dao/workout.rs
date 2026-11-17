@@ -188,10 +188,7 @@ impl Workout {
     }
 
     /// Saves the new Connect id and creation time of the workout and queues it again for its devices.
-    pub async fn set_connect_keys(
-        &mut self,
-        tx: &Transaction<'_>,
-    ) -> rusqlite_orm::errors::Result<()> {
+    pub async fn set_connect_keys(&self, tx: &Transaction<'_>) -> rusqlite_orm::errors::Result<()> {
         self.update_by_id_in(tx).await?;
         WorkoutDevice::requeue_on_devices(tx, std::slice::from_ref(&self.name)).await
     }

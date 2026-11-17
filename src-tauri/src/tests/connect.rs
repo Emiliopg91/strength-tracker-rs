@@ -641,7 +641,7 @@ fn exercise_sets_expose_the_modelled_fields() {
 
     let last = sets.exercise_sets.last().unwrap();
     assert_eq!(last.set_type, ExerciseSetType::Rest);
-    assert!(last.exercises.is_empty());
+    assert_eq!(last.exercises, []);
     assert_eq!(last.wkt_step_index, None);
 }
 
@@ -755,7 +755,7 @@ fn empty_workout_schedule_export_is_parsed() {
 
     let export: WorkoutScheduleExport = serde_json::from_str(json).unwrap();
 
-    assert!(export.workout_schedules.is_empty());
+    assert_eq!(export.workout_schedules, []);
     assert_eq!(export.start_calendar_date, day(2026, 11, 13));
     assert_eq!(export.end_calendar_date, day(2026, 12, 13));
 }

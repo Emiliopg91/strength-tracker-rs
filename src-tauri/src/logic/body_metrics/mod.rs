@@ -83,7 +83,7 @@ pub async fn delete_body_metric<R: Runtime>(
             info!("Measures deleted succesfully");
             show_notification(NotificationDefinition {
                 title: translate("ok_delete_body_entry", lang),
-                body: "".to_string(),
+                body: String::new(),
                 kind: NotificationKind::Temporal,
             });
             Ok(())
