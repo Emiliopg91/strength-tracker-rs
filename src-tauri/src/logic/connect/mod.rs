@@ -96,7 +96,7 @@ async fn name_from_connect_location<R: Runtime>(
         }
     };
 
-    for session in pending.iter().map(|p| p.session) {
+    for session in pending {
         let Some(id) = ids.get(&session).filter(|_| imported.contains(&session)) else {
             continue;
         };

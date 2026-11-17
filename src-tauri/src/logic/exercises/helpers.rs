@@ -196,22 +196,14 @@ async fn progression_suggestions_for<'a>(
 
     // Sets of the latest session of each exercise
     let keys: HashSet<(u16, u16)> = exercises.keys().copied().collect();
-    let mut latest: HashMap<(u16, u16), (u32, Vec<Set>)> = HashMap::new();
-    for (key, session, weight, reps) in SessionStep::get_exercise_sets(conn, &keys).await? {
-        let entry = latest.entry(key).or_insert((session, Vec::new()));
-        if session > entry.0 {
-            *entry = (session, Vec::new());
-        }
-        if session == entry.0 {
-            entry.1.push((weight, reps));
-        }
+    let mut latest: HashMap<(u16, u16), Vec<Set>> = HashMap::new();
+    for (key, _, weight, reps) in SessionStep::get_latest_exercise_sets(conn, &keys).await? {
+        latest.entry(key).or_default().push((weight, reps));
     }
 
     let candidates: HashMap<(u16, u16), ProgressionSuggestion> = latest
         .iter()
-        .filter_map(|(key, (_, sets))| {
-            Some((*key, suggestion_from_sets(exercises.get(key)?, sets)?))
-        })
+        .filter_map(|(key, sets)| Some((*key, suggestion_from_sets(exercises.get(key)?, sets)?)))
         .collect();
     if candidates.is_empty() {
         return Ok(HashMap::new());

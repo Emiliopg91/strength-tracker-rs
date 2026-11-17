@@ -100,7 +100,7 @@ pub(super) async fn check_for_update<R: Runtime>(app: &AppHandle<R>) {
 
 /// Latest version published on GitHub.
 async fn latest_version() -> Result<Version, String> {
-    let response = reqwest::Client::new()
+    let response = crate::utils::http::client()
         .get(constants::URL)
         .header(reqwest::header::USER_AGENT, "strength-coach-for-garmin")
         .header(reqwest::header::ACCEPT, "application/vnd.github+json")

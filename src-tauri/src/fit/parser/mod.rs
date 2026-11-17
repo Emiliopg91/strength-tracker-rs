@@ -4,6 +4,7 @@ use std::io::Cursor;
 #[cfg(any(test, debug_assertions))]
 use std::path::Path;
 
+use bytes::Bytes;
 use embedded_io_adapters::std::FromStd;
 use ouroboros::self_referencing;
 use rustyfit::{Decoder, StreamDecoder};
@@ -22,7 +23,7 @@ pub struct FitParser {
 
     #[borrows(mut decoder)]
     #[not_covariant]
-    stream: StreamDecoder<'this, FromStd<Cursor<Vec<u8>>>>,
+    stream: StreamDecoder<'this, FromStd<Cursor<Bytes>>>,
 }
 
 impl FitParser {

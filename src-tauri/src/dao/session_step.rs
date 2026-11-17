@@ -94,7 +94,16 @@ impl SessionStep {
     pub async fn get_personal_records(
         conn: &Connection,
     ) -> rusqlite_orm::errors::Result<Vec<SessionStep>> {
-        SessionStepRepository::select_by_personal_records_in(conn, true, None).await
+        // Only exercise sets can hold a record; filtering by exercise lets SQLite scan the
+        // partial SESSION_STEP_EXERCISE_PR index, which holds just the records
+        SessionStepRepository::select()
+            .where_(Where::And(vec![
+                Where::Eq(entity::columns::PR, true.into()),
+                Where::NotNull(entity::columns::EX_CAT),
+                Where::NotNull(entity::columns::EX_ID),
+            ]))
+            .fetch_in(conn)
+            .await
     }
 
     /// Keys of every exercise with some recorded set.
@@ -214,12 +223,33 @@ impl SessionStep {
         Ok(pr_counts)
     }
 
-    /// Exercise sets of the exercises in `keys`, as `(exercise, session, weight, reps)`, a missing
-    /// weight or reps counting as 0.
-    pub async fn get_exercise_sets(
+    /// Exercise sets of the latest session of each exercise in `keys`, as
+    /// `(exercise, session, weight, reps)`, a missing weight or reps counting as 0.
+    pub async fn get_latest_exercise_sets(
         conn: &Connection,
         keys: &HashSet<(u16, u16)>,
     ) -> rusqlite_orm::errors::Result<Vec<((u16, u16), u32, f32, u16)>> {
+        if keys.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Latest session of each exercise
+        let latest_sessions = SessionStepRepository::select()
+            .columns(&[
+                entity::columns::EX_CAT.into(),
+                entity::columns::EX_ID.into(),
+                entity::columns::SESSION.max(),
+            ])
+            .where_(Where::And(vec![
+                Where::Eq(entity::columns::KIND, StepType::Exercise.into()),
+                Where::InMultiple(
+                    vec![entity::columns::EX_CAT, entity::columns::EX_ID],
+                    exercise_key_values(keys),
+                ),
+            ]))
+            .group_by(&[entity::columns::EX_CAT, entity::columns::EX_ID])
+            .to_subquery();
+
         Ok(SessionStepRepository::select()
             .columns(&[
                 entity::columns::EX_CAT,
@@ -230,9 +260,13 @@ impl SessionStep {
             ])
             .where_(Where::And(vec![
                 Where::Eq(entity::columns::KIND, StepType::Exercise.into()),
-                Where::InMultiple(
-                    vec![entity::columns::EX_CAT, entity::columns::EX_ID],
-                    exercise_key_values(keys),
+                Where::InMultipleSub(
+                    vec![
+                        entity::columns::EX_CAT,
+                        entity::columns::EX_ID,
+                        entity::columns::SESSION,
+                    ],
+                    latest_sessions,
                 ),
             ]))
             .fetch_in(conn)

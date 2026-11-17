@@ -173,22 +173,43 @@ impl SessionData {
         Ok(())
     }
 
-    /// Coordinates of the unnamed sessions recorded with GPS, newest first, to name them after
-    /// their location.
+    /// Unnamed sessions recorded with GPS, newest first, to name them after their location.
     pub async fn get_pending_geolocation(
         conn: &Connection,
-    ) -> rusqlite_orm::errors::Result<Vec<SessionData>> {
+    ) -> rusqlite_orm::errors::Result<Vec<u32>> {
         let unnamed_sessions = SessionRepository::select()
             .columns(&[session_cols::DATE])
             .where_(Where::Eq(session_cols::NAME, "".into()))
             .to_subquery();
 
-        SessionDataRepository::select()
-            .columns(&[entity::columns::SESSION, entity::columns::COORDINATES])
+        Ok(SessionDataRepository::select()
+            .columns(&[entity::columns::SESSION])
             .where_(Where::And(vec![
                 Where::InSub(entity::columns::SESSION, unnamed_sessions),
                 Where::NotNull(entity::columns::COORDINATES),
             ]))
+            .order_by(OrderBy::Desc(entity::columns::SESSION))
+            .fetch_in(conn)
+            .await?
+            .iter()
+            .map(|row| row.get_u32(entity::columns::SESSION.as_ref()))
+            .collect())
+    }
+
+    /// Coordinates of the sessions started at any of `dates`, newest first.
+    pub async fn get_coordinates(
+        conn: &Connection,
+        dates: &[u32],
+    ) -> rusqlite_orm::errors::Result<Vec<SessionData>> {
+        if dates.is_empty() {
+            return Ok(Vec::new());
+        }
+        SessionDataRepository::select()
+            .columns(&[entity::columns::SESSION, entity::columns::COORDINATES])
+            .where_(Where::In(
+                entity::columns::SESSION,
+                dates.iter().map(|d| (*d).into()).collect(),
+            ))
             .order_by(OrderBy::Desc(entity::columns::SESSION))
             .fetch_in(conn)
             .await

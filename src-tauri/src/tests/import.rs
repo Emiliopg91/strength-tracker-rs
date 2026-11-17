@@ -6,7 +6,7 @@ use crate::{
         session::{Session, SessionRepository},
     },
     fit::{FitFile, parser::FitParser},
-    logic::sessions::helpers::import_file_list,
+    logic::sessions::helpers::{import_file_list, parse_files},
     tests::common,
 };
 
@@ -51,7 +51,7 @@ async fn register_device(db: &DatabasePool, serial: &str) {
 async fn import(db: &DatabasePool, fixture: &str) -> Option<String> {
     let files = [FitFile::read(fixture_path(fixture)).unwrap()];
     let imported = db
-        .run_in_transaction(async move |tx| Ok(import_file_list(tx, &files).await?))
+        .run_in_transaction(async move |tx| Ok(import_file_list(tx, parse_files(&files)).await?))
         .await
         .unwrap();
     assert_eq!(imported.sessions.len(), 1);
@@ -98,7 +98,7 @@ async fn unknown_device_is_cleared() {
 async fn import_connect_id(db: &DatabasePool, file: FitFile) -> Option<String> {
     let files = [file];
     let imported = db
-        .run_in_transaction(async move |tx| Ok(import_file_list(tx, &files).await?))
+        .run_in_transaction(async move |tx| Ok(import_file_list(tx, parse_files(&files)).await?))
         .await
         .unwrap();
     assert_eq!(imported.sessions.len(), 1);

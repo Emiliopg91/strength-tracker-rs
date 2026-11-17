@@ -1,7 +1,6 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeSet, HashMap, HashSet},
     path::{Path, PathBuf},
-    sync::Arc,
     time::Duration,
 };
 
@@ -98,9 +97,9 @@ pub(crate) async fn import_file_paths<R: Runtime>(
     files: Vec<PathBuf>,
 ) -> Result<usize, String> {
     let lang = language(app);
-    // Reading the files is blocking work
-    let files: Vec<FitFile> = tokio::task::spawn_blocking(move || {
-        files
+    // Reading and parsing the files is blocking work, done before taking a pooled connection
+    let parsed = tokio::task::spawn_blocking(move || {
+        let files: Vec<FitFile> = files
             .iter()
             .filter_map(|path| match FitFile::read(path) {
                 Ok(file) => Some(file),
@@ -110,13 +109,14 @@ pub(crate) async fn import_file_paths<R: Runtime>(
                     None
                 }
             })
-            .collect()
+            .collect();
+        parse_files(&files)
     })
     .await
     .expect("FIT reading task panicked");
 
     let res = pool(app)
-        .run_in_transaction(async move |tx| Ok(import_file_list(tx, &files).await?))
+        .run_in_transaction(async move |tx| Ok(import_file_list(tx, parsed).await?))
         .await
         .map_err(|e| e.to_string());
 
@@ -139,13 +139,18 @@ pub(crate) async fn import_pending_sessions<R: Runtime>(
     lang: Languages,
     sync_mark: Option<u32>,
 ) -> Result<Vec<u32>, DatabaseError> {
-    // Shared with the transaction, as they are still needed to store them as pending if it fails
-    let files = Arc::new(files);
-    let tx_files = Arc::clone(&files);
+    // Parsed before taking a pooled connection. The files are kept to store them as pending if the
+    // transaction fails; their clones share the contents
+    let parsed = {
+        let files = files.clone();
+        tokio::task::spawn_blocking(move || parse_files(&files))
+            .await
+            .expect("FIT parsing task panicked")
+    };
     let mut tx_device = device.clone();
     let res = pool(app)
         .run_in_transaction(async move |tx| {
-            let imported = import_device_files(tx, &tx_files, &mut tx_device, sync_mark).await?;
+            let imported = import_device_files(tx, parsed, &mut tx_device, sync_mark).await?;
             Ok((imported, tx_device))
         })
         .await;
@@ -271,14 +276,37 @@ fn notify_parse_error(name: &str, error: &str, lang: Languages) {
     });
 }
 
-pub(super) static GELOCATION_MUTEX: Mutex<()> = Mutex::const_new(());
+/// Serializes the geolocation runs and holds the sessions that cannot be named after a place (no
+/// valid position, or none Nominatim knows), skipped until the app restarts instead of being
+/// loaded and queried again on every import.
+static GEOLOCATION_SKIPPED: Mutex<BTreeSet<u32>> = Mutex::const_new(BTreeSet::new());
 
 /// Names the unnamed sessions recorded with GPS after the place where they started.
 pub(crate) async fn update_pending_geolocation<R: Runtime>(app: &AppHandle<R>) {
-    let _lock = GELOCATION_MUTEX.lock().await;
+    let mut skipped = GEOLOCATION_SKIPPED.lock().await;
     info!("Looking for sessions pending geolocation...");
-    let pending = match pool(app)
+    let pending: Vec<u32> = match pool(app)
         .run_in_connection(async |conn| Ok(SessionData::get_pending_geolocation(conn).await?))
+        .await
+    {
+        Ok(pending) => pending
+            .into_iter()
+            .filter(|session| !skipped.contains(session))
+            .collect(),
+        Err(e) => {
+            error!("Error while looking for pending sessions: {}", e);
+            return;
+        }
+    };
+    if pending.is_empty() {
+        info!("Found no pending sessions");
+        return;
+    }
+
+    let pending = match pool(app)
+        .run_in_connection(
+            async move |conn| Ok(SessionData::get_coordinates(conn, &pending).await?),
+        )
         .await
     {
         Ok(pending) => pending,
@@ -297,6 +325,7 @@ pub(crate) async fn update_pending_geolocation<R: Runtime>(app: &AppHandle<R>) {
             .and_then(|coords| coords.into_iter().flatten().next())
         else {
             warn!("Session @ {session} has no valid position to geolocate");
+            skipped.insert(session);
             continue;
         };
 
@@ -318,7 +347,9 @@ pub(crate) async fn update_pending_geolocation<R: Runtime>(app: &AppHandle<R>) {
                     Err(e) => error!("Error while updating session {session}: {e}"),
                 }
             }
-            Ok(None) => {}
+            Ok(None) => {
+                skipped.insert(session);
+            }
             Err(e) => error!("Error geolocating session @ {session}: {e}"),
         }
 
@@ -332,7 +363,7 @@ pub(crate) async fn update_pending_geolocation<R: Runtime>(app: &AppHandle<R>) {
 async fn geocode(lat: f64, lon: f64) -> Result<Option<String>, String> {
     let url =
         format!("https://nominatim.openstreetmap.org/reverse?format=json&lat={lat}&lon={lon}");
-    let response = reqwest::Client::new()
+    let response = crate::utils::http::client()
         .get(&url)
         .header(reqwest::header::USER_AGENT, "strength-coach-for-garmin")
         .header(reqwest::header::ACCEPT, "application/json")
@@ -522,16 +553,18 @@ pub(crate) struct ImportedFiles {
     pub any_progression: Option<bool>,
 }
 
-/// Parses a batch of `.FIT` files in parallel and inserts each new session (plus its
-/// exercises/series/heart rate/GPS/speeds) in the given transaction, then refreshes personal
-/// records.
-pub(crate) async fn import_file_list(
-    tx: &mut Transaction<'_>,
-    files: &[FitFile],
-) -> Result<ImportedFiles, DatabaseError> {
-    let mut success = Vec::new();
-    let mut handled_exercises: HashSet<(u16, u16)> = HashSet::new();
+/// Outcome of `parse_files`.
+#[derive(Default)]
+pub(crate) struct ParsedFiles {
+    /// Sessions parsed, oldest first.
+    pub sessions: Vec<Session>,
+    /// Files that could not be parsed, with the parse error.
+    pub failed: Vec<(FitFile, String)>,
+}
 
+/// Parses a batch of `.FIT` files in parallel. Blocking work, to run outside the async runtime and
+/// before opening the transaction that imports them.
+pub(crate) fn parse_files(files: &[FitFile]) -> ParsedFiles {
     let (mut sessions, failed): (Vec<_>, Vec<_>) = files.par_iter().partition_map(|file| {
         info!("Parsing session file {}", file.name);
         match Session::try_from(FitParser::from_fit_file(file.clone())) {
@@ -550,6 +583,22 @@ pub(crate) async fn import_file_list(
     });
 
     sessions.sort_by_key(|s| s.date);
+
+    ParsedFiles { sessions, failed }
+}
+
+/// Inserts each new session parsed (plus its exercises/series/heart rate/GPS/speeds) in the given
+/// transaction, then refreshes personal records.
+pub(crate) async fn import_file_list(
+    tx: &mut Transaction<'_>,
+    parsed: ParsedFiles,
+) -> Result<ImportedFiles, DatabaseError> {
+    let ParsedFiles {
+        mut sessions,
+        failed,
+    } = parsed;
+    let mut success = Vec::new();
+    let mut handled_exercises: HashSet<(u16, u16)> = HashSet::new();
 
     let dates: Vec<u32> = sessions.iter().map(|s| s.date).collect();
     let mut existing_sessions = Session::get_existing_dates(tx, &dates).await?;
@@ -606,17 +655,18 @@ pub(crate) async fn import_file_list(
     })
 }
 
-/// Imports the `.fit` files fetched from `device` and, with `sync_mark`, moves its last activity
-/// sync to it.
+/// Imports the sessions parsed from the `.fit` files fetched from `device` and, with `sync_mark`,
+/// moves its last activity sync to it.
 pub(super) async fn import_device_files(
     tx: &mut Transaction<'_>,
-    files: &[FitFile],
+    parsed: ParsedFiles,
     device: &mut Device,
     sync_mark: Option<u32>,
 ) -> Result<ImportedFiles, DatabaseError> {
-    let res = if !files.is_empty() {
-        info!("Fetched {} activity files", files.len());
-        import_file_list(tx, files).await?
+    let fetched = parsed.sessions.len() + parsed.failed.len();
+    let res = if fetched > 0 {
+        info!("Fetched {} activity files", fetched);
+        import_file_list(tx, parsed).await?
     } else {
         ImportedFiles::default()
     };

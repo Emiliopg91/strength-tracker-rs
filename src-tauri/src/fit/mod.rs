@@ -1,21 +1,24 @@
 pub mod parser;
 pub mod writer;
 
+use bytes::Bytes;
+
 /// A `.fit` file held in memory, as fetched from a device or from Connect.
 #[derive(Debug, Clone)]
 pub struct FitFile {
     /// File name, used to identify it in logs and as its name if it gets stored as pending.
     pub name: String,
-    pub data: Vec<u8>,
+    /// Contents, shared by the clones: they are kept to be stored as pending while they are parsed.
+    pub data: Bytes,
     /// Connect activity the file was downloaded from, if any.
     pub activity_id: Option<u64>,
 }
 
 impl FitFile {
-    pub fn new(name: impl Into<String>, data: Vec<u8>) -> Self {
+    pub fn new(name: impl Into<String>, data: impl Into<Bytes>) -> Self {
         Self {
             name: name.into(),
-            data,
+            data: data.into(),
             activity_id: None,
         }
     }

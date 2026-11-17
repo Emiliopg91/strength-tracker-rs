@@ -290,7 +290,7 @@ async fn migration_27_nulls_reps_and_weight_only_on_rest_steps() {
             )?)
         }).await
         .unwrap();
-    assert_eq!(indexes, 4);
+    assert_eq!(indexes, 3);
 }
 
 #[tokio::test]
@@ -511,7 +511,6 @@ async fn migration_30_tunes_indexes() {
         .unwrap()
     };
     assert_eq!(index_sql("WORKOUT_STEP_WORKOUT").await, None);
-    assert!(index_sql("SESSION_STEP_PR").await.is_some());
     assert!(index_sql("MUSCLE_EXERCISE_EXERCISE").await.is_some());
     assert!(
         index_sql("SESSION_STEP_EXERCISE_PR")
@@ -538,22 +537,68 @@ async fn migration_30_tunes_indexes() {
         plan.iter().any(|p| p.contains("SESSION_STEP_EXERCISE_PR")),
         "{plan:?}"
     );
+}
 
-    // Lookups by the record flag alone keep SESSION_STEP_PR
-    let plan: Vec<String> = db
-        .run_in_connection(async move |conn| {
-            let mut stmt =
-                conn.prepare("EXPLAIN QUERY PLAN SELECT * FROM SESSION_STEP WHERE pr=true")?;
+#[tokio::test]
+async fn migration_34_indexes_records_by_load() {
+    let db = common::test_db().await;
+
+    let plan = async |sql: &'static str| -> Vec<String> {
+        db.run_in_connection(async move |conn| {
+            let mut stmt = conn.prepare(&format!("EXPLAIN QUERY PLAN {sql}"))?;
             let rows = stmt
                 .query_map([], |r| r.get::<_, String>(3))?
                 .collect::<Result<_, _>>()?;
             Ok(rows)
         })
         .await
-        .unwrap();
+        .unwrap()
+    };
+
+    let index_exists = async |name: &'static str| {
+        db.run_in_connection(async move |conn| {
+            Ok(conn
+                .query_row(
+                    "SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = ?1",
+                    [name],
+                    |_| Ok(()),
+                )
+                .is_ok())
+        })
+        .await
+        .unwrap()
+    };
+    assert!(!index_exists("SESSION_STEP_PR").await);
+    assert!(!index_exists("SESSION_STEP_EXERCISE").await);
+
+    // The record of an exercise is read straight from the index, without sorting its sets
+    let record = plan(
+        "SELECT * FROM SESSION_STEP WHERE exercise_category=1 AND exercise_id=2
+         ORDER BY weight DESC, reps DESC, session ASC, idx ASC LIMIT 1",
+    )
+    .await;
     assert!(
-        plan.iter().any(|p| p.contains("SESSION_STEP_PR ")),
-        "{plan:?}"
+        record
+            .iter()
+            .any(|p| p.contains("SESSION_STEP_EXERCISE_RECORD")),
+        "{record:?}"
+    );
+    assert!(
+        !record.iter().any(|p| p.contains("TEMP B-TREE")),
+        "{record:?}"
+    );
+
+    // Every record, as `SessionStep::get_personal_records` asks for them, scans the partial index
+    let records = plan(
+        "SELECT * FROM SESSION_STEP
+         WHERE pr=true AND exercise_category IS NOT NULL AND exercise_id IS NOT NULL",
+    )
+    .await;
+    assert!(
+        records
+            .iter()
+            .any(|p| p.contains("SESSION_STEP_EXERCISE_PR")),
+        "{records:?}"
     );
 }
 

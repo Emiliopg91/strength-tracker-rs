@@ -335,15 +335,23 @@ impl ConnectClient {
         let to = Local::now().date_naive();
         let from = to - chrono::Days::new(CALENDAR_RECENT_DAYS);
 
-        let mut items = Vec::new();
-        for (year, month) in calendar_months(from, to) {
-            let page = with_retry(|| client.list_calendar_month(oauth2, year, month))
-                .await
-                .map_err(|e| {
-                    log_error("Error fetching calendar", ConnectError::FetchCalendar(e))
-                })?;
-            items.extend(calendar_page_items(page, year, month, from, to));
-        }
+        // The months are independent, so they are fetched at once, kept in order
+        let pages: Vec<Vec<CalendarItem>> = stream::iter(calendar_months(from, to))
+            .map(|(year, month)| {
+                let client = &client;
+                async move {
+                    let page = with_retry(|| client.list_calendar_month(oauth2, year, month))
+                        .await
+                        .map_err(|e| {
+                            log_error("Error fetching calendar", ConnectError::FetchCalendar(e))
+                        })?;
+                    Ok::<_, ConnectError>(calendar_page_items(page, year, month, from, to))
+                }
+            })
+            .buffered(DOWNLOAD_CONCURRENCY)
+            .try_collect()
+            .await?;
+        let items: Vec<CalendarItem> = pages.into_iter().flatten().collect();
         info!("Listed {} calendar items.", items.len());
 
         Ok(items)
