@@ -16,6 +16,7 @@ use crate::{
         devices::helpers::{notify_workout_sent, set_workout_on_device},
         pool, report_error,
         sessions::helpers::{finish_session_import, import_pending_sessions},
+        settings_language,
     },
 };
 
@@ -24,7 +25,7 @@ pub async fn import_from_connect<R: Runtime>(
     settings: &SettingsLock,
     connect: &ConnectLock,
 ) -> Result<usize, String> {
-    let lang = settings.read().unwrap().language;
+    let lang = settings_language(settings);
 
     let res: Result<_, String> = async {
         let (mut device, existing) = pool(app)
@@ -41,16 +42,12 @@ pub async fn import_from_connect<R: Runtime>(
 
         let pending: Vec<u64> = calendar_items
             .iter()
-            .filter_map(|e| {
-                if e.item_type == CalendarItemType::Activity
-                    && let Some(date) = e.start_timestamp_local
-                    && !existing.contains(&date)
-                {
-                    e.id
-                } else {
-                    None
-                }
+            .filter(|e| {
+                e.item_type == CalendarItemType::Activity
+                    && e.start_timestamp_local
+                        .is_some_and(|d| !existing.contains(&d))
             })
+            .filter_map(|e| e.id)
             .collect();
 
         let files = connect
@@ -97,7 +94,10 @@ async fn name_from_connect_location<R: Runtime>(
     };
 
     for session in pending {
-        let Some(id) = ids.get(&session).filter(|_| imported.contains(&session)) else {
+        if !imported.contains(&session) {
+            continue;
+        }
+        let Some(id) = ids.get(&session) else {
             continue;
         };
         let location = match connect.get_activity_location(*id).await {
@@ -133,7 +133,7 @@ pub async fn import_weight_from_connect<R: Runtime>(
         let mut entries = connect
             .lock()
             .await
-            .list_weight(existing.first().copied())
+            .list_weight(existing.last().copied())
             .await
             .map_err(|e| e.to_string())?;
 
@@ -218,7 +218,7 @@ pub async fn send_to_connect<R: Runtime>(
     }
     .await;
 
-    let lang = settings.read().unwrap().language;
+    let lang = settings_language(settings);
 
     match res {
         Ok(()) => {

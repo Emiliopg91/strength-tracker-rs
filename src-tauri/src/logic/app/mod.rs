@@ -23,6 +23,7 @@ use crate::{
         notifications::show_notification,
         pool, report_error,
         sessions::helpers::spawn_geolocation_update,
+        settings_language,
     },
     utils::translations::{Languages, TRANSLATIONS, translate},
 };
@@ -145,7 +146,7 @@ pub async fn update_settings_value<R: Runtime>(
 
 /// Returns every translation key resolved to the current UI language, for the frontend's i18n bootstrap.
 pub async fn get_translations(settings: &SettingsLock) -> Result<HashMap<String, String>, String> {
-    let lang = settings.read().unwrap().language;
+    let lang = settings_language(settings);
     Ok(TRANSLATIONS
         .keys()
         .map(|k| (k.to_string(), translate(k, lang)))

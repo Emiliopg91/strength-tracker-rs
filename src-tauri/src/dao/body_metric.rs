@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 
 use rusqlite_orm::{
     Entity,
@@ -80,11 +80,10 @@ impl BodyMetric {
             .map(|_| ())
     }
 
-    /// Dates of the stored body measurements, newest first.
-    pub async fn get_dates(conn: &Connection) -> rusqlite_orm::errors::Result<Vec<u32>> {
+    /// Dates of the stored body measurements.
+    pub async fn get_dates(conn: &Connection) -> rusqlite_orm::errors::Result<BTreeSet<u32>> {
         Ok(BodyMetricRepository::select()
             .columns(&[entity::columns::DATE])
-            .order_by(OrderBy::Desc(entity::columns::DATE))
             .fetch_in(conn)
             .await?
             .iter()
@@ -96,7 +95,7 @@ impl BodyMetric {
     pub async fn insert_new(
         tx: &'_ Transaction<'_>,
         entries: &mut [BodyMetric],
-        existing: &[u32],
+        existing: &BTreeSet<u32>,
     ) -> rusqlite_orm::errors::Result<usize> {
         let mut insert = BodyMetricRepository::insert().or_replace();
         for entry in entries {

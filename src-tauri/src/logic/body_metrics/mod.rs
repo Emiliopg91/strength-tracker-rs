@@ -10,7 +10,7 @@ use crate::{
         body_metrics::BodyMetricListItem,
         notifications::{NotificationDefinition, NotificationKind},
     },
-    logic::{notifications::show_notification, pool, report_error},
+    logic::{notifications::show_notification, pool, report_error, settings_language},
     utils::translations::translate,
 };
 
@@ -77,7 +77,7 @@ pub async fn delete_body_metric<R: Runtime>(
 ) -> Result<(), String> {
     let res = BodyMetric::delete_on(&pool(app), date).await;
 
-    let lang = settings.read().unwrap().language;
+    let lang = settings_language(settings);
     match res {
         Ok(_) => {
             info!("Measures deleted succesfully");

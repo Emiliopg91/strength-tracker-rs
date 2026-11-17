@@ -19,7 +19,7 @@ use crate::{
     },
     logic::{
         ask_open_paths, ask_save_path, connect::helpers::sync_session_sets_connect, fit_settings,
-        notifications::show_notification, pool, report_error,
+        notifications::show_notification, pool, report_error, settings_language,
     },
     utils::{
         constants,
@@ -154,7 +154,7 @@ pub async fn save_session_changes<R: Runtime>(
             .unwrap()
             .to_rfc3339()
     );
-    let lang = settings.read().unwrap().language;
+    let lang = settings_language(settings);
     let (timestamp, sets) = (details.timestamp, details.sets.clone());
 
     let res = pool(app)
@@ -201,7 +201,7 @@ pub async fn import_from_files<R: Runtime>(
     app: &AppHandle<R>,
     settings: &SettingsLock,
 ) -> Result<usize, String> {
-    let lang = { settings.read().unwrap().language };
+    let lang = settings_language(settings);
     let files = ask_open_paths(app, "FIT", "fit", &translate("select_files_import", lang)).await?;
 
     if !files.is_empty() {

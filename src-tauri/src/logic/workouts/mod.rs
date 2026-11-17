@@ -19,7 +19,7 @@ use crate::{
             send_enabled_workout_to_connect_devices, send_schedule_to_connected,
         },
         notifications::show_notification,
-        open_window, pool, print_to_pdf, report_error,
+        open_window, pool, print_to_pdf, report_error, settings_language,
     },
     utils::{time::today_local_midnight, translations::translate},
 };
@@ -102,7 +102,7 @@ pub async fn save_workout<R: Runtime>(
         .run_in_transaction(async move |tx| Ok(Workout::store(tx, &workout, edit).await?))
         .await;
 
-    let lang = settings.read().unwrap().language;
+    let lang = settings_language(settings);
     match res {
         Ok(_) => {
             info!("Workout '{}' saved succesfully", name);

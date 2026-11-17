@@ -842,15 +842,13 @@ pub(super) async fn merge_sessions(
         }
     }
 
-    for lap in &from.laps {
-        let mut lap = lap.clone();
+    for mut lap in std::mem::take(&mut from.laps) {
         lap.session = to.date;
         lap.idx = to.laps.len() as u16;
         to.laps.push(lap);
     }
 
-    for set in &from.steps {
-        let mut set = set.clone();
+    for mut set in std::mem::take(&mut from.steps) {
         set.session = to.date;
         set.idx = to.steps.len() as u8;
         to.steps.push(set);

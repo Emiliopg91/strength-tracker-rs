@@ -12,7 +12,9 @@ use crate::{
         export::Export,
         notifications::{NotificationDefinition, NotificationKind},
     },
-    logic::{ask_save_path, notifications::show_notification, pool, report_error},
+    logic::{
+        ask_save_path, notifications::show_notification, pool, report_error, settings_language,
+    },
     rclone::{self, errors::RCloneError, providers::CloudProvider},
     utils::{
         constants,
@@ -29,7 +31,7 @@ pub async fn upload_to_cloud(
     settings: &SettingsLock,
     provider: CloudProvider,
 ) -> Result<(), String> {
-    let lang = settings.read().unwrap().language;
+    let lang = settings_language(settings);
 
     let res: Result<(), String> = async {
         if !rclone::is_installed() {
@@ -72,7 +74,7 @@ pub async fn export_database<R: Runtime>(
         *constants::APP_NAME,
         Local::now().format("%Y-%m-%d-%H-%M-%S")
     ));
-    let dialog_lang = settings.read().unwrap().language;
+    let dialog_lang = settings_language(settings);
     let Some(path) = ask_save_path(
         app,
         &default_file,
@@ -87,7 +89,7 @@ pub async fn export_database<R: Runtime>(
     info!("Exporting database to {}...", path.display());
 
     let export_path = path.clone();
-    let export_lang = settings.read().unwrap().language;
+    let export_lang = settings_language(settings);
     let res: Result<(), Box<dyn std::error::Error + Send + Sync>> = async {
         let export = Export::from_database(&pool(app), export_lang).await?;
         tokio::task::spawn_blocking(move || {
@@ -100,7 +102,7 @@ pub async fn export_database<R: Runtime>(
     }
     .await;
 
-    let lang = settings.read().unwrap().language;
+    let lang = settings_language(settings);
     match res {
         Ok(()) => {
             show_notification(NotificationDefinition {

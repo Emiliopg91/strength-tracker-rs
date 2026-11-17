@@ -37,7 +37,7 @@ fn main() {
         }
     }
 
-    let log_level: LevelFilter = if args.contains(&"-v".to_string()) {
+    let log_level: LevelFilter = if args.iter().any(|a| a == "-v") {
         LevelFilter::Debug
     } else {
         LevelFilter::Info

@@ -266,11 +266,11 @@ impl ConnectClient {
             return Ok(Vec::new());
         }
 
-        let (client, oauth2) = self.api_client().await?;
+        let client = self.api_client().await?;
 
         info!("Downloading {} activities...", ids.len());
         let files: Vec<Vec<FitFile>> = stream::iter(ids.iter().copied())
-            .map(|id| Self::download_activity(&client, oauth2, id))
+            .map(|id| Self::download_activity(&client, id))
             .buffer_unordered(DOWNLOAD_CONCURRENCY)
             .try_collect()
             .await?;
@@ -283,9 +283,9 @@ impl ConnectClient {
     pub async fn list_devices(&mut self) -> Result<Vec<DeviceSummary>> {
         info!("Listing devices...");
 
-        let (client, oauth2) = self.api_client().await?;
+        let client = self.api_client().await?;
 
-        let devices = with_retry(|| client.list_devices(oauth2))
+        let devices = with_retry(|| client.list_devices())
             .await
             .map_err(|e| log_error("Error fetching devices", ConnectError::FetchDevices(e)))?;
         info!("Listed {} devices.", devices.len());
@@ -297,7 +297,7 @@ impl ConnectClient {
     pub async fn list_recent_calendar_items(&mut self) -> Result<Vec<CalendarItem>> {
         info!("Listing recent calendar items...");
 
-        let (client, oauth2) = self.api_client().await?;
+        let client = self.api_client().await?;
 
         let to = Local::now().date_naive();
         let from = to - chrono::Days::new(CALENDAR_RECENT_DAYS);
@@ -307,7 +307,7 @@ impl ConnectClient {
             .map(|(year, month)| {
                 let client = &client;
                 async move {
-                    let page = with_retry(|| client.list_calendar_month(oauth2, year, month))
+                    let page = with_retry(|| client.list_calendar_month(year, month))
                         .await
                         .map_err(|e| {
                             log_error("Error fetching calendar", ConnectError::FetchCalendar(e))
@@ -341,8 +341,8 @@ impl ConnectClient {
             .date_naive();
         let (year, month) = (date.year() as u16, date.month() as u8);
 
-        let (client, oauth2) = self.api_client().await?;
-        let page = with_retry(|| client.list_calendar_month(oauth2, year, month))
+        let client = self.api_client().await?;
+        let page = with_retry(|| client.list_calendar_month(year, month))
             .await
             .map_err(|e| log_error("Error fetching calendar", ConnectError::FetchCalendar(e)))?;
 
@@ -360,15 +360,13 @@ impl ConnectClient {
 
     /// Details of the activity `id`.
     async fn fetch_activity(&mut self, id: u64) -> Result<ActivityDetails> {
-        let (client, oauth2) = self.api_client().await?;
-        with_retry(|| client.get_activity(oauth2, id))
-            .await
-            .map_err(|e| {
-                log_error(
-                    "Error fetching activity",
-                    ConnectError::FetchActivity(id, e),
-                )
-            })
+        let client = self.api_client().await?;
+        with_retry(|| client.get_activity(id)).await.map_err(|e| {
+            log_error(
+                "Error fetching activity",
+                ConnectError::FetchActivity(id, e),
+            )
+        })
     }
 
     /// Notes (description) of the activity `id`.
@@ -397,9 +395,9 @@ impl ConnectClient {
     pub async fn update_activity_notes(&mut self, id: u64, notes: &str) -> Result<()> {
         info!("Updating notes of activity {}...", id);
 
-        let (client, oauth2) = self.api_client().await?;
+        let client = self.api_client().await?;
         // Retried: it replaces the description, so repeating it is harmless
-        with_retry(|| client.update_activity_description(oauth2, id, notes))
+        with_retry(|| client.update_activity_description(id, notes))
             .await
             .map_err(|e| {
                 log_error(
@@ -416,8 +414,8 @@ impl ConnectClient {
     pub async fn get_session_sets(&mut self, id: u64) -> Result<ExerciseSets> {
         info!("Fetching exercise sets of activity {}...", id);
 
-        let (client, oauth2) = self.api_client().await?;
-        let sets = with_retry(|| client.get_exercise_sets(oauth2, id))
+        let client = self.api_client().await?;
+        let sets = with_retry(|| client.get_exercise_sets(id))
             .await
             .map_err(|e| {
                 log_error(
@@ -440,9 +438,9 @@ impl ConnectClient {
         let id = sets.activity_id;
         info!("Updating exercise sets of activity {}...", id);
 
-        let (client, oauth2) = self.api_client().await?;
+        let client = self.api_client().await?;
         // Retried: it replaces the whole list, so repeating it is harmless
-        with_retry(|| client.update_exercise_sets(oauth2, sets))
+        with_retry(|| client.update_exercise_sets(sets))
             .await
             .map_err(|e| {
                 log_error(
@@ -461,12 +459,12 @@ impl ConnectClient {
         let today = Local::now().date_naive();
         info!("Listing workouts scheduled from {}...", today);
 
-        let (client, oauth2) = self.api_client().await?;
+        let client = self.api_client().await?;
 
         let mut schedules = Vec::new();
         let mut start = Some(today);
         while let Some(from) = start {
-            let window = with_retry(|| client.list_workout_schedules(oauth2, from))
+            let window = with_retry(|| client.list_workout_schedules(from))
                 .await
                 .map_err(|e| {
                     log_error(
@@ -498,10 +496,10 @@ impl ConnectClient {
             .date_naive();
         info!("Scheduling workout {} on {}...", workout_id, date);
 
-        let (client, oauth2) = self.api_client().await?;
+        let client = self.api_client().await?;
         // Not retried: a request that timed out after reaching Connect would schedule it twice
         let schedule = client
-            .schedule_workout(oauth2, workout_id, date)
+            .schedule_workout(workout_id, date)
             .await
             .map_err(|e| {
                 log_error(
@@ -521,9 +519,9 @@ impl ConnectClient {
     pub async fn delete_workout_schedule(&mut self, schedule_id: u64) -> Result<()> {
         info!("Deleting workout schedule {}...", schedule_id);
 
-        let (client, oauth2) = self.api_client().await?;
+        let client = self.api_client().await?;
         // Retried: a retry after a delete that did reach Connect just finds it gone
-        match with_retry(|| client.delete_workout_schedule(oauth2, schedule_id)).await {
+        match with_retry(|| client.delete_workout_schedule(schedule_id)).await {
             Ok(()) => info!("Deleted workout schedule {}.", schedule_id),
             Err(GarminError::NotFound(_)) => {
                 warn!(
@@ -543,25 +541,23 @@ impl ConnectClient {
     }
 
     /// Refreshes the token if needed and builds an API client for the domain of the account.
-    async fn api_client(&mut self) -> Result<(GarminClient, &OAuth2Token)> {
+    async fn api_client(&mut self) -> Result<GarminClient> {
         self.refresh_token().await?;
 
         let (Some(oauth1), Some(oauth2)) = (&self.oauth1, &self.oauth2) else {
             return Err(ConnectError::LoginRequired());
         };
 
-        let client = GarminClient::new(&oauth1.domain);
-
-        Ok((client, oauth2))
+        Ok(GarminClient::new(&oauth1.domain, oauth2))
     }
 
     /// Lists every workout stored in Connect.
     pub async fn list_workouts(&mut self) -> Result<Vec<WorkoutSummary>> {
         info!("Listing workouts...");
 
-        let (client, oauth2) = self.api_client().await?;
+        let client = self.api_client().await?;
 
-        let workouts = Self::fetch_workouts(&client, oauth2).await?;
+        let workouts = Self::fetch_workouts(&client).await?;
         info!("Listed {} workouts.", workouts.len());
 
         Ok(workouts)
@@ -571,11 +567,11 @@ impl ConnectClient {
     pub async fn create_workout<T: Serialize>(&mut self, workout: &T) -> Result<WorkoutSummary> {
         info!("Creating workout...");
 
-        let (client, oauth2) = self.api_client().await?;
+        let client = self.api_client().await?;
 
         // Not retried: a request that timed out after reaching Connect would duplicate the workout
         let created: WorkoutSummary = client
-            .post_json(oauth2, "/workout-service/workout", workout)
+            .post_json("/workout-service/workout", workout)
             .await
             .map_err(|e| log_error("Error creating workout", ConnectError::CreateWorkout(e)))?;
         info!(
@@ -595,10 +591,10 @@ impl ConnectClient {
             fields.insert("workoutId".to_string(), id.into());
         }
 
-        let (client, oauth2) = self.api_client().await?;
+        let client = self.api_client().await?;
 
         let path = format!("/workout-service/workout/{}", id);
-        with_retry(|| client.put_json(oauth2, &path, &body))
+        with_retry(|| client.put_json(&path, &body))
             .await
             .map_err(|e| log_error("Error updating workout", ConnectError::UpdateWorkout(id, e)))?;
         info!("Updated workout {}.", id);
@@ -616,7 +612,7 @@ impl ConnectClient {
     ) -> Result<()> {
         info!("Sending workout {} to device {}...", workout_id, unit_id);
 
-        let (client, oauth2) = self.api_client().await?;
+        let client = self.api_client().await?;
 
         let message = [DeviceMessage {
             device_id: unit_id,
@@ -631,11 +627,7 @@ impl ConnectClient {
 
         // Not retried: a request that timed out after reaching Connect would queue the workout twice
         client
-            .post_json::<_, serde_json::Value>(
-                oauth2,
-                "/device-service/devicemessage/messages",
-                &message,
-            )
+            .post_json::<_, serde_json::Value>("/device-service/devicemessage/messages", &message)
             .await
             .map_err(|e| {
                 log_error(
@@ -651,7 +643,7 @@ impl ConnectClient {
     pub async fn list_weight(&mut self, from: Option<u32>) -> Result<Vec<BodyMetric>> {
         info!("Listing weight entries...");
 
-        let (client, oauth2) = self.api_client().await?;
+        let client = self.api_client().await?;
         let end_date = chrono::Local::now().date_naive();
 
         let entries = match from {
@@ -665,7 +657,7 @@ impl ConnectClient {
                     })?
                     .with_timezone(&chrono::Local)
                     .date_naive();
-                Self::fetch_weight_range(&client, oauth2, start_date, end_date).await?
+                Self::fetch_weight_range(&client, start_date, end_date).await?
             }
             None => {
                 // No start date: walk back year by year until history runs dry
@@ -677,8 +669,7 @@ impl ConnectClient {
                         .checked_sub_months(chrono::Months::new(WEIGHT_CHUNK_MONTHS))
                         .and_then(|d| d.succ_opt())
                         .unwrap_or(chrono::NaiveDate::MIN);
-                    let chunk =
-                        Self::fetch_weight_range(&client, oauth2, chunk_start, chunk_end).await?;
+                    let chunk = Self::fetch_weight_range(&client, chunk_start, chunk_end).await?;
                     if chunk.is_empty() {
                         empty_chunks += 1;
                     } else {
@@ -709,7 +700,6 @@ impl ConnectClient {
 
     async fn fetch_weight_range(
         client: &GarminClient,
-        oauth2: &OAuth2Token,
         start_date: chrono::NaiveDate,
         end_date: chrono::NaiveDate,
     ) -> Result<Vec<WeightEntry>> {
@@ -718,28 +708,22 @@ impl ConnectClient {
             start_date.format("%Y-%m-%d"),
             end_date.format("%Y-%m-%d")
         );
-        let result: WeightRange = with_retry(|| client.get_json(oauth2, &path))
+        let result: WeightRange = with_retry(|| client.get_json(&path))
             .await
             .map_err(|e| log_error("Error fetching weight", ConnectError::FetchWeight(e)))?;
 
         Ok(result.date_weight_list)
     }
 
-    async fn download_activity(
-        client: &GarminClient,
-        oauth2: &OAuth2Token,
-        id: u64,
-    ) -> Result<Vec<FitFile>> {
+    async fn download_activity(client: &GarminClient, id: u64) -> Result<Vec<FitFile>> {
         info!("Downloading activity {}...", id);
         let path = format!("/download-service/files/activity/{}", id);
-        let zipped = with_retry(|| client.download(oauth2, &path))
-            .await
-            .map_err(|e| {
-                log_error(
-                    "Error downloading activity",
-                    ConnectError::DownloadActivity(id, e),
-                )
-            })?;
+        let zipped = with_retry(|| client.download(&path)).await.map_err(|e| {
+            log_error(
+                "Error downloading activity",
+                ConnectError::DownloadActivity(id, e),
+            )
+        })?;
 
         tokio::task::spawn_blocking(move || Self::extract_activity(id, zipped))
             .await
@@ -751,10 +735,7 @@ impl ConnectClient {
             })?
     }
 
-    async fn fetch_workouts(
-        client: &GarminClient,
-        oauth2: &OAuth2Token,
-    ) -> Result<Vec<WorkoutSummary>> {
+    async fn fetch_workouts(client: &GarminClient) -> Result<Vec<WorkoutSummary>> {
         let mut workouts = Vec::new();
         loop {
             let path = format!(
@@ -762,14 +743,13 @@ impl ConnectClient {
                 workouts.len(),
                 WORKOUT_LIST_STEP
             );
-            let result: Vec<WorkoutSummary> = with_retry(|| client.get_json(oauth2, &path))
-                .await
-                .map_err(|e| {
-                log_error(
-                    "Error fetching workout page",
-                    ConnectError::FetchWorkouts(e),
-                )
-            })?;
+            let result: Vec<WorkoutSummary> =
+                with_retry(|| client.get_json(&path)).await.map_err(|e| {
+                    log_error(
+                        "Error fetching workout page",
+                        ConnectError::FetchWorkouts(e),
+                    )
+                })?;
             let page_len = result.len();
             workouts.extend(result);
 

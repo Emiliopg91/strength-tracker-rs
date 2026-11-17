@@ -38,7 +38,7 @@ pub fn report_error<E: std::fmt::Display>(
 ) -> String {
     error!("{}: {}", log_msg, e);
     show_notification(NotificationDefinition {
-        title: translate(error_key, settings.read().unwrap().language),
+        title: translate(error_key, settings_language(settings)),
         body: e.to_string(),
         kind: NotificationKind::Persistant,
     });
@@ -47,7 +47,12 @@ pub fn report_error<E: std::fmt::Display>(
 
 /// Language currently configured.
 pub(crate) fn language<R: Runtime, M: Manager<R>>(app: &M) -> Languages {
-    app.state::<SettingsLock>().read().unwrap().language
+    settings_language(&app.state::<SettingsLock>())
+}
+
+/// Language configured in `settings`.
+pub(crate) fn settings_language(settings: &SettingsLock) -> Languages {
+    settings.read().unwrap().language
 }
 
 /// Language and weight unit currently configured, as needed to write FIT files.
