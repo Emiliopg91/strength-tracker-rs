@@ -1,8 +1,19 @@
-use rusqlite_orm::Entity;
+use std::{
+    borrow::Borrow,
+    collections::{HashMap, HashSet},
+};
+
+use rusqlite_orm::{
+    Entity,
+    dao::Repository,
+    rusqlite::{Connection, Transaction},
+    types::{order_by::OrderBy, value::Value, where_clause::Where},
+};
 use serde::{Deserialize, Serialize};
 
 use crate::dao::{
     exercise::{self},
+    session::{SessionRepository, entity::columns as session_cols},
     workout_step::StepType,
 };
 
@@ -35,4 +46,307 @@ pub struct SessionStep {
     #[relationship((ex_cat, exercise::entity::columns::CATEGORY),(ex_id, exercise::entity::columns::ID))]
     #[allow(dead_code)]
     pub exercise: Option<Exercise>,
+}
+
+/// Values of `(category, id)` keys, for a `Where::InMultiple` over the exercise columns.
+pub(crate) fn exercise_key_values(
+    keys: impl IntoIterator<Item = impl Borrow<(u16, u16)>>,
+) -> Vec<Vec<Value>> {
+    keys.into_iter()
+        .map(|key| {
+            let (cat, id) = *key.borrow();
+            vec![cat.into(), id.into()]
+        })
+        .collect()
+}
+
+impl SessionStep {
+    /// Sets of the exercise, newest session first and in order within each session.
+    pub async fn get_by_exercise(
+        conn: &Connection,
+        category: u16,
+        id: u16,
+    ) -> rusqlite_orm::errors::Result<Vec<SessionStep>> {
+        SessionStepRepository::select_by_exercise_in(
+            conn,
+            Some(category),
+            Some(id),
+            Some(&[
+                OrderBy::Desc(entity::columns::SESSION),
+                OrderBy::Asc(entity::columns::IDX),
+            ]),
+        )
+        .await
+    }
+
+    /// Steps of every session in `dates`, unordered.
+    pub async fn get_by_sessions(
+        conn: &Connection,
+        dates: &[Value],
+    ) -> rusqlite_orm::errors::Result<Vec<SessionStep>> {
+        SessionStepRepository::select()
+            .where_(Where::In(entity::columns::SESSION, dates.to_vec()))
+            .fetch_in(conn)
+            .await
+    }
+
+    /// The personal record set of every exercise that has one.
+    pub async fn get_personal_records(
+        conn: &Connection,
+    ) -> rusqlite_orm::errors::Result<Vec<SessionStep>> {
+        SessionStepRepository::select_by_personal_records_in(conn, true, None).await
+    }
+
+    /// Keys of every exercise with some recorded set.
+    #[cfg(debug_assertions)]
+    pub async fn get_performed_exercises(
+        conn: &Connection,
+    ) -> rusqlite_orm::errors::Result<HashSet<(u16, u16)>> {
+        Ok(SessionStepRepository::select()
+            .distinct(&[entity::columns::EX_CAT, entity::columns::EX_ID])
+            .fetch_in(conn)
+            .await?
+            .iter()
+            .filter_map(|r| {
+                r.get_u16_nullable(entity::columns::EX_CAT.as_ref())
+                    .zip(r.get_u16_nullable(entity::columns::EX_ID.as_ref()))
+            })
+            .collect())
+    }
+
+    /// Exercises of the steps `idxs` of the session; rest steps, without exercise, are skipped.
+    pub async fn get_step_exercises(
+        conn: &Connection,
+        session: u32,
+        idxs: &[u8],
+    ) -> rusqlite_orm::errors::Result<HashSet<(u16, u16)>> {
+        Ok(SessionStepRepository::select()
+            .columns(&[entity::columns::EX_CAT, entity::columns::EX_ID])
+            .where_(Where::And(vec![
+                Where::Eq(entity::columns::SESSION, session.into()),
+                Where::In(
+                    entity::columns::IDX,
+                    idxs.iter().map(|idx| (*idx).into()).collect(),
+                ),
+            ]))
+            .fetch_in(conn)
+            .await?
+            .iter()
+            .filter_map(|row| {
+                row.get_u16_nullable(entity::columns::EX_CAT.as_ref())
+                    .zip(row.get_u16_nullable(entity::columns::EX_ID.as_ref()))
+            })
+            .collect())
+    }
+
+    /// Overwrites the exercise, reps and weight of the step `idx` of the session.
+    pub async fn update_set(
+        tx: &Transaction<'_>,
+        session: u32,
+        idx: u8,
+        exercise: (Option<u16>, Option<u16>),
+        reps: Option<u16>,
+        weight: Option<f32>,
+    ) -> rusqlite_orm::errors::Result<usize> {
+        SessionStepRepository::update()
+            .set(entity::columns::REPS, reps.into())
+            .set(entity::columns::WEIGHT, weight.into())
+            .set(entity::columns::EX_CAT, exercise.0.into())
+            .set(entity::columns::EX_ID, exercise.1.into())
+            .where_(Where::And(vec![
+                Where::Eq(entity::columns::SESSION, session.into()),
+                Where::Eq(entity::columns::IDX, idx.into()),
+            ]))
+            .execute_in(tx)
+            .await
+    }
+
+    /// Maps every session that has sets (within `[min_date, max_date]`, each bound optional) to
+    /// whether any of them is a personal record.
+    pub async fn get_set_flags(
+        conn: &Connection,
+        min_date: Option<i32>,
+        max_date: Option<i32>,
+    ) -> rusqlite_orm::errors::Result<HashMap<u32, bool>> {
+        let mut select_builder = SessionStepRepository::select()
+            .distinct(&[entity::columns::SESSION, entity::columns::PR]);
+
+        // `where_` replaces the previous condition, so bounds must be combined in a single `And`
+        let mut conditions = Vec::new();
+        if let Some(min_date) = min_date {
+            conditions.push(Where::Gte(entity::columns::SESSION, min_date.into()));
+        }
+        if let Some(max_date) = max_date {
+            conditions.push(Where::Lte(entity::columns::SESSION, max_date.into()));
+        }
+        if !conditions.is_empty() {
+            select_builder = select_builder.where_(Where::And(conditions));
+        }
+
+        let mut flags: HashMap<u32, bool> = HashMap::new();
+        for row in select_builder.fetch_in(conn).await? {
+            let session = row.get_u32(entity::columns::SESSION.as_ref());
+            let pr = row.get_bool(entity::columns::PR.as_ref());
+            *flags.entry(session).or_default() |= pr;
+        }
+        Ok(flags)
+    }
+
+    /// Number of personal records of every session from `since` on that holds any.
+    pub async fn get_pr_counts_since(
+        conn: &Connection,
+        since: i64,
+    ) -> rusqlite_orm::errors::Result<HashMap<u32, u16>> {
+        let mut pr_counts: HashMap<u32, u16> = HashMap::new();
+        for pr in SessionStepRepository::select()
+            .columns(&[entity::columns::SESSION])
+            .where_(Where::And(vec![
+                Where::Eq(entity::columns::PR, true.into()),
+                Where::Gte(entity::columns::SESSION, since.into()),
+            ]))
+            .fetch_in(conn)
+            .await?
+        {
+            *pr_counts
+                .entry(pr.get_u32(entity::columns::SESSION.as_ref()))
+                .or_default() += 1;
+        }
+        Ok(pr_counts)
+    }
+
+    /// Exercise sets of the exercises in `keys`, as `(exercise, session, weight, reps)`, a missing
+    /// weight or reps counting as 0.
+    pub async fn get_exercise_sets(
+        conn: &Connection,
+        keys: &HashSet<(u16, u16)>,
+    ) -> rusqlite_orm::errors::Result<Vec<((u16, u16), u32, f32, u16)>> {
+        Ok(SessionStepRepository::select()
+            .columns(&[
+                entity::columns::EX_CAT,
+                entity::columns::EX_ID,
+                entity::columns::SESSION,
+                entity::columns::WEIGHT,
+                entity::columns::REPS,
+            ])
+            .where_(Where::And(vec![
+                Where::Eq(entity::columns::KIND, StepType::Exercise.into()),
+                Where::InMultiple(
+                    vec![entity::columns::EX_CAT, entity::columns::EX_ID],
+                    exercise_key_values(keys),
+                ),
+            ]))
+            .fetch_in(conn)
+            .await?
+            .iter()
+            .map(|row| {
+                (
+                    (
+                        row.get_u16(entity::columns::EX_CAT.as_ref()),
+                        row.get_u16(entity::columns::EX_ID.as_ref()),
+                    ),
+                    row.get_u32(entity::columns::SESSION.as_ref()),
+                    row.get_f32_nullable(entity::columns::WEIGHT.as_ref())
+                        .unwrap_or_default(),
+                    row.get_u16_nullable(entity::columns::REPS.as_ref())
+                        .unwrap_or_default(),
+                )
+            })
+            .collect())
+    }
+
+    /// Volume (reps by weight) lifted in every session of the workout `name` that has sets.
+    pub async fn get_volume_by_session(
+        conn: &Connection,
+        name: &str,
+    ) -> rusqlite_orm::errors::Result<HashMap<u32, f32>> {
+        let series = SessionStepRepository::select()
+            .columns(&[
+                entity::columns::SESSION,
+                entity::columns::REPS,
+                entity::columns::WEIGHT,
+            ])
+            .where_(Where::And(vec![
+                // Rest steps have neither reps nor weight
+                Where::NotEq(entity::columns::KIND, StepType::Rest.into()),
+                Where::InSub(
+                    entity::columns::SESSION,
+                    SessionRepository::select()
+                        .columns(&[session_cols::DATE])
+                        .where_(Where::Eq(session_cols::NAME, name.into()))
+                        .to_subquery(),
+                ),
+            ]))
+            .fetch_in(conn)
+            .await?;
+
+        let mut volume_by_session = HashMap::new();
+        for serie in &series {
+            *volume_by_session
+                .entry(serie.get_u32(entity::columns::SESSION.as_ref()))
+                .or_insert(0.0) += serie
+                .get_u16_nullable(entity::columns::REPS.as_ref())
+                .unwrap_or_default() as f32
+                * serie
+                    .get_f32_nullable(entity::columns::WEIGHT.as_ref())
+                    .unwrap_or_default();
+        }
+        Ok(volume_by_session)
+    }
+
+    /// Recomputes the `pr` flag for each affected exercise. Returns whether any of `sessions` holds
+    /// a new record.
+    pub async fn update_prs(
+        tx: &Transaction<'_>,
+        exercises: &HashSet<(u16, u16)>,
+        sessions: &[u32],
+    ) -> rusqlite_orm::errors::Result<bool> {
+        let mut new_prs = false;
+
+        let mut update_false_conditions = vec![];
+        let mut update_true_conditions = vec![];
+
+        for exer in exercises {
+            update_false_conditions.push(vec![exer.0.into(), exer.1.into()]);
+            if let Some(pr) = SessionStepRepository::select()
+                .where_(Where::And(vec![
+                    Where::Eq(entity::columns::EX_CAT, exer.0.into()),
+                    Where::Eq(entity::columns::EX_ID, exer.1.into()),
+                ]))
+                .order_by(OrderBy::Desc(entity::columns::WEIGHT))
+                .order_by(OrderBy::Desc(entity::columns::REPS))
+                .order_by(OrderBy::Asc(entity::columns::SESSION))
+                .order_by(OrderBy::Asc(entity::columns::IDX))
+                .limit(1)
+                .fetch_one_in(tx)
+                .await?
+            {
+                update_true_conditions.push(vec![pr.session.into(), pr.idx.into()]);
+                new_prs = new_prs || sessions.contains(&pr.session);
+            }
+        }
+
+        if !update_true_conditions.is_empty() {
+            SessionStepRepository::update()
+                .set(entity::columns::PR, false.into())
+                .where_(Where::And(vec![
+                    Where::InMultiple(
+                        vec![entity::columns::EX_CAT, entity::columns::EX_ID],
+                        update_false_conditions,
+                    ),
+                    Where::Eq(entity::columns::PR, true.into()),
+                ]))
+                .execute_in(tx)
+                .await?;
+            SessionStepRepository::update()
+                .set(entity::columns::PR, true.into())
+                .where_(Where::InMultiple(
+                    vec![entity::columns::SESSION, entity::columns::IDX],
+                    update_true_conditions,
+                ))
+                .execute_in(tx)
+                .await?;
+        }
+
+        Ok(new_prs)
+    }
 }

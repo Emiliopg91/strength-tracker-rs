@@ -2,16 +2,18 @@ use std::time::Duration;
 
 use semver::Version;
 use serde_json::Value;
-use tauri::{AppHandle, Manager, Runtime, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager, Runtime};
 use tauri_plugin_log::log::{debug, info, warn};
 
 use crate::{
-    SettingsLock, constants,
+    constants,
     dto::{
         notifications::{NotificationDefinition, NotificationKind},
         prompts::PromptKind,
     },
-    logic::{notifications::show_notification, prompts::helpers::request_prompt},
+    logic::{
+        language, notifications::show_notification, open_window, prompts::helpers::request_prompt,
+    },
     udev::{UdevManager, errors::UdevError},
     utils::translations::{translate, translate_and_replace},
 };
@@ -25,17 +27,7 @@ pub(crate) fn show_main_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<
         return Ok(());
     }
 
-    let config = app
-        .config()
-        .app
-        .windows
-        .iter()
-        .find(|w| w.label == "main")
-        .expect("no 'main' window in tauri.conf.json")
-        .clone();
-
-    let w = WebviewWindowBuilder::from_config(app, &config)?.build()?;
-    w.set_focus()?;
+    open_window(app, "main", None)?.set_focus()?;
 
     Ok(())
 }
@@ -91,7 +83,7 @@ pub(super) async fn check_for_update<R: Runtime>(app: &AppHandle<R>) {
         match latest_version().await {
             Ok(version) if version > *constants::APP_SEM_VERSION => {
                 info!("Update {} found!", version);
-                let lang = app.state::<SettingsLock>().read().unwrap().language;
+                let lang = language(app);
                 show_notification(NotificationDefinition {
                     title: translate("new_update_title", lang),
                     body: translate_and_replace("new_update_body", &[&version.to_string()], lang),

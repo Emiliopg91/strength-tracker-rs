@@ -1,11 +1,8 @@
 use rusqlite_orm::{dao::Repository, database::DatabasePool, types::where_clause::Where};
 
 use crate::{
-    dao::exercise::{self, ExerciseRepository},
-    logic::{
-        exercises::queries::fetch_exercises_muscles,
-        sessions::queries::{fetch_session_details, fetch_sessions_details},
-    },
+    dao::exercise::{self, Exercise, ExerciseRepository},
+    logic::sessions::helpers::{fetch_session_details, fetch_sessions_details},
     tests::common,
 };
 
@@ -48,7 +45,7 @@ async fn batched_muscles_match_the_relationship_fetcher() {
 
     let (batched, one_by_one) = db
         .run_in_connection(async move |conn| {
-            fetch_exercises_muscles(conn, &mut batched).await?;
+            Exercise::fill_muscles(conn, &mut batched).await?;
             for exercise in &mut one_by_one {
                 exercise.fetch_muscles_relationship_in(conn).await?;
             }

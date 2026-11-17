@@ -7,10 +7,6 @@ use crate::{
         workout_device::{WorkoutDevice, WorkoutDeviceRepository},
         workout_planning::{WorkoutPlanning, WorkoutPlanningRepository},
     },
-    logic::{
-        connect::queries::set_connect_created_times,
-        devices::queries::{plans_between, workouts_on_device},
-    },
     tests::common,
     utils::constants,
 };
@@ -58,7 +54,7 @@ async fn setup(plans: &[(u32, &'static str)]) -> DatabasePool {
 }
 
 async fn between(db: &DatabasePool, from: u32, to: u32) -> Vec<WorkoutPlanning> {
-    db.run_in_connection(async move |conn| Ok(plans_between(conn, from, to).await?))
+    db.run_in_connection(async move |conn| Ok(WorkoutPlanning::get_between(conn, from, to).await?))
         .await
         .unwrap()
 }
@@ -153,7 +149,10 @@ async fn only_workouts_sent_to_the_device_count_as_on_it() {
     )
     .await;
 
-    let on_device = workouts_on_device(&db, "watch").await.unwrap();
+    let on_device = db
+        .run_in_connection(async |conn| Ok(WorkoutDevice::get_sent(conn, "watch").await?))
+        .await
+        .unwrap();
 
     assert_eq!(on_device, ["a".to_string()].into());
 }
@@ -174,7 +173,7 @@ async fn new_connect_creation_time_queues_the_workout_for_its_devices() {
 
     let changed = db
         .run_in_transaction(async |tx| {
-            Ok(set_connect_created_times(
+            Ok(Workout::set_connect_created_times(
                 tx,
                 &[
                     ("1746213483".to_string(), 1_793_500_000),

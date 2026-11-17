@@ -1,43 +1,29 @@
 pub mod commands;
-pub mod queries;
+pub mod helpers;
 
-use tauri::{AppHandle, Manager, Runtime, WebviewWindow, WebviewWindowBuilder};
+use tauri::{AppHandle, Runtime, WebviewWindow};
 use tauri_plugin_log::log::info;
 
-use self::queries::report_data;
+use self::helpers::report_data;
 use crate::{
     SettingsLock,
     dto::report::ReportData,
-    logic::{pool, print_to_pdf, report_error},
+    logic::{language, open_window, pool, print_to_pdf, report_error},
     utils::translations::translate,
 };
 
-/// Called by the report window once everything is rendered and painted: prints it to PDF.
+/// Opens the report window for the `[from, to]` range, which stays hidden: printing starts once
+/// the page calls `report_ready`.
 pub async fn load_report<R: Runtime>(app: &AppHandle<R>, from: u32, to: u32) -> Result<(), String> {
-    let mut config = app
-        .config()
-        .app
-        .windows
-        .iter()
-        .find(|w| w.label == "report")
-        .expect("no 'report' window in tauri.conf.json")
-        .clone();
-
-    config.url = tauri::WebviewUrl::App(format!("{}?from={from}&to={to}", config.url).into());
-
-    // Stays hidden: printing starts once the page calls `report_ready`
-    WebviewWindowBuilder::from_config(app, &config)
-        .map_err(|e| e.to_string())?
-        .build()
-        .map_err(|e| e.to_string())?;
-
-    Ok(())
+    open_window(app, "report", Some(&format!("from={from}&to={to}")))
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }
 
 /// Called by the report window once everything is rendered and painted: prints it to PDF.
 pub async fn report_ready(window: WebviewWindow) -> Result<(), String> {
     info!("Report ready, printing");
-    let lang = window.state::<SettingsLock>().read().unwrap().language;
+    let lang = language(&window);
     print_to_pdf(window, &translate("progression_report", lang)).await
 }
 

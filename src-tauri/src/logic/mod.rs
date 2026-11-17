@@ -10,24 +10,21 @@ pub mod report;
 pub mod sessions;
 pub mod workouts;
 
-use std::{
-    path::{Path, PathBuf},
-    sync::atomic::{AtomicU64, Ordering},
-};
+use std::path::{Path, PathBuf};
 
-use chrono::Local;
 use rusqlite_orm::database::DatabasePool;
-use tauri::{AppHandle, Manager, Runtime, WebviewWindow};
+use tauri::{AppHandle, Manager, Runtime, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_log::log::{error, info, warn};
 use tokio::sync::oneshot;
 
 use crate::{
     SettingsLock,
+    dao::settings::WeightUnit,
     dto::notifications::{NotificationDefinition, NotificationKind},
     fit::FitFile,
     logic::notifications::show_notification,
-    utils::translations::translate,
+    utils::translations::{Languages, translate},
 };
 
 /// Logs `e` (prefixed by `log_msg`), fires a persistent desktop notification titled by the
@@ -48,9 +45,47 @@ pub fn report_error<E: std::fmt::Display>(
     e.to_string()
 }
 
+/// Language currently configured.
+pub(crate) fn language<R: Runtime, M: Manager<R>>(app: &M) -> Languages {
+    app.state::<SettingsLock>().read().unwrap().language
+}
+
+/// Language and weight unit currently configured, as needed to write FIT files.
+pub(crate) fn fit_settings<R: Runtime, M: Manager<R>>(app: &M) -> (Languages, WeightUnit) {
+    let state = app.state::<SettingsLock>();
+    let settings = state.read().unwrap();
+    (settings.language, settings.weight_unit)
+}
+
 /// The app's database pool. Clones are cheap and share the same connections.
 pub fn pool<R: Runtime>(app: &AppHandle<R>) -> DatabasePool {
     app.state::<DatabasePool>().inner().clone()
+}
+
+/// Opens the window `label` declared in `tauri.conf.json`, with `query` appended to its URL if
+/// given.
+///
+/// # Panics
+/// If `tauri.conf.json` declares no window `label`.
+pub(crate) fn open_window<R: Runtime>(
+    app: &AppHandle<R>,
+    label: &str,
+    query: Option<&str>,
+) -> tauri::Result<WebviewWindow<R>> {
+    let mut config = app
+        .config()
+        .app
+        .windows
+        .iter()
+        .find(|w| w.label == label)
+        .unwrap_or_else(|| panic!("no '{label}' window in tauri.conf.json"))
+        .clone();
+
+    if let Some(query) = query {
+        config.url = tauri::WebviewUrl::App(format!("{}?{query}", config.url).into());
+    }
+
+    WebviewWindowBuilder::from_config(app, &config)?.build()
 }
 
 /// Adds `extension` to `path` unless it already ends in it.
@@ -123,19 +158,6 @@ pub(crate) async fn ask_open_paths<R: Runtime>(
         .collect()
 }
 
-/// Gives every transfer its own dir, so concurrent syncs of the same source don't share files.
-static PENDING_DIR_SEQ: AtomicU64 = AtomicU64::new(0);
-
-/// Returns a new dir under `root` for a single transfer of `serial`. The timestamp keeps it apart
-/// from those left by previous runs, and the sequence from concurrent transfers.
-pub(crate) fn new_pending_dir(root: &Path, serial: &str) -> PathBuf {
-    root.join(serial).join(format!(
-        "{}-{}",
-        Local::now().timestamp_millis(),
-        PENDING_DIR_SEQ.fetch_add(1, Ordering::Relaxed)
-    ))
-}
-
 /// Stores under `root/<serial>` the fetched `files` whose parse or import failed, so they are kept
 /// for a later look instead of being lost. A file with the same name is replaced.
 pub(crate) async fn store_pending_files(root: &Path, serial: &str, files: &[&FitFile]) {
@@ -178,7 +200,7 @@ async fn start_pdf_print<R: Runtime>(
 ) -> Result<(), String> {
     use webkit2gtk::{PrintOperation, PrintOperationExt};
 
-    let lang = w.state::<SettingsLock>().read().unwrap().language;
+    let lang = language(&w);
     let default_file = w
         .path()
         .download_dir()

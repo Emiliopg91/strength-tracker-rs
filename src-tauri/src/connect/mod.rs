@@ -5,9 +5,9 @@ pub mod errors;
 use crate::{
     connect::{
         client::{
-            CalendarItem, CalendarItemType, DeviceMessage, DeviceSummary, ExerciseSets,
-            GarminClient, GarminError, OAuth1Token, OAuth2Token, SsoClient, WeightEntry,
-            WeightRange, WorkoutSchedule, WorkoutScheduleExport, WorkoutSummary,
+            ActivityDetails, CalendarItem, CalendarItemType, DeviceMessage, DeviceSummary,
+            ExerciseSets, GarminClient, GarminError, OAuth1Token, OAuth2Token, SsoClient,
+            WeightEntry, WeightRange, WorkoutSchedule, WorkoutScheduleExport, WorkoutSummary,
         },
         errors::{ConnectError, Result},
     },
@@ -383,21 +383,26 @@ impl ConnectClient {
         Ok(id)
     }
 
-    /// Notes (description) of the activity `id`.
-    pub async fn get_activity_notes(&mut self, id: u64) -> Result<Option<String>> {
-        info!("Fetching notes of activity {}...", id);
-
+    /// Details of the activity `id`.
+    async fn fetch_activity(&mut self, id: u64) -> Result<ActivityDetails> {
         let (client, oauth2) = self
             .api_client(|e| ConnectError::FetchActivity(id, e))
             .await?;
-        let activity = with_retry(|| client.get_activity(oauth2, id))
+        with_retry(|| client.get_activity(oauth2, id))
             .await
             .map_err(|e| {
                 log_error(
                     "Error fetching activity",
                     ConnectError::FetchActivity(id, e),
                 )
-            })?;
+            })
+    }
+
+    /// Notes (description) of the activity `id`.
+    pub async fn get_activity_notes(&mut self, id: u64) -> Result<Option<String>> {
+        info!("Fetching notes of activity {}...", id);
+
+        let activity = self.fetch_activity(id).await?;
         info!("Fetched notes of activity {}.", id);
 
         Ok(activity.description.filter(|notes| !notes.is_empty()))
@@ -407,17 +412,7 @@ impl ConnectClient {
     pub async fn get_activity_location(&mut self, id: u64) -> Result<Option<String>> {
         info!("Fetching location of activity {}...", id);
 
-        let (client, oauth2) = self
-            .api_client(|e| ConnectError::FetchActivity(id, e))
-            .await?;
-        let activity = with_retry(|| client.get_activity(oauth2, id))
-            .await
-            .map_err(|e| {
-                log_error(
-                    "Error fetching activity",
-                    ConnectError::FetchActivity(id, e),
-                )
-            })?;
+        let activity = self.fetch_activity(id).await?;
 
         Ok(activity
             .location_name

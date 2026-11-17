@@ -3,7 +3,7 @@ pub mod schedule;
 pub mod session;
 pub mod workout;
 
-use std::{fs::File, io::BufWriter, path::Path};
+use std::{io::Cursor, path::Path};
 
 use embedded_io_adapters::std::FromStd;
 use rustyfit::{
@@ -83,11 +83,8 @@ where
         creator.into()
     }
 
-    /// Encodes `item` as a complete FIT file, consuming the writer.
-    pub fn write<P>(self, path: P, lang: Languages, weight_unit: WeightUnit) -> errors::Result<()>
-    where
-        P: AsRef<Path>,
-    {
+    /// Encodes `item` as a complete FIT file in memory, consuming the writer.
+    pub fn into_bytes(self, lang: Languages, weight_unit: WeightUnit) -> errors::Result<Vec<u8>> {
         let mut messages = vec![self.file_id(), Self::file_creator()];
         messages.extend(self.obj.to_fit_messages(lang, weight_unit)?);
 
@@ -96,17 +93,23 @@ where
             ..Default::default()
         };
 
-        let file = File::create(path.as_ref())
-            .map_err(|e| WriteFitFileError::FileCreating(path.as_ref().display().to_string(), e))?;
-        let mut writer = FromStd::new(BufWriter::new(file));
+        // The encoder seeks back to fill in the header once the data is written
+        let mut writer = FromStd::new(Cursor::new(Vec::new()));
         let mut encoder = Encoder::new();
-        encoder.encode(&mut writer, &mut fit).map_err(|e| {
-            WriteFitFileError::FileWriting(
-                path.as_ref().display().to_string(),
-                format!("{e:?}").into(),
-            )
-        })?;
+        encoder
+            .encode(&mut writer, &mut fit)
+            .map_err(|e| WriteFitFileError::Encoding(format!("{e:?}").into()))?;
 
-        Ok(())
+        Ok(writer.into_inner().into_inner())
+    }
+
+    /// Encodes `item` as a complete FIT file at `path`, consuming the writer.
+    pub fn write<P>(self, path: P, lang: Languages, weight_unit: WeightUnit) -> errors::Result<()>
+    where
+        P: AsRef<Path>,
+    {
+        let data = self.into_bytes(lang, weight_unit)?;
+        std::fs::write(path.as_ref(), data)
+            .map_err(|e| WriteFitFileError::FileWriting(path.as_ref().display().to_string(), e))
     }
 }

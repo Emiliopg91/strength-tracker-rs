@@ -87,13 +87,9 @@ pub static RCLONE_CONFIG_NAME: LazyLock<String> = LazyLock::new(|| APP_NAME.to_s
 pub static RCLONE_CONFIG_FILE: LazyLock<PathBuf> =
     LazyLock::new(|| HOME_DIR.join(".config").join("rclone").join("rclone.conf"));
 
-// Pending files block: one subfolder per source (named after its serial). Uploads give every
-// transfer its own subfolder below it; downloads only keep the files whose parse or import failed
+// Pending files block: the downloaded files whose parse or import failed, in one subfolder per
+// source (named after its serial). Uploads are encoded and sent from memory
 pub static PENDING_FOLDER: LazyLock<PathBuf> = LazyLock::new(|| DATA_LOCAL_DIR.join("pending"));
-pub static PENDING_UPLOAD_WORKOUTS_FOLDER: LazyLock<PathBuf> =
-    LazyLock::new(|| PENDING_FOLDER.join("upload").join("workouts"));
-pub static PENDING_UPLOAD_SCHEDULES_FOLDER: LazyLock<PathBuf> =
-    LazyLock::new(|| PENDING_FOLDER.join("upload").join("schedules"));
 pub static PENDING_DOWNLOAD_SESSIONS_FOLDER: LazyLock<PathBuf> =
     LazyLock::new(|| PENDING_FOLDER.join("download").join("sessions"));
 pub static PENDING_DOWNLOAD_WORKOUTS_FOLDER: LazyLock<PathBuf> =

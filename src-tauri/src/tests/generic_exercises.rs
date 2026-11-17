@@ -7,7 +7,7 @@ use crate::{
         session_step::SessionStepRepository,
         workout_step::WorkoutStepRepository,
     },
-    logic::exercises::queries::exercises_catalog,
+    logic::exercises::helpers::exercises_catalog,
     schema_ddls,
     tests::common,
 };

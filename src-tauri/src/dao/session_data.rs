@@ -1,5 +1,12 @@
-use rusqlite_orm::Entity;
+use rusqlite_orm::{
+    Entity,
+    dao::Repository,
+    rusqlite::{Connection, Transaction},
+    types::{order_by::OrderBy, value::Value, where_clause::Where},
+};
 use serde::{Deserialize, Serialize};
+
+use crate::dao::session::{SessionRepository, entity::columns as session_cols};
 
 #[derive(Entity, Clone, Deserialize, Serialize)]
 #[entity("session_data")]
@@ -124,5 +131,77 @@ impl SessionData {
                 })
                 .collect()
         })
+    }
+}
+
+impl SessionData {
+    /// Additional data of every session in `dates`, unordered.
+    pub async fn get_by_sessions(
+        conn: &Connection,
+        dates: &[Value],
+    ) -> rusqlite_orm::errors::Result<Vec<SessionData>> {
+        SessionDataRepository::select()
+            .where_(Where::In(entity::columns::SESSION, dates.to_vec()))
+            .fetch_in(conn)
+            .await
+    }
+
+    /// Stores the notes of a single session, creating its additional data row if needed. Blank
+    /// notes are stored as `NULL`.
+    pub async fn update_notes(
+        tx: &Transaction<'_>,
+        session: u32,
+        notes: Option<&str>,
+    ) -> rusqlite_orm::errors::Result<()> {
+        let notes = notes.filter(|n| !n.trim().is_empty()).map(str::to_string);
+
+        let updated = SessionDataRepository::update()
+            .set(entity::columns::NOTES, notes.clone().into())
+            .where_(Where::Eq(entity::columns::SESSION, session.into()))
+            .execute_in(tx)
+            .await?;
+
+        if updated == 0 && notes.is_some() {
+            let mut add_data = SessionData::new(session);
+            add_data.notes = notes;
+            SessionDataRepository::insert()
+                .item(&mut add_data)
+                .execute_in(tx)
+                .await?;
+        }
+
+        Ok(())
+    }
+
+    /// Coordinates of the unnamed sessions recorded with GPS, newest first, to name them after
+    /// their location.
+    pub async fn get_pending_geolocation(
+        conn: &Connection,
+    ) -> rusqlite_orm::errors::Result<Vec<SessionData>> {
+        let unnamed_sessions = SessionRepository::select()
+            .columns(&[session_cols::DATE])
+            .where_(Where::Eq(session_cols::NAME, "".into()))
+            .to_subquery();
+
+        SessionDataRepository::select()
+            .columns(&[entity::columns::SESSION, entity::columns::COORDINATES])
+            .where_(Where::And(vec![
+                Where::InSub(entity::columns::SESSION, unnamed_sessions),
+                Where::NotNull(entity::columns::COORDINATES),
+            ]))
+            .order_by(OrderBy::Desc(entity::columns::SESSION))
+            .fetch_in(conn)
+            .await
+            .map(|rows| {
+                rows.into_iter()
+                    .map(|row| {
+                        let mut add_data =
+                            SessionData::new(row.get_u32(entity::columns::SESSION.as_ref()));
+                        add_data.coordinates =
+                            row.get_blob_nullable(entity::columns::COORDINATES.as_ref());
+                        add_data
+                    })
+                    .collect()
+            })
     }
 }

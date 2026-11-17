@@ -2,7 +2,6 @@ use rusqlite_orm::database::DatabasePool;
 
 use crate::{
     dao::session_data::{SessionData, SessionDataRepository},
-    logic::sessions::queries::update_session_notes,
     tests::common,
 };
 
@@ -32,7 +31,7 @@ async fn setup() -> DatabasePool {
 async fn save_notes(db: &DatabasePool, session: u32, notes: Option<&str>) {
     let notes = notes.map(str::to_string);
     db.run_in_transaction(async move |tx| {
-        Ok(update_session_notes(tx, session, notes.as_deref()).await?)
+        Ok(SessionData::update_notes(tx, session, notes.as_deref()).await?)
     })
     .await
     .unwrap();

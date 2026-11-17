@@ -1,6 +1,5 @@
 pub mod commands;
 pub mod helpers;
-pub mod queries;
 
 use std::collections::HashMap;
 
@@ -9,22 +8,15 @@ use tauri::{AppHandle, Runtime};
 use tauri_plugin_log::log::{error, info};
 
 use self::helpers::{get_devices_from_connect, queue_workout_on_connect, up_to_date_connect};
-use self::queries::{body_metric_dates, connect_import_state, insert_new_body_metrics};
 use crate::{
     ConnectLock, SettingsLock,
     connect::{ConnectClient, client::CalendarItemType},
-    dao::workout_device::WorkoutDevice,
-    dto::notifications::{NotificationDefinition, NotificationKind},
+    dao::{body_metric::BodyMetric, device::Device, session::Session, session_data::SessionData},
     logic::{
-        devices::queries::queue_workout_device,
-        notifications::show_notification,
+        devices::helpers::{notify_workout_sent, set_workout_on_device},
         pool, report_error,
-        sessions::{
-            helpers::{import_pending_sessions, spawn_geolocation_update},
-            queries::{pending_geolocation, set_session_name},
-        },
+        sessions::helpers::{finish_session_import, import_pending_sessions},
     },
-    utils::translations::translate,
 };
 
 pub async fn import_from_connect<R: Runtime>(
@@ -35,9 +27,10 @@ pub async fn import_from_connect<R: Runtime>(
     let lang = settings.read().unwrap().language;
 
     let res: Result<_, String> = async {
-        let (mut device, existing) = connect_import_state(&pool(app))
+        let (mut device, existing) = pool(app)
+            .run_in_connection(async |conn| Ok(Device::get_connect_import_state(conn).await?))
             .await
-            .map_err(|e: DatabaseError| e.to_string())?;
+            .map_err(|e| e.to_string())?;
 
         let mut connect = connect.lock().await;
 
@@ -80,20 +73,7 @@ pub async fn import_from_connect<R: Runtime>(
     }
     .await;
 
-    match res {
-        Ok(res) => {
-            if !res.is_empty() {
-                spawn_geolocation_update(app);
-            }
-            Ok(res.len())
-        }
-        Err(e) => Err(report_error(
-            e,
-            settings,
-            "error_import_sessions",
-            "Error importing sessions",
-        )),
-    }
+    finish_session_import(app, res)
 }
 
 /// Names the `imported` sessions waiting for geocoding (unnamed, with GPS) after the place Connect
@@ -105,7 +85,10 @@ async fn name_from_connect_location<R: Runtime>(
     imported: &[u32],
     ids: &HashMap<u32, u64>,
 ) {
-    let pending = match pending_geolocation(&pool(app)).await {
+    let pending = match pool(app)
+        .run_in_connection(async |conn| Ok(SessionData::get_pending_geolocation(conn).await?))
+        .await
+    {
         Ok(pending) => pending,
         Err(e) => {
             error!("Error looking for sessions pending geolocation: {e}");
@@ -125,7 +108,11 @@ async fn name_from_connect_location<R: Runtime>(
                 continue;
             }
         };
-        match set_session_name(&pool(app), session, &location).await {
+        let name = location.clone();
+        let res = pool(app)
+            .run_in_connection(async move |conn| Ok(Session::set_name(conn, session, &name).await?))
+            .await;
+        match res {
             Ok(_) => info!("Session @ {session} named '{location}' after its Connect location"),
             Err(e) => error!("Error naming session {session}: {e}"),
         }
@@ -138,9 +125,10 @@ pub async fn import_weight_from_connect<R: Runtime>(
     connect: &ConnectLock,
 ) -> Result<usize, String> {
     let res: Result<usize, String> = async {
-        let existing = body_metric_dates(&pool(app))
+        let existing = pool(app)
+            .run_in_connection(async |conn| Ok(BodyMetric::get_dates(conn).await?))
             .await
-            .map_err(|e: DatabaseError| e.to_string())?;
+            .map_err(|e| e.to_string())?;
 
         let mut entries = connect
             .lock()
@@ -149,9 +137,16 @@ pub async fn import_weight_from_connect<R: Runtime>(
             .await
             .map_err(|e| e.to_string())?;
 
-        insert_new_body_metrics(&pool(app), &mut entries, &existing)
-            .await
-            .map_err(|e: DatabaseError| e.to_string())
+        if entries.is_empty() {
+            Ok(0_usize)
+        } else {
+            pool(app)
+                .run_in_transaction(async move |tx| {
+                    Ok(BodyMetric::insert_new(tx, &mut entries, &existing).await?)
+                })
+                .await
+                .map_err(|e| e.to_string())
+        }
     }
     .await;
 
@@ -215,12 +210,9 @@ pub async fn send_to_connect<R: Runtime>(
         queue_workout_on_connect(app, workout, serial).await?;
 
         // Register the pair so later changes (e.g. progressions) get re-sent once plugged by USB
-        let mut entry = WorkoutDevice {
-            device: serial.to_string(),
-            workout: workout.to_string(),
-            pending: false,
-        };
-        queue_workout_device(&pool(app), &mut entry).await?;
+        set_workout_on_device(app, workout, serial, false)
+            .await
+            .map_err(|e| e.to_string())?;
 
         Ok(())
     }
@@ -230,12 +222,7 @@ pub async fn send_to_connect<R: Runtime>(
 
     match res {
         Ok(()) => {
-            info!("Workout '{}' sent to device {}", workout, serial);
-            show_notification(NotificationDefinition {
-                title: workout.to_string(),
-                body: translate("ok_workout_send", lang),
-                kind: NotificationKind::Temporal,
-            });
+            notify_workout_sent(workout, serial, lang);
             Ok(())
         }
         Err(e) => Err(report_error(

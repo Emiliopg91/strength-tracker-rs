@@ -1,9 +1,8 @@
-use std::{path::Path, time::Instant};
+use std::time::Instant;
 
 use bytes::Bytes;
 use mtp_rs::{MtpDevice, NewObjectInfo, ObjectHandle, ObjectInfo, Storage};
 use tauri_plugin_log::log::{debug, error, info};
-use tokio::fs;
 
 use crate::{
     dao::device::Device,
@@ -51,6 +50,49 @@ async fn open_device(serial: &str) -> Result<MtpDevice> {
     );
 
     Ok(device)
+}
+
+/// Opens the device with serial number `serial`, runs `f` on its first storage and closes the
+/// device, however `f` ends.
+async fn with_storage<T>(serial: &str, f: impl AsyncFnOnce(&Storage) -> Result<T>) -> Result<T> {
+    let device = open_device(serial).await?;
+
+    // Every fallible step runs inside this block so that, regardless of how it exits,
+    // `device.close()` below always runs exactly once.
+    let result: Result<T> = async {
+        let storages = device.storages().await.map_err(MtpError::Storage)?;
+        let storage = storages
+            .first()
+            .ok_or_else(|| MtpError::NoStorageDevice(serial.to_string()))?;
+        f(storage).await
+    }
+    .await;
+
+    let _ = device.close().await;
+    result
+}
+
+/// Downloads into memory the `.FIT` files of `GARMIN/<folder>` on `storage` for which `keep` holds.
+async fn download_fit_files(
+    storage: &Storage,
+    serial: &str,
+    folder: &str,
+    keep: impl Fn(&ObjectInfo) -> bool,
+) -> Result<Vec<FitFile>> {
+    info!("Listing files...");
+    let mut objs = list_garmin_folder(storage, serial, folder).await?;
+
+    objs.retain(is_fit_file);
+    info!("Found {} files", objs.len());
+    objs.retain(keep);
+
+    if objs.is_empty() {
+        info!("No pending files to download");
+        return Ok(Vec::new());
+    }
+
+    info!("Pending {} files", objs.len());
+    Ok(download_files(storage, objs).await)
 }
 
 /// Looks up the `GARMIN/<folder>` folder on `storage`.
@@ -139,17 +181,14 @@ async fn delete_file(storage: &Storage, obj: ObjectInfo) -> Result<()> {
     }
 }
 
-/// Uploads the local file `src` into the folder `parent` on `storage` and returns the new handle.
-/// MTP cannot overwrite, so any file with the same name in `parent` is deleted first.
-async fn upload_file(storage: &Storage, parent: ObjectHandle, src: &Path) -> Result<ObjectHandle> {
-    let filename = src
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .ok_or_else(|| MtpError::InvalidFileName(src.display().to_string()))?;
-    let data = fs::read(src)
-        .await
-        .map_err(|e| MtpError::ReadData(src.display().to_string(), e))?;
-
+/// Uploads `data` as the file `filename` into the folder `parent` on `storage` and returns the new
+/// handle. MTP cannot overwrite, so any file with the same name in `parent` is deleted first.
+async fn upload_file(
+    storage: &Storage,
+    parent: ObjectHandle,
+    filename: &str,
+    data: Vec<u8>,
+) -> Result<ObjectHandle> {
     let existing = storage
         .list_objects(Some(parent))
         .await
@@ -162,12 +201,12 @@ async fn upload_file(storage: &Storage, parent: ObjectHandle, src: &Path) -> Res
         storage
             .delete(obj.handle)
             .await
-            .map_err(|e| MtpError::DeleteFile(filename.clone(), e))?;
+            .map_err(|e| MtpError::DeleteFile(filename.to_string(), e))?;
     }
 
     info!("Uploading file {} ({} bytes)...", filename, data.len());
     let t0 = Instant::now();
-    let new_info = NewObjectInfo::file(filename.clone(), data.len() as u64);
+    let new_info = NewObjectInfo::file(filename.to_string(), data.len() as u64);
     let stream = futures_util::stream::iter([Ok(Bytes::from(data))]);
     match storage.upload(Some(parent), new_info, stream).await {
         Ok(handle) => {
@@ -183,7 +222,7 @@ async fn upload_file(storage: &Storage, parent: ObjectHandle, src: &Path) -> Res
             if let Some(partial) = e.partial {
                 let _ = storage.delete(partial).await;
             }
-            Err(MtpError::UploadFile(filename, e))
+            Err(MtpError::UploadFile(filename.to_string(), e))
         }
     }
 }
@@ -242,91 +281,49 @@ impl MtpClient {
         serial: &str,
         date: String,
     ) -> Result<Vec<FitFile>> {
-        let device = open_device(serial).await?;
-
-        // Every fallible step below runs inside this block so that, regardless of how it
-        // exits, `device.close()` below always runs exactly once.
-        let result: Result<Vec<FitFile>> = async {
-            let storages = device.storages().await.map_err(MtpError::Storage)?;
-            let storage = storages
-                .first()
-                .ok_or_else(|| MtpError::NoStorageDevice(serial.to_string()))?;
-
-            info!("Listing files...");
-            let mut objs =
-                list_garmin_folder(storage, serial, constants::MTP_GARMIN_ACTIVITY_FOLDER).await?;
-
-            objs.retain(is_fit_file);
-            info!("Found {} files", objs.len());
-            objs.retain(|f| f.filename.split('.').next().unwrap() > date.as_str());
-
-            if objs.is_empty() {
-                info!("No pending files to import");
-                return Ok(Vec::new());
-            }
-
-            info!("Pending {} files", objs.len());
-
-            Ok(download_files(storage, objs).await)
-        }
-        .await;
-
-        let _ = device.close().await;
-        result
+        with_storage(serial, async |storage| {
+            download_fit_files(
+                storage,
+                serial,
+                constants::MTP_GARMIN_ACTIVITY_FOLDER,
+                |f| f.filename.split('.').next().unwrap() > date.as_str(),
+            )
+            .await
+        })
+        .await
     }
 
     /// Downloads into memory the `.FIT` workout files.
     pub async fn download_workouts(&self, serial: &str) -> Result<Vec<FitFile>> {
-        let device = open_device(serial).await?;
-
-        // Every fallible step below runs inside this block so that, regardless of how it
-        // exits, `device.close()` below always runs exactly once.
-        let result: Result<Vec<FitFile>> = async {
-            let storages = device.storages().await.map_err(MtpError::Storage)?;
-            let storage = storages
-                .first()
-                .ok_or_else(|| MtpError::NoStorageDevice(serial.to_string()))?;
-
-            info!("Listing files...");
-            let mut objs =
-                list_garmin_folder(storage, serial, constants::MTP_GARMIN_WORKOUTS_FOLDER).await?;
-
-            objs.retain(is_fit_file);
-            info!("Found {} files", objs.len());
-
-            Ok(download_files(storage, objs).await)
-        }
-        .await;
-
-        let _ = device.close().await;
-        result
+        with_storage(serial, async |storage| {
+            download_fit_files(
+                storage,
+                serial,
+                constants::MTP_GARMIN_WORKOUTS_FOLDER,
+                |_| true,
+            )
+            .await
+        })
+        .await
     }
 
     /// Deletes the workout file `file_name`, looking first in `Workouts` and then in `NewFiles`.
     pub async fn delete_workout(&self, serial: &str, file_name: &str) -> Result<bool> {
-        let device = open_device(serial).await?;
-
-        let result: Result<bool> = async {
+        with_storage(serial, async |storage| {
             info!("Looking for .fit file '{}'", file_name);
             let matches =
                 |o: &ObjectInfo| o.is_file() && o.filename.eq_ignore_ascii_case(file_name);
 
-            let storages = device.storages().await.map_err(MtpError::Storage)?;
-            let storage = storages
-                .first()
-                .ok_or_else(|| MtpError::NoStorageDevice(serial.to_string()))?;
-
-            let objs =
-                list_garmin_folder(storage, serial, constants::MTP_GARMIN_WORKOUTS_FOLDER).await?;
-
-            let mut obj = objs.into_iter().find(matches);
-
+            let mut obj =
+                list_garmin_folder(storage, serial, constants::MTP_GARMIN_WORKOUTS_FOLDER)
+                    .await?
+                    .into_iter()
+                    .find(matches);
             if obj.is_none() {
-                let objs =
-                    list_garmin_folder(storage, serial, constants::MTP_GARMIN_NEW_FILES_FOLDER)
-                        .await?;
-
-                obj = objs.into_iter().find(matches);
+                obj = list_garmin_folder(storage, serial, constants::MTP_GARMIN_NEW_FILES_FOLDER)
+                    .await?
+                    .into_iter()
+                    .find(matches);
             }
 
             if let Some(obj) = obj {
@@ -336,43 +333,24 @@ impl MtpClient {
                 info!("Not found .fit file");
                 Ok(false)
             }
-        }
-        .await;
-
-        let _ = device.close().await;
-        result
+        })
+        .await
     }
 
-    /// Uploads the local file `src` into the device's `GARMIN/<folder>` folder, replacing any file
-    /// with the same name.
-    pub async fn upload_file(&self, serial: &str, folder: &str, src: &Path) -> Result<()> {
-        let device = open_device(serial).await?;
-
-        // Every fallible step below runs inside this block so that, regardless of how it
-        // exits, `device.close()` below always runs exactly once.
-        let result: Result<()> = async {
-            let storages = device.storages().await.map_err(MtpError::Storage)?;
-            let storage = storages
-                .first()
-                .ok_or_else(|| MtpError::NoStorageDevice(serial.to_string()))?;
-
+    /// Uploads `data` as the file `filename` into the device's `GARMIN/<folder>` folder, replacing
+    /// any file with the same name.
+    pub async fn upload_file(
+        &self,
+        serial: &str,
+        folder: &str,
+        filename: &str,
+        data: Vec<u8>,
+    ) -> Result<()> {
+        with_storage(serial, async |storage| {
             let target = find_garmin_folder(storage, serial, folder).await?;
-            upload_file(storage, target.handle, src).await?;
+            upload_file(storage, target.handle, filename, data).await?;
             Ok(())
-        }
-        .await;
-
-        let _ = device.close().await;
-        result
-    }
-
-    /// Uploads a workout `.FIT` file into `GARMIN/NewFiles`, from where the device validates and
-    /// imports it into `GARMIN/Workouts` once it is disconnected.
-    pub async fn upload_workout<P>(&self, serial: &str, src: P) -> Result<()>
-    where
-        P: AsRef<Path>,
-    {
-        self.upload_file(serial, constants::MTP_GARMIN_NEW_FILES_FOLDER, src.as_ref())
-            .await
+        })
+        .await
     }
 }

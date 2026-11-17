@@ -1,8 +1,7 @@
 use chrono::{Datelike, Days, Local, TimeZone};
 
 use crate::{
-    logic::sessions::queries::{heatmap_data, session_set_flags},
-    tests::common,
+    dao::session_step::SessionStep, logic::sessions::helpers::heatmap_data, tests::common,
 };
 
 /// Builds a timestamp for `days_ago` days before today, anchored at local noon so the
@@ -102,7 +101,9 @@ async fn session_set_flags_report_sets_and_records_per_session() {
     .unwrap();
 
     let all = db
-        .run_in_connection(async move |conn| Ok(session_set_flags(conn, None, None).await?))
+        .run_in_connection(
+            async move |conn| Ok(SessionStep::get_set_flags(conn, None, None).await?),
+        )
         .await
         .unwrap();
     assert_eq!(all.len(), 2);
@@ -111,7 +112,9 @@ async fn session_set_flags_report_sets_and_records_per_session() {
     assert!(!all.contains_key(&1_000));
 
     let recent = db
-        .run_in_connection(async move |conn| Ok(session_set_flags(conn, Some(2_500), None).await?))
+        .run_in_connection(async move |conn| {
+            Ok(SessionStep::get_set_flags(conn, Some(2_500), None).await?)
+        })
         .await
         .unwrap();
     assert_eq!(recent.len(), 1);
@@ -119,7 +122,7 @@ async fn session_set_flags_report_sets_and_records_per_session() {
 
     let bounded = db
         .run_in_connection(async move |conn| {
-            Ok(session_set_flags(conn, Some(2_500), Some(3_500)).await?)
+            Ok(SessionStep::get_set_flags(conn, Some(2_500), Some(3_500)).await?)
         })
         .await
         .unwrap();
@@ -127,7 +130,9 @@ async fn session_set_flags_report_sets_and_records_per_session() {
     assert_eq!(bounded.get(&3_000), Some(&true));
 
     let upto = db
-        .run_in_connection(async move |conn| Ok(session_set_flags(conn, None, Some(2_500)).await?))
+        .run_in_connection(async move |conn| {
+            Ok(SessionStep::get_set_flags(conn, None, Some(2_500)).await?)
+        })
         .await
         .unwrap();
     assert_eq!(upto.len(), 1);

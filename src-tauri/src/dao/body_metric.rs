@@ -1,6 +1,13 @@
 use std::collections::HashSet;
 
-use rusqlite_orm::{Entity, errors::DatabaseError, rusqlite::Transaction};
+use rusqlite_orm::{
+    Entity,
+    dao::Repository,
+    database::DatabasePool,
+    errors::DatabaseError,
+    rusqlite::{Connection, Transaction},
+    types::{order_by::OrderBy, where_clause::Where},
+};
 use serde::{Deserialize, Serialize};
 
 use crate::{connect::client::WeightEntry, utils::time::local_midnight};
@@ -33,10 +40,74 @@ impl TryFrom<&WeightEntry> for BodyMetric {
     }
 }
 
-/// Moves every body metric to its local midnight, keeping the latest one of each day.
-///
-/// Written against the raw table rather than the entity: later migrations rename its columns,
-/// which don't exist yet when this one runs.
+impl BodyMetric {
+    /// Lists all body measurements, newest first.
+    pub async fn get_by_range(
+        conn: &rusqlite_orm::rusqlite::Connection,
+        from_to: Option<(u32, u32)>,
+    ) -> rusqlite_orm::errors::Result<Vec<BodyMetric>> {
+        let mut query =
+            BodyMetricRepository::select().order_by(OrderBy::Desc(entity::columns::DATE));
+
+        if let Some((from, to)) = from_to {
+            query = query.where_(Where::And(vec![
+                Where::Gte(entity::columns::DATE, from.into()),
+                Where::Lte(entity::columns::DATE, to.into()),
+            ]))
+        }
+
+        query.fetch_in(conn).await
+    }
+
+    /// Stores a new body measurement entry.
+    pub async fn insert(
+        database: &DatabasePool,
+        item: &mut BodyMetric,
+    ) -> rusqlite_orm::errors::Result<()> {
+        BodyMetricRepository::insert()
+            .item(item)
+            .execute(database)
+            .await
+            .map(|_| ())
+    }
+
+    /// Deletes the body measurement logged on `date`, if any.
+    pub async fn delete_on(database: &DatabasePool, date: u32) -> rusqlite_orm::errors::Result<()> {
+        BodyMetricRepository::delete()
+            .where_(Where::Eq(entity::columns::DATE, date.into()))
+            .execute(database)
+            .await
+            .map(|_| ())
+    }
+
+    /// Dates of the stored body measurements, newest first.
+    pub async fn get_dates(conn: &Connection) -> rusqlite_orm::errors::Result<Vec<u32>> {
+        Ok(BodyMetricRepository::select()
+            .columns(&[entity::columns::DATE])
+            .order_by(OrderBy::Desc(entity::columns::DATE))
+            .fetch_in(conn)
+            .await?
+            .iter()
+            .map(|row| row.get_u32(entity::columns::DATE.as_ref()))
+            .collect())
+    }
+
+    /// Stores the `entries` not logged yet (by date); returns how many were added.
+    pub async fn insert_new(
+        tx: &'_ Transaction<'_>,
+        entries: &mut [BodyMetric],
+        existing: &[u32],
+    ) -> rusqlite_orm::errors::Result<usize> {
+        let mut insert = BodyMetricRepository::insert().or_replace();
+        for entry in entries {
+            if !existing.contains(&entry.date) {
+                insert = insert.item(entry);
+            }
+        }
+        insert.execute_in(tx).await
+    }
+}
+
 pub async fn migration_21(tx: &Transaction<'_>) -> Result<(), DatabaseError> {
     tx.execute_batch(
         "CREATE TEMP TABLE BODY_METRIC_OLD AS SELECT * FROM BODY_METRIC;

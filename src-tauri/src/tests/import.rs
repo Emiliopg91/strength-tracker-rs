@@ -6,7 +6,7 @@ use crate::{
         session::{Session, SessionRepository},
     },
     fit::{FitFile, parser::FitParser},
-    logic::sessions::queries::import_file_list,
+    logic::sessions::helpers::import_file_list,
     tests::common,
 };
 

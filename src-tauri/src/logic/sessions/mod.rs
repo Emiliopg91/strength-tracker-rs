@@ -1,26 +1,24 @@
 pub mod commands;
 pub mod helpers;
-pub mod queries;
 
 use chrono::{Local, TimeZone};
 use tauri::{AppHandle, Emitter, Runtime};
 use tauri_plugin_log::log::info;
 
 use self::helpers::{
-    import_file_paths, notify_new_prs, notify_progression_available, retrieve_session_connect_id,
-    session_file_name, write_session_fit,
-};
-use self::queries::{
-    apply_session_changes, fetch_session_details, fetch_sessions, heatmap_data, session_name,
+    apply_session_changes, fetch_session_details, fetch_sessions, heatmap_data, import_file_paths,
+    notify_new_prs, notify_progression_available, retrieve_session_connect_id, session_file_name,
+    write_session_fit,
 };
 use crate::{
     SettingsLock,
+    dao::session::Session,
     dto::{
         notifications::{NotificationDefinition, NotificationKind},
         sessions::{SessionDetails, SessionListItem, SessionStepsUpdate},
     },
     logic::{
-        ask_open_paths, ask_save_path, connect::helpers::sync_session_sets_connect,
+        ask_open_paths, ask_save_path, connect::helpers::sync_session_sets_connect, fit_settings,
         notifications::show_notification, pool, report_error,
     },
     utils::{
@@ -99,13 +97,11 @@ pub async fn download_session<R: Runtime>(
     settings: &SettingsLock,
     timestamp: u32,
 ) -> Result<(), String> {
-    let (lang, weight_unit) = {
-        let settings = settings.read().unwrap();
-        (settings.language, settings.weight_unit)
-    };
+    let (lang, weight_unit) = fit_settings(app);
 
     // Without a name the file is just named after the date; a failure surfaces when writing the file
-    let name = session_name(&pool(app), timestamp)
+    let name = pool(app)
+        .run_in_connection(async move |conn| Ok(Session::get_name(conn, timestamp).await?))
         .await
         .ok()
         .flatten()

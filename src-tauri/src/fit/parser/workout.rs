@@ -65,11 +65,7 @@ impl WorkoutAccumulator {
         }
 
         self.name = msg.wkt_name.to_string();
-        self.notes = if !msg.wkt_description.is_empty() {
-            Some(msg.wkt_description.to_string())
-        } else {
-            None
-        };
+        self.notes = non_empty(&msg.wkt_description);
 
         Ok(())
     }
@@ -77,6 +73,10 @@ impl WorkoutAccumulator {
     pub(super) fn push_step(&mut self, msg: &mesgdef::WorkoutStep) {
         let name = &self.name;
         let idx = msg.message_index.0;
+        let notes = non_empty(&msg.notes);
+        // FIT files carry times in milliseconds
+        let time =
+            (msg.duration_type == WktStepDuration::TIME).then_some(msg.duration_value / 1000);
         match msg.duration_type {
             WktStepDuration::REPEAT_UNTIL_STEPS_CMPLT => {
                 self.steps.push(WorkoutStep::repeat(
@@ -88,17 +88,7 @@ impl WorkoutAccumulator {
             }
             _ => match msg.intensity {
                 Intensity::REST => {
-                    let duration = match msg.duration_type {
-                        WktStepDuration::TIME => Some(msg.duration_value / 1000),
-                        _ => None,
-                    };
-                    let notes = if !msg.notes.is_empty() {
-                        Some(msg.notes.to_string())
-                    } else {
-                        None
-                    };
-                    self.steps
-                        .push(WorkoutStep::rest(name, idx, duration, notes));
+                    self.steps.push(WorkoutStep::rest(name, idx, time, notes));
                 }
                 Intensity::ACTIVE
                 | Intensity::COOLDOWN
@@ -113,15 +103,6 @@ impl WorkoutAccumulator {
                     let reps = match msg.duration_type {
                         WktStepDuration::REPS => Some(msg.duration_value as u16),
                         _ => None,
-                    };
-                    let time = match msg.duration_type {
-                        WktStepDuration::TIME => Some(msg.duration_value / 1000),
-                        _ => None,
-                    };
-                    let notes = if !msg.notes.is_empty() {
-                        Some(msg.notes.to_string())
-                    } else {
-                        None
                     };
                     self.steps.push(WorkoutStep::active(
                         name,
@@ -168,4 +149,9 @@ impl WorkoutAccumulator {
             connect_created_time: None,
         })
     }
+}
+
+/// `text` as an owned string, `None` if empty.
+fn non_empty(text: &str) -> Option<String> {
+    (!text.is_empty()).then(|| text.to_string())
 }

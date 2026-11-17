@@ -1,12 +1,11 @@
 pub mod commands;
-pub mod queries;
 
 use tauri::{AppHandle, Runtime};
 use tauri_plugin_log::log::info;
 
-use self::queries::{delete_body_metric_on, fetch_body_measures, insert_body_metric};
 use crate::{
     SettingsLock,
+    dao::body_metric::BodyMetric,
     dto::{
         body_metrics::BodyMetricListItem,
         notifications::{NotificationDefinition, NotificationKind},
@@ -23,7 +22,13 @@ pub async fn get_body_measures<R: Runtime>(
     info!("Getting body measures list...");
 
     pool(app)
-        .run_in_connection(async move |conn| Ok(fetch_body_measures(conn, None).await?))
+        .run_in_connection(async move |conn| {
+            Ok(BodyMetric::get_by_range(conn, None)
+                .await?
+                .iter()
+                .map(BodyMetricListItem::from)
+                .collect::<Vec<_>>())
+        })
         .await
         .inspect(|res| info!("Retrieved {} measures", res.len()))
         .map_err(|e| {
@@ -44,7 +49,11 @@ pub async fn add_body_measures<R: Runtime>(
 ) -> Result<(), String> {
     info!("Adding body measures list...");
 
-    let res = insert_body_metric(&pool(app), &measures).await;
+    let res = BodyMetric::insert(
+        &pool(app),
+        &mut BodyMetric::try_from(&measures).map_err(|e| e.to_string())?,
+    )
+    .await;
 
     match res {
         Ok(_) => {
@@ -66,7 +75,7 @@ pub async fn delete_body_metric<R: Runtime>(
     settings: &SettingsLock,
     date: u32,
 ) -> Result<(), String> {
-    let res = delete_body_metric_on(&pool(app), date).await;
+    let res = BodyMetric::delete_on(&pool(app), date).await;
 
     let lang = settings.read().unwrap().language;
     match res {

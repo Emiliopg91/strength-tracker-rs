@@ -4,12 +4,11 @@ use rustyfit::profile::typedef::Intensity;
 use crate::{
     dao::{
         device::{Device, DeviceRepository},
-        exercise::ExerciseRepository,
+        exercise::{Exercise, ExerciseRepository},
         workout::{Workout, WorkoutRepository},
         workout_device::{WorkoutDevice, WorkoutDeviceRepository},
         workout_step::{WorkoutStep, WorkoutStepRepository},
     },
-    logic::exercises::queries::update_exercise_notes,
     tests::common,
 };
 
@@ -117,7 +116,7 @@ async fn save_notes(db: &DatabasePool, exercise: (u16, u16), notes: Option<&str>
     let notes = notes.map(str::to_string);
     let mut workouts = db
         .run_in_transaction(async move |tx| {
-            Ok(update_exercise_notes(tx, exercise.0, exercise.1, notes).await?)
+            Ok(Exercise::update_notes(tx, exercise.0, exercise.1, notes).await?)
         })
         .await
         .unwrap();

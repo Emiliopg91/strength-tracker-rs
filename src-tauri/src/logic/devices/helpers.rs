@@ -2,18 +2,13 @@ use std::collections::HashMap;
 
 use futures_util::StreamExt;
 use mtp_rs::{MtpDevice, mtp::HotplugEvent};
-use rusqlite_orm::{database::DatabasePool, errors::DatabaseError};
+use rusqlite_orm::errors::DatabaseError;
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tauri_plugin_log::log::{error, info};
 
 use super::import_from_device;
-use super::queries::{
-    clear_pending, enrol_usb_device, pending_connect_devices, pending_queue, plans_between,
-    queue_workout_device, store_workout_steps, workout_for_device, workouts_on_device,
-    workouts_without_steps,
-};
 use crate::{
-    ConnectLock, MtpLock, SettingsLock,
+    ConnectLock, MtpLock,
     dao::{
         device::Device, settings::WeightUnit, workout::Workout, workout_device::WorkoutDevice,
         workout_planning::WorkoutPlanning,
@@ -28,7 +23,7 @@ use crate::{
         writer::{FitWriter, ToFitMessages},
     },
     logic::{
-        connect::helpers::queue_workout_on_connect, new_pending_dir,
+        connect::helpers::queue_workout_on_connect, fit_settings, language,
         notifications::show_notification, pool, store_pending_files,
     },
     utils::{
@@ -82,6 +77,50 @@ pub(crate) fn start_device_watcher<R: Runtime>(app: &AppHandle<R>) {
     });
 }
 
+/// Records that the device `serial` has the workout, so later changes (e.g. progressions) get
+/// re-sent to it. An existing entry is kept as it is.
+pub(crate) async fn register_workout_on_device<R: Runtime>(
+    app: &AppHandle<R>,
+    workout: &str,
+    serial: &str,
+) -> Result<usize, DatabaseError> {
+    let (workout, serial) = (workout.to_string(), serial.to_string());
+    pool(app)
+        .run_in_connection(async move |conn| {
+            Ok(WorkoutDevice::insert_or_ignore(conn, &workout, &serial).await?)
+        })
+        .await
+}
+
+/// Records the workout for the device `serial`, `pending` of being sent or already sent,
+/// replacing any existing entry.
+pub(crate) async fn set_workout_on_device<R: Runtime>(
+    app: &AppHandle<R>,
+    workout: &str,
+    serial: &str,
+    pending: bool,
+) -> Result<usize, DatabaseError> {
+    let (workout, serial) = (workout.to_string(), serial.to_string());
+    pool(app)
+        .run_in_connection(async move |conn| {
+            Ok(WorkoutDevice::insert_or_replace(conn, &workout, &serial, pending).await?)
+        })
+        .await
+}
+
+/// Takes the workout off the queue of the device `serial`, logging a failure.
+async fn clear_workout_pending<R: Runtime>(app: &AppHandle<R>, workout: &str, serial: &str) {
+    let (wkt, device) = (workout.to_string(), serial.to_string());
+    if let Err(e) = pool(app)
+        .run_in_connection(async move |conn| {
+            Ok(WorkoutDevice::clear_pending(conn, &wkt, &device).await?)
+        })
+        .await
+    {
+        error!("Error clearing the queue entry of workout '{workout}' for {serial}: {e}");
+    }
+}
+
 pub(super) async fn on_device_disconnected<R: Runtime>(
     app: &AppHandle<R>,
     serial: &str,
@@ -91,11 +130,7 @@ pub(super) async fn on_device_disconnected<R: Runtime>(
         let payload: DeviceListItem = DeviceListItem::from(&device);
         let _ = app.emit("device_disconnected", payload);
 
-        let lang = {
-            let settings_state = app.state::<SettingsLock>();
-            let settings = settings_state.read().unwrap();
-            settings.language
-        };
+        let lang = language(app);
 
         info!("Disconnected Garmin {} ({})", device.model, device.serial);
         show_notification(NotificationDefinition {
@@ -116,15 +151,11 @@ pub(super) async fn on_device_connected<R: Runtime>(
         return;
     }
 
-    let lang = {
-        let settings_state = app.state::<SettingsLock>();
-        let settings = settings_state.read().unwrap();
-        settings.language
-    };
+    let lang = language(app);
     let mut enrolled = device.clone();
     let enrol_res = pool(app)
         .run_in_transaction(async move |tx| {
-            enrol_usb_device(tx, &mut enrolled).await?;
+            Device::enrol_usb(tx, &mut enrolled).await?;
             Ok(enrolled)
         })
         .await;
@@ -148,7 +179,7 @@ pub(super) async fn on_device_connected<R: Runtime>(
         kind: NotificationKind::Temporal,
     });
 
-    let payload: DeviceListItem = DeviceListItem::from(&device.clone());
+    let payload: DeviceListItem = DeviceListItem::from(&*device);
     let _ = app.emit("device_connected", payload);
 
     let serial = &device.serial;
@@ -180,19 +211,45 @@ pub(super) async fn with_loading<R: Runtime>(
     }
 }
 
+/// Serial numbers of the devices plugged in by USB; none if they can't be listed, which is logged.
+async fn connected_serials<R: Runtime>(app: &AppHandle<R>) -> Vec<String> {
+    let mtp_client = app.state::<MtpLock>();
+    // Bound in its own statement so the MTP lock is released before the caller uses the devices
+    let connected = mtp_client.lock().await.get_connected_devices().await;
+    match connected {
+        Ok(devices) => devices.into_iter().map(|d| d.serial).collect(),
+        Err(e) => {
+            error!("Error listing connected devices: {e}");
+            Vec::new()
+        }
+    }
+}
+
+/// Tells the user the workout was sent to a device.
+pub(crate) fn notify_workout_sent(workout: &str, serial: &str, lang: Languages) {
+    info!("Workout '{workout}' sent to device {serial}");
+    show_notification(NotificationDefinition {
+        title: workout.to_string(),
+        body: translate("ok_workout_send", lang),
+        kind: NotificationKind::Temporal,
+    });
+}
+
+/// Tells the user the workout will be sent to a device the next time it is plugged in.
+pub(super) fn notify_workout_pending(workout: &str, serial: &str, lang: Languages) {
+    info!("Workout '{workout}' pending to be sent to device {serial}");
+    show_notification(NotificationDefinition {
+        title: workout.to_string(),
+        body: translate("pending_workout_send", lang),
+        kind: NotificationKind::Temporal,
+    });
+}
+
 /// Uploads the pending workouts of every device plugged in by USB. The rest keep them pending for
 /// the next plug: Connect only gets the workout itself, never a delivery to a device.
 pub(crate) async fn push_pending_to_usb<R: Runtime>(app: &AppHandle<R>) {
-    let mtp_client = app.state::<MtpLock>();
-    // Bound in its own statement so the MTP lock is released before pushing
-    let connected = mtp_client.lock().await.get_connected_devices().await;
-    match connected {
-        Ok(devices) => {
-            for device in devices {
-                push_pending_workouts(app, &device.serial).await;
-            }
-        }
-        Err(e) => error!("Error listing connected devices: {e}"),
+    for serial in connected_serials(app).await {
+        push_pending_workouts(app, &serial).await;
     }
 }
 
@@ -216,7 +273,9 @@ pub(crate) async fn send_enabled_workout_to_connect_devices<R: Runtime>(
     let _guard = PUSH_LOCK.lock().await;
     let name = workout.to_string();
     let serials = match pool(app)
-        .run_in_connection(async move |conn| Ok(pending_connect_devices(conn, &name).await?))
+        .run_in_connection(async move |conn| {
+            Ok(WorkoutDevice::get_pending_connect_devices(conn, &name).await?)
+        })
         .await
     {
         Ok(serials) => serials,
@@ -226,7 +285,7 @@ pub(crate) async fn send_enabled_workout_to_connect_devices<R: Runtime>(
         }
     };
 
-    let lang = app.state::<SettingsLock>().read().unwrap().language;
+    let lang = language(app);
     for serial in serials {
         if let Err(e) = queue_workout_on_connect(app, workout, &serial).await {
             error!("Error pushing pending workout '{workout}' to {serial}: {e}");
@@ -238,16 +297,8 @@ pub(crate) async fn send_enabled_workout_to_connect_devices<R: Runtime>(
 
 /// Delete the pending workouts of every currently connected device.
 pub(crate) async fn delete_pending_from_connected<R: Runtime>(app: &AppHandle<R>) {
-    let mtp_client = app.state::<MtpLock>();
-    // Bound in its own statement so the MTP lock is released before pushing
-    let connected = mtp_client.lock().await.get_connected_devices().await;
-    match connected {
-        Ok(devices) => {
-            for device in devices {
-                delete_pending_workouts(app, &device.serial).await;
-            }
-        }
-        Err(e) => error!("Error listing connected devices: {e}"),
+    for serial in connected_serials(app).await {
+        delete_pending_workouts(app, &serial).await;
     }
 }
 
@@ -260,7 +311,13 @@ pub(super) async fn push_pending_workouts<R: Runtime>(app: &AppHandle<R>, serial
     let _guard = PUSH_LOCK.lock().await;
     let serial = serial.to_string();
     let serial_q = serial.clone();
-    let pending = match pending_queue(&pool(app), &serial_q, true).await {
+
+    let pending = match pool(app)
+        .run_in_connection(async move |conn| {
+            Ok(WorkoutDevice::get_pending(conn, &serial_q, Some(true)).await?)
+        })
+        .await
+    {
         Ok(pending) => pending,
         Err(e) => {
             error!("Error fetching pending workouts for pushing to {serial}: {e}");
@@ -271,11 +328,7 @@ pub(super) async fn push_pending_workouts<R: Runtime>(app: &AppHandle<R>, serial
         return;
     }
 
-    let (lang, weight_unit) = {
-        let state = app.state::<SettingsLock>();
-        let settings = state.read().unwrap();
-        (settings.language, settings.weight_unit)
-    };
+    let (lang, weight_unit) = fit_settings(app);
     for workout in pending {
         if let Err(e) = send_workout_to_device(app, lang, weight_unit, &workout, &serial).await {
             error!("Error pushing pending workout '{workout}' to {serial}: {e}");
@@ -292,18 +345,8 @@ pub(super) async fn finish_push<R: Runtime>(
     serial: &str,
     lang: Languages,
 ) {
-    let device = serial.to_string();
-    let wkt = workout.to_string();
-    if let Err(e) = clear_pending(&pool(app), &wkt, &device).await {
-        error!("Error clearing pending upload entry for {serial}: {e}");
-    }
-
-    info!("Workout '{workout}' sent to device {serial}");
-    show_notification(NotificationDefinition {
-        title: workout.to_string(),
-        body: translate("ok_workout_send", lang),
-        kind: NotificationKind::Temporal,
-    });
+    clear_workout_pending(app, workout, serial).await;
+    notify_workout_sent(workout, serial, lang);
 }
 
 /// Deletes from `device` the disabled workouts queued while it was disconnected, removing each queue entry once deleted.
@@ -312,7 +355,12 @@ pub(super) async fn delete_pending_workouts<R: Runtime>(app: &AppHandle<R>, seri
     let _guard = PUSH_LOCK.lock().await;
     let serial = serial.to_string();
     let serial_q = serial.clone();
-    let pending = match pending_queue(&pool(app), &serial_q, false).await {
+    let pending = match pool(app)
+        .run_in_connection(async move |conn| {
+            Ok(WorkoutDevice::get_pending(conn, &serial_q, Some(false)).await?)
+        })
+        .await
+    {
         Ok(pending) => pending,
         Err(e) => {
             error!("Error fetching pending workouts for deleting from {serial}: {e}");
@@ -323,19 +371,11 @@ pub(super) async fn delete_pending_workouts<R: Runtime>(app: &AppHandle<R>, seri
         return;
     }
 
-    let lang = {
-        let state = app.state::<SettingsLock>();
-        let settings = state.read().unwrap();
-        settings.language
-    };
+    let lang = language(app);
     for workout in pending {
         match delete_workout_from_device(app, &workout, &serial).await {
             Ok(deleted) => {
-                let device = serial.clone();
-                let wkt = workout.clone();
-                if let Err(e) = clear_pending(&pool(app), &wkt, &device).await {
-                    error!("Error clearing pending deletion entry for {serial}: {e}");
-                }
+                clear_workout_pending(app, &workout, &serial).await;
                 if deleted {
                     info!("Workout '{workout}' deleted from device {serial}");
                     show_notification(NotificationDefinition {
@@ -353,20 +393,10 @@ pub(super) async fn delete_pending_workouts<R: Runtime>(app: &AppHandle<R>, seri
     }
 }
 
-/// Lists the workouts recorded in sessions of `serial` that have no steps stored yet.
-pub(super) async fn list_pending_workouts<R: Runtime>(
-    app: &AppHandle<R>,
-    serial: &str,
-) -> Result<Vec<String>, DatabaseError> {
-    let serial_q = serial.to_string();
-    workouts_without_steps(&pool(app), &serial_q).await
-}
-
 /// Stores the steps of the `pending_workouts` found among the `.fit` files fetched from the
 /// device. Those that fail to parse or to be stored are kept as pending files.
 pub(super) async fn store_pending_workouts<R: Runtime>(
     app: &AppHandle<R>,
-    db: &DatabasePool,
     files: &[FitFile],
     serial: &str,
     pending_workouts: &[String],
@@ -402,8 +432,8 @@ pub(super) async fn store_pending_workouts<R: Runtime>(
     let mut workout_names: Vec<String> = Vec::new();
     for (mut workout, file) in workouts_to_insert {
         let name = workout.name.clone();
-        let res = db
-            .run_in_transaction(async move |tx| Ok(store_workout_steps(tx, &mut workout).await?))
+        let res = pool(app)
+            .run_in_transaction(async move |tx| Ok(Workout::store_steps(tx, &mut workout).await?))
             .await;
 
         if let Err(e) = res {
@@ -428,7 +458,11 @@ pub(super) async fn store_pending_workouts<R: Runtime>(
 
 /// Downloads from `device` the step definitions of workouts that have sessions recorded on it but no steps stored yet.
 pub(super) async fn download_pending_workouts<R: Runtime>(app: &AppHandle<R>, serial: &str) {
-    let pending_workouts = match list_pending_workouts(app, serial).await {
+    let serial_q = serial.to_string();
+    let pending_workouts = match pool(app)
+        .run_in_connection(async move |conn| Ok(Workout::get_without_steps(conn, &serial_q).await?))
+        .await
+    {
         Ok(pending) => pending,
         Err(e) => {
             error!("Error listing pending workouts for {}: {e}", serial);
@@ -447,7 +481,7 @@ pub(super) async fn download_pending_workouts<R: Runtime>(app: &AppHandle<R>, se
 
     match downloaded {
         Ok(files) => {
-            store_pending_workouts(app, &pool(app), &files, serial, &pending_workouts).await;
+            store_pending_workouts(app, &files, serial, &pending_workouts).await;
         }
         Err(e) => error!("Error downloading workouts from {}: {e}", serial),
     }
@@ -462,41 +496,43 @@ pub(super) async fn send_workout_to_device<R: Runtime>(
 ) -> Result<(), String> {
     let name = workout.to_string();
     let workout = pool(app)
-        .run_in_connection(async move |conn| Ok(workout_for_device(conn, &name).await?))
+        .run_in_connection(async move |conn| Ok(Workout::get_for_device(conn, &name).await?))
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("Workout {workout} not found"))?;
 
-    let dir = new_pending_dir(&constants::PENDING_UPLOAD_WORKOUTS_FOLDER, serial);
-    tokio::fs::create_dir_all(&dir)
-        .await
-        .map_err(|e| e.to_string())?;
     // File name is kept as-is since it becomes the workout file name on the device
-    let path = dir.join(workout.get_workout_file_name());
-    // Encoding and writing the file is blocking work
-    let fit_path = path.clone();
-    let written = tokio::task::spawn_blocking(move || {
-        FitWriter::from(&workout)
-            .write(fit_path, lang, weight_unit)
-            .map_err(|e| e.to_string())
+    let file_name = workout.get_workout_file_name();
+    upload_fit(app, serial, &file_name, move || {
+        FitWriter::from(&workout).into_bytes(lang, weight_unit)
     })
     .await
-    .expect("FIT writing task panicked");
-    if let Err(e) = written {
-        let _ = tokio::fs::remove_dir_all(&dir).await;
-        return Err(e);
-    }
+}
 
-    let mtp_client = app.state::<MtpLock>();
-    let upload = mtp_client
+/// Encodes a FIT file in memory with `encode` and uploads it as `file_name` to `GARMIN/NewFiles` on
+/// the device `serial`, from where the device validates and imports it once unplugged.
+async fn upload_fit<R: Runtime, E: ToString>(
+    app: &AppHandle<R>,
+    serial: &str,
+    file_name: &str,
+    encode: impl FnOnce() -> Result<Vec<u8>, E> + Send + 'static,
+) -> Result<(), String> {
+    // Encoding is CPU-bound work
+    let data = tokio::task::spawn_blocking(move || encode().map_err(|e| e.to_string()))
+        .await
+        .expect("FIT encoding task panicked")?;
+
+    app.state::<MtpLock>()
         .lock()
         .await
-        .upload_workout(serial, path.clone())
+        .upload_file(
+            serial,
+            constants::MTP_GARMIN_NEW_FILES_FOLDER,
+            file_name,
+            data,
+        )
         .await
-        .map_err(|e| e.to_string());
-
-    let _ = tokio::fs::remove_dir_all(dir).await;
-
-    upload
+        .map_err(|e| e.to_string())
 }
 
 pub(super) async fn delete_workout_from_device<R: Runtime>(
@@ -519,16 +555,8 @@ static SCHEDULE_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(())
 /// Sends the schedule of the next days to every device plugged in by USB, even if it has no plans
 /// left, so removed plans leave the devices too.
 pub(crate) async fn send_schedule_to_connected<R: Runtime>(app: &AppHandle<R>) {
-    let mtp_client = app.state::<MtpLock>();
-    // Bound in its own statement so the MTP lock is released before sending
-    let connected = mtp_client.lock().await.get_connected_devices().await;
-    match connected {
-        Ok(devices) => {
-            for device in devices {
-                send_schedule_to_device(app, &device.serial, true).await;
-            }
-        }
-        Err(e) => error!("Error listing connected devices: {e}"),
+    for serial in connected_serials(app).await {
+        send_schedule_to_device(app, &serial, true).await;
     }
 }
 
@@ -554,7 +582,9 @@ pub(super) async fn send_schedule_to_device<R: Runtime>(
     };
 
     let plans = match pool(app)
-        .run_in_connection(async move |conn| Ok(plans_between(conn, from, to).await?))
+        .run_in_connection(
+            async move |conn| Ok(WorkoutPlanning::get_between(conn, from, to).await?),
+        )
         .await
     {
         Ok(plans) => plans,
@@ -585,7 +615,11 @@ async fn upload_missing_workouts<R: Runtime>(
     serial: &str,
     plans: &[WorkoutPlanning],
 ) {
-    let on_device = match workouts_on_device(&pool(app), serial).await {
+    let serial_cl = serial.to_string();
+    let on_device = match pool(app)
+        .run_in_connection(async move |conn| Ok(WorkoutDevice::get_sent(conn, &serial_cl).await?))
+        .await
+    {
         Ok(names) => names,
         Err(e) => {
             error!("Error fetching the workouts sent to {serial}: {e}");
@@ -604,23 +638,15 @@ async fn upload_missing_workouts<R: Runtime>(
         return;
     }
 
-    let (lang, weight_unit) = {
-        let state = app.state::<SettingsLock>();
-        let settings = state.read().unwrap();
-        (settings.language, settings.weight_unit)
-    };
+    let (lang, weight_unit) = fit_settings(app);
     for workout in missing {
         info!("Planned workout '{workout}' missing on {serial}, uploading it");
         if let Err(e) = send_workout_to_device(app, lang, weight_unit, workout, serial).await {
             error!("Error uploading planned workout '{workout}' to {serial}: {e}");
             continue;
         }
-        let mut entry = WorkoutDevice {
-            workout: workout.to_string(),
-            device: serial.to_string(),
-            pending: false,
-        };
-        if let Err(e) = queue_workout_device(&pool(app), &mut entry).await {
+
+        if let Err(e) = set_workout_on_device(app, workout, serial, false).await {
             error!("Error registering workout '{workout}' for device {serial}: {e}");
         }
     }
@@ -632,41 +658,12 @@ async fn upload_schedule<R: Runtime>(
     serial: &str,
     plans: Vec<WorkoutPlanning>,
 ) -> Result<(), String> {
-    let (lang, weight_unit) = {
-        let state = app.state::<SettingsLock>();
-        let settings = state.read().unwrap();
-        (settings.language, settings.weight_unit)
-    };
-
-    let dir = new_pending_dir(&constants::PENDING_UPLOAD_SCHEDULES_FOLDER, serial);
-    tokio::fs::create_dir_all(&dir)
-        .await
-        .map_err(|e| e.to_string())?;
-    let path = dir.join(constants::MTP_GARMIN_SCHEDULE_FILE);
-    // Encoding and writing the file is blocking work
-    let fit_path = path.clone();
-    let written = tokio::task::spawn_blocking(move || {
-        FitWriter::from(&plans)
-            .write(fit_path, lang, weight_unit)
-            .map_err(|e| e.to_string())
-    })
+    let (lang, weight_unit) = fit_settings(app);
+    upload_fit(
+        app,
+        serial,
+        constants::MTP_GARMIN_SCHEDULE_FILE,
+        move || FitWriter::from(&plans).into_bytes(lang, weight_unit),
+    )
     .await
-    .expect("FIT writing task panicked");
-    if let Err(e) = written {
-        let _ = tokio::fs::remove_dir_all(&dir).await;
-        return Err(e);
-    }
-
-    // Like workouts, through NewFiles: the device validates it and imports it once unplugged
-    let mtp_client = app.state::<MtpLock>();
-    let upload = mtp_client
-        .lock()
-        .await
-        .upload_file(serial, constants::MTP_GARMIN_NEW_FILES_FOLDER, &path)
-        .await
-        .map_err(|e| e.to_string());
-
-    let _ = tokio::fs::remove_dir_all(dir).await;
-
-    upload
 }

@@ -1,5 +1,5 @@
 pub mod commands;
-pub mod queries;
+pub mod helpers;
 
 use std::collections::HashMap;
 
@@ -7,13 +7,13 @@ use rusqlite_orm::errors::DatabaseError;
 use tauri::{AppHandle, Runtime};
 use tauri_plugin_log::log::info;
 
-use self::queries::{
-    any_progression_suggestion, apply_progression, exercise_list, exercises_catalog,
-    fetch_exercise_details, fetch_progression_suggestion, progression_status, set_progression,
-    set_progression_parameters, set_unilateral, update_exercise_notes,
+use self::helpers::{
+    any_progression_suggestion, exercise_list, exercises_catalog, fetch_exercise_details,
+    fetch_progression_suggestion,
 };
 use crate::{
     ConnectLock, SettingsLock,
+    dao::{exercise::Exercise, workout_step::WorkoutStep},
     dto::exercises::{ExerciseDetails, ExerciseListItem, ProgressionSuggestion},
     logic::{
         connect::helpers::sync_workouts_connect, devices::helpers::push_pending_to_usb, pool,
@@ -85,7 +85,10 @@ pub async fn set_exercise_unilateral<R: Runtime>(
     id: u16,
     value: bool,
 ) -> Result<(), String> {
-    set_unilateral(&pool(app), category, id, value)
+    pool(app)
+        .run_in_connection(async move |conn| {
+            Ok(Exercise::set_unilateral(conn, category, id, value).await?)
+        })
         .await
         .inspect(|_| info!("Updated unilateral flag for exercise"))
         .map_err(|e| {
@@ -105,7 +108,10 @@ pub async fn set_exercise_progression<R: Runtime>(
     id: u16,
     value: bool,
 ) -> Result<(), String> {
-    set_progression(&pool(app), category, id, value)
+    pool(app)
+        .run_in_connection(async move |conn| {
+            Ok(Exercise::set_progression(conn, category, id, value).await?)
+        })
         .await
         .inspect(|_| info!("Updated progression flag for exercise"))
         .map_err(|e| {
@@ -127,7 +133,10 @@ pub async fn set_exercise_progression_parameters<R: Runtime>(
     weight: f32,
 ) -> Result<(), String> {
     let reps = reps.to_string();
-    set_progression_parameters(&pool(app), category, id, reps, weight)
+    pool(app)
+        .run_in_connection(async move |conn| {
+            Ok(Exercise::set_progression_parameters(conn, category, id, reps, weight).await?)
+        })
         .await
         .inspect(|_| info!("Updated rep ranges for exercise"))
         .map_err(|e| {
@@ -145,8 +154,12 @@ pub async fn get_progression_status<R: Runtime>(
     category: u16,
     id: u16,
 ) -> Result<Option<ProgressionSuggestion>, String> {
-    progression_status(&pool(app), category, id)
+    pool(app)
+        .run_in_connection(async move |conn| {
+            Ok(WorkoutStep::get_highest_load(conn, category, id).await?)
+        })
         .await
+        .map(|load| load.map(|(weight, reps)| ProgressionSuggestion { weight, reps }))
         .map_err(|e: DatabaseError| e.to_string())
 }
 
@@ -171,12 +184,20 @@ pub async fn apply_progression_suggestion<R: Runtime>(
     id: u16,
     suggestion: ProgressionSuggestion,
 ) -> Result<(), String> {
-    let res = pool(app)
-        .run_in_transaction(async move |tx| {
-            Ok(apply_progression(tx, category, id, &suggestion).await?)
-        })
-        .await
-        .map_err(|e| e.to_string());
+    let res =
+        pool(app)
+            .run_in_transaction(async move |tx| {
+                Ok(WorkoutStep::apply_progression(
+                    tx,
+                    category,
+                    id,
+                    suggestion.weight,
+                    suggestion.reps,
+                )
+                .await?)
+            })
+            .await
+            .map_err(|e| e.to_string());
 
     match res {
         Ok((modified, workouts)) => {
@@ -212,7 +233,7 @@ pub async fn save_exercise_notes<R: Runtime>(
 
     let workouts = pool(app)
         .run_in_transaction(async move |tx| {
-            Ok(update_exercise_notes(tx, category, id, notes.clone()).await?)
+            Ok(Exercise::update_notes(tx, category, id, notes.clone()).await?)
         })
         .await
         .map_err(|e| e.to_string())?;

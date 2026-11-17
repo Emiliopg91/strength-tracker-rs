@@ -1,24 +1,22 @@
+use std::collections::{BTreeSet, HashMap};
+
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tauri_plugin_log::log::{error, info};
 
-use super::queries::{
-    pending_connect_workouts, session_sets_for_connect, set_connect_created_times,
-    set_connect_keys, set_connect_pending, sync_connect_devices, workout_connect_id,
-    workout_with_exercises,
-};
 use crate::{
     ConnectLock, SettingsLock,
     connect::ConnectClient,
-    dao::{device::Device, workout::WorkoutRepository},
+    dao::{
+        device::Device, exercise::Exercise, session::Session, workout::Workout,
+        workout_device::WorkoutDevice, workout_planning::WorkoutPlanning,
+    },
     dto::{
         connect::{ConnectUpdateSets, ConnectWorkout},
         devices::DeviceListItem,
         sessions::SessionStepDto,
     },
-    logic::{
-        connect::queries::pending_connect_plans, pool, report_error,
-        workouts::queries::update_schedule_id,
-    },
+    logic::{pool, report_error},
+    utils::constants,
 };
 
 /// Uploads `workout` to Connect, notifying the user if it fails.
@@ -74,8 +72,9 @@ pub(crate) async fn up_to_date_connect<R: Runtime>(app: &AppHandle<R>) {
 
     let (pending_workouts, pending_plans) = match pool(app)
         .run_in_connection(async move |conn| {
-            let wkts = pending_connect_workouts(conn).await?;
-            let plans = pending_connect_plans(conn).await?;
+            let wkts =
+                WorkoutDevice::get_pending(conn, constants::CONNECT_DEVICE_SERIAL, None).await?;
+            let plans = WorkoutPlanning::get_pending_connect(conn).await?;
             Ok((wkts, plans))
         })
         .await
@@ -127,9 +126,9 @@ async fn align_workouts_connect<R: Runtime>(app: &AppHandle<R>, connect: &Connec
         .filter_map(|w| w.created_date.map(|c| (w.workout_id.to_string(), c)))
         .collect();
     let res = pool(app)
-        .run_in_transaction(
-            async move |tx| Ok(set_connect_created_times(tx, &created_times).await?),
-        )
+        .run_in_transaction(async move |tx| {
+            Ok(Workout::set_connect_created_times(tx, &created_times).await?)
+        })
         .await;
 
     match res {
@@ -147,7 +146,7 @@ pub(super) async fn mark_connect_pending<R: Runtime>(
     let workouts = workouts.to_vec();
     let res = pool(app)
         .run_in_connection(async move |conn| {
-            Ok(set_connect_pending(conn, &workouts, pending).await?)
+            Ok(WorkoutDevice::set_connect_pending(conn, &workouts, pending).await?)
         })
         .await;
 
@@ -166,7 +165,7 @@ pub async fn upload_workout_connect<R: Runtime>(
 
     let id = workout.to_string();
     let mut workout = pool(app)
-        .run_in_connection(async move |conn| Ok(workout_with_exercises(conn, &id).await?))
+        .run_in_connection(async move |conn| Ok(Workout::get_with_exercises(conn, &id).await?))
         .await
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("Workout {workout} not found"))?;
@@ -214,7 +213,7 @@ pub async fn upload_workout_connect<R: Runtime>(
     let connect_id = workout.connect_id.clone().unwrap();
     if workout.connect_id != original_id || workout.connect_created_time != original_created {
         pool(app)
-            .run_in_transaction(async move |tx| Ok(set_connect_keys(tx, &mut workout).await?))
+            .run_in_transaction(async move |tx| Ok(workout.set_connect_keys(tx).await?))
             .await
             .map_err(|e| e.to_string())?;
     }
@@ -249,7 +248,13 @@ pub(crate) async fn get_devices_from_connect<R: Runtime>(app_orig: &AppHandle<R>
         .collect();
 
     let res = pool(app_orig)
-        .run_in_transaction(async move |tx| Ok(sync_connect_devices(tx, &listed).await?))
+        .run_in_transaction(async move |tx| {
+            Ok(Device::sync_connect(tx, &listed)
+                .await?
+                .iter()
+                .map(DeviceListItem::from)
+                .collect::<Vec<_>>())
+        })
         .await;
 
     match res {
@@ -271,9 +276,16 @@ pub(crate) async fn queue_workout_on_connect<R: Runtime>(
     workout: &str,
     serial: &str,
 ) -> Result<(), String> {
-    let fetch_connect_id = async || workout_connect_id(&pool(app), workout).await;
+    let fetch_connect_id = async |workout: String| {
+        pool(app)
+            .run_in_connection(async move |conn| Ok(Workout::get_connect_id(conn, &workout).await?))
+            .await
+    };
 
-    let connect_id = match fetch_connect_id().await.map_err(|e| e.to_string())? {
+    let connect_id = match fetch_connect_id(workout.to_string())
+        .await
+        .map_err(|e| e.to_string())?
+    {
         Some(id) => id,
         None => {
             send_workout_connect(
@@ -283,7 +295,7 @@ pub(crate) async fn queue_workout_on_connect<R: Runtime>(
                 workout,
             )
             .await?;
-            fetch_connect_id()
+            fetch_connect_id(workout.to_string())
                 .await
                 .map_err(|e| e.to_string())?
                 .ok_or_else(|| format!("Workout {workout} has no Connect id"))?
@@ -311,7 +323,36 @@ pub(crate) async fn sync_session_sets_connect<R: Runtime>(
 ) {
     let res = pool(app)
         .run_in_connection(async move |conn| {
-            Ok(session_sets_for_connect(conn, timestamp, &sets).await?)
+            let Some(connect_id) = Session::get_connect_id(conn, timestamp).await? else {
+                return Ok(None);
+            };
+
+            let keys: BTreeSet<(u16, u16)> =
+                sets.iter().filter_map(|s| s.ex_cat.zip(s.ex_id)).collect();
+            let names: HashMap<(u16, u16), (String, String)> =
+                Exercise::get_by_keys_with_category(conn, &keys)
+                    .await?
+                    .into_iter()
+                    .filter_map(|(key, exercise)| {
+                        Some((key, (exercise.exercise_category?.name, exercise.name)))
+                    })
+                    .collect();
+
+            let updates: Vec<ConnectUpdateSets> = sets
+                .iter()
+                .filter_map(|set| {
+                    let (exercise_category, exercise_id) =
+                        names.get(&set.ex_cat.zip(set.ex_id)?)?.clone();
+                    Some(ConnectUpdateSets {
+                        idx: set.idx as u16,
+                        reps: set.reps,
+                        weight: set.weight,
+                        exercise_category,
+                        exercise_id,
+                    })
+                })
+                .collect();
+            Ok(Some((connect_id, updates)))
         })
         .await;
 
@@ -378,7 +419,11 @@ pub async fn push_plan_to_connect<R: Runtime>(app: &AppHandle<R>, date: u32, wor
     let connect = connect_state.lock().await;
     if connect.logged_user().is_some() {
         drop(connect);
-        let workout_id = match WorkoutRepository::select_by_id(&pool(app), workout).await {
+        let name = workout.to_string();
+        let workout_id = match pool(app)
+            .run_in_connection(async move |conn| Ok(Workout::get(conn, &name).await?))
+            .await
+        {
             Err(e) => {
                 error!("Could not get workout entry {}: {}", workout, e);
                 None
@@ -414,10 +459,13 @@ pub async fn push_plan_to_connect<R: Runtime>(app: &AppHandle<R>, date: u32, wor
                 let workout = workout.to_string();
                 let res = pool(app)
                     .run_in_connection(async move |conn| {
-                        Ok(
-                            update_schedule_id(conn, date, &workout, &schedule_id.to_string())
-                                .await?,
+                        Ok(WorkoutPlanning::set_schedule_id(
+                            conn,
+                            date,
+                            &workout,
+                            &schedule_id.to_string(),
                         )
+                        .await?)
                     })
                     .await;
 

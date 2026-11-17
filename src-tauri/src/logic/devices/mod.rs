@@ -1,27 +1,24 @@
 pub mod commands;
 pub mod helpers;
-pub mod queries;
 
 use chrono::{Datelike, Local, TimeZone, Timelike};
 use rusqlite_orm::errors::DatabaseError;
 use tauri::{AppHandle, Manager, Runtime};
 use tauri_plugin_log::log::{error, info};
 
-use self::helpers::send_workout_to_device;
-use self::queries::{add_workout_device, all_devices, device_by_serial, queue_workout_device};
+use self::helpers::{
+    notify_workout_pending, notify_workout_sent, register_workout_on_device,
+    send_workout_to_device, set_workout_on_device,
+};
 use crate::{
     MtpLock, SettingsLock,
-    dao::workout_device::WorkoutDevice,
-    dto::{
-        devices::DeviceListItem,
-        notifications::{NotificationDefinition, NotificationKind},
-    },
+    dao::device::Device,
+    dto::devices::DeviceListItem,
     logic::{
-        notifications::show_notification,
-        pool, report_error,
-        sessions::helpers::{import_pending_sessions, spawn_geolocation_update},
+        fit_settings, language, pool, report_error,
+        sessions::helpers::{finish_session_import, import_pending_sessions},
     },
-    utils::{constants, translations::translate},
+    utils::constants,
 };
 
 pub async fn send_to_device<R: Runtime>(
@@ -30,10 +27,7 @@ pub async fn send_to_device<R: Runtime>(
     workout: &str,
     serial: &str,
 ) -> Result<(), String> {
-    let (lang, weight_unit) = {
-        let settings = settings.read().unwrap();
-        (settings.language, settings.weight_unit)
-    };
+    let (lang, weight_unit) = fit_settings(app);
 
     let mtp_client = app.state::<MtpLock>();
     let connected = mtp_client
@@ -47,13 +41,7 @@ pub async fn send_to_device<R: Runtime>(
         match send_workout_to_device(app, lang, weight_unit, workout, serial).await {
             Ok(_) => {
                 // Register the pair so later changes (e.g. progressions) get re-sent to this device
-                let mut entry = WorkoutDevice {
-                    device: serial.to_string(),
-                    workout: workout.to_string(),
-                    pending: false,
-                };
-
-                if let Err(e) = add_workout_device(&pool(app), &mut entry).await {
+                if let Err(e) = register_workout_on_device(app, workout, serial).await {
                     error!("Error registering workout '{workout}' for device {serial}: {e}");
                 }
 
@@ -62,13 +50,7 @@ pub async fn send_to_device<R: Runtime>(
             Err(e) => Err(e),
         }
     } else {
-        let mut entry = WorkoutDevice {
-            device: serial.to_string(),
-            workout: workout.to_string(),
-            pending: true,
-        };
-
-        queue_workout_device(&pool(app), &mut entry)
+        set_workout_on_device(app, workout, serial, true)
             .await
             .map_err(|e| e.to_string())?;
 
@@ -77,24 +59,11 @@ pub async fn send_to_device<R: Runtime>(
 
     match res {
         Ok(true) => {
-            info!("Workout '{}' sent to device {}", workout, serial);
-            show_notification(NotificationDefinition {
-                title: workout.to_string(),
-                body: translate("ok_workout_send", lang),
-                kind: NotificationKind::Temporal,
-            });
+            notify_workout_sent(workout, serial, lang);
             Ok(())
         }
         Ok(false) => {
-            info!(
-                "Workout '{}' pending to be sent to device {}",
-                workout, serial
-            );
-            show_notification(NotificationDefinition {
-                title: workout.to_string(),
-                body: translate("pending_workout_send", lang),
-                kind: NotificationKind::Temporal,
-            });
+            notify_workout_pending(workout, serial, lang);
             Ok(())
         }
         Err(e) => Err(report_error(
@@ -113,10 +82,13 @@ pub async fn import_from_device<R: Runtime>(
 ) -> Result<usize, String> {
     info!("Starting import from device with S/N {}", serial);
     let mut latest_date = "1970-01-01-00-00-00".to_string();
-    let lang = app.state::<SettingsLock>().read().unwrap().language;
-    let mut device = device_by_serial(&pool(app), serial)
+    let lang = language(app);
+    let serial_str = serial.to_string();
+    let mut device = pool(app)
+        .run_in_connection(async move |conn| Ok(Device::get(conn, &serial_str).await?))
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("Device {serial} is not registered"))?;
 
     if let Some(latest) = device.last_activity_sync {
         let latest = Local.timestamp_opt(latest as i64, 0).unwrap();
@@ -148,26 +120,14 @@ pub async fn import_from_device<R: Runtime>(
         res = import_pending_sessions(app, files, &mut device, lang, Some(now)).await;
     }
 
-    match res {
-        Ok(res) => {
-            if !res.is_empty() {
-                spawn_geolocation_update(app);
-            }
-            Ok(res.len())
-        }
-        Err(e) => Err(report_error(
-            e,
-            &app.state::<SettingsLock>(),
-            "error_import_sessions",
-            "Error importing sessions",
-        )),
-    }
+    finish_session_import(app, res)
 }
 
 pub async fn get_registered_devices<R: Runtime>(
     app: &AppHandle<R>,
 ) -> Result<Vec<DeviceListItem>, String> {
-    Ok(all_devices(&pool(app))
+    Ok(pool(app)
+        .run_in_connection(async move |conn| Ok(Device::get_all(conn).await?))
         .await
         .map_err(|e| e.to_string())?
         .iter()

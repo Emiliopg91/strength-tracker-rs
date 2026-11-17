@@ -4,7 +4,6 @@ use rusqlite_orm::{database::DatabasePool, types::order_by::OrderBy};
 
 use crate::{
     dao::session_step::{self, SessionStep, SessionStepRepository},
-    logic::exercises::queries::update_prs,
     tests::common,
 };
 
@@ -38,7 +37,7 @@ async fn insert_and_update(db: &DatabasePool, sessions: Vec<(u32, Vec<SessionSte
             session.steps = sets.clone();
             common::insert_session(tx, session).await;
         }
-        update_prs(tx, &exercises, &[]).await?;
+        SessionStep::update_prs(tx, &exercises, &[]).await?;
         Ok(())
     })
     .await

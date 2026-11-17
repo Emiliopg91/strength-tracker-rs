@@ -1,10 +1,13 @@
-use std::{collections::HashSet, hash::Hash};
+use std::hash::Hash;
 
 use serde::{Deserialize, Serialize};
 
-use crate::dao::{
-    exercise::Exercise, session::Session, session_lap::SessionLap, session_step::SessionStep,
-    workout_step::StepType,
+use crate::{
+    dao::{
+        exercise::Exercise, session::Session, session_lap::SessionLap, session_step::SessionStep,
+        workout_step::StepType,
+    },
+    dto::split_muscles,
 };
 
 #[derive(Serialize, Default)]
@@ -170,23 +173,7 @@ impl From<(&Session, &[Exercise], &[SessionStep], &[SessionLap])> for SessionDet
             }
         }
 
-        let mut primary_set = HashSet::new();
-        let mut secondary_set = HashSet::new();
-        for exercise in value.1 {
-            for muscle in &exercise.muscles {
-                if muscle.is_primary {
-                    primary_set.insert(muscle.muscle.clone());
-                } else {
-                    secondary_set.insert(muscle.muscle.clone());
-                }
-            }
-        }
-
-        let secondary_muscles = secondary_set
-            .into_iter()
-            .filter(|m| !primary_set.contains(m))
-            .collect();
-        let primary_muscles = primary_set.into_iter().collect();
+        let (primary_muscles, secondary_muscles) = split_muscles(value.1);
 
         let sets = value.2.iter().map(SessionStepDto::from).collect();
         let laps = value.3.iter().map(SessionLapDto::from).collect();

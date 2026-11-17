@@ -27,7 +27,7 @@ use tauri_plugin_log::{
 };
 
 #[cfg(debug_assertions)]
-use crate::logic::exercises::queries::update_all_prs;
+use crate::logic::exercises::helpers::update_all_prs;
 use crate::{
     connect::ConnectClient,
     dao::body_metric::migration_21,
@@ -122,7 +122,7 @@ fn initialize(app: &AppHandle) -> (DatabasePool, Settings, ConnectClient, MtpCli
                 .await
                 .unwrap();
 
-                //crate::logic::sessions::queries::merge_sessions(&database, _, _);
+                //crate::logic::sessions::helpers::merge_sessions(&database, _, _);
 
                 #[cfg(debug_assertions)]
                 let _ = database

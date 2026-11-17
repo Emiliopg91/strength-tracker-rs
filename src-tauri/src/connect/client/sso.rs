@@ -102,6 +102,15 @@ struct SsoResponse {
     customer_mfa_info: Option<MfaInfo>,
 }
 
+impl SsoResponse {
+    /// Type of the response status, `UNKNOWN` if it has none.
+    fn response_type(&self) -> &str {
+        self.response_status
+            .as_ref()
+            .map_or("UNKNOWN", |s| s.response_type.as_str())
+    }
+}
+
 /// MFA information from login response
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -257,13 +266,7 @@ impl SsoClient {
             ))
         })?;
 
-        let resp_type = sso_resp
-            .response_status
-            .as_ref()
-            .map(|s| s.response_type.as_str())
-            .unwrap_or("UNKNOWN");
-
-        let ticket = match resp_type {
+        let ticket = match sso_resp.response_type() {
             "SUCCESSFUL" => sso_resp
                 .service_ticket_id
                 .ok_or_else(|| GarminError::invalid_response("Missing serviceTicketId"))?,
@@ -330,13 +333,7 @@ impl SsoClient {
             GarminError::invalid_response(format!("Failed to parse MFA response: {}", e))
         })?;
 
-        let resp_type = sso_resp
-            .response_status
-            .as_ref()
-            .map(|s| s.response_type.as_str())
-            .unwrap_or("UNKNOWN");
-
-        if resp_type != "SUCCESSFUL" {
+        if sso_resp.response_type() != "SUCCESSFUL" {
             let message = sso_resp
                 .response_status
                 .map(|s| s.message)

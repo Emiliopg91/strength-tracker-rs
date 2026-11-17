@@ -1,17 +1,9 @@
 use std::collections::BTreeSet;
 
-use rusqlite_orm::{
-    dao::Repository,
-    types::{order_by::OrderBy, where_clause::Where},
-};
-
 use crate::{
-    dao::session::{SessionRepository, entity::columns as session_cols},
-    dto::report::ReportData,
-    logic::{
-        body_metrics::queries::fetch_body_measures, exercises::queries::exercise_details,
-        sessions::queries::fetch_sessions_details,
-    },
+    dao::{body_metric::BodyMetric, session::Session},
+    dto::{body_metrics::BodyMetricListItem, report::ReportData},
+    logic::{exercises::helpers::exercise_details, sessions::helpers::fetch_sessions_details},
 };
 
 const STRENGTH_SPORT: u8 = 10;
@@ -25,20 +17,19 @@ pub(super) async fn report_data(
     from: u32,
     to: u32,
 ) -> rusqlite_orm::errors::Result<ReportData> {
-    let timestamps: Vec<u32> = SessionRepository::select()
-        .columns(&[session_cols::DATE])
-        .where_(Where::And(vec![
-            Where::Gte(session_cols::DATE, from.into()),
-            Where::Lte(session_cols::DATE, to.into()),
-            Where::Eq(session_cols::SPORT, STRENGTH_SPORT.into()),
-            Where::Eq(session_cols::SUB_SPORT, STRENGTH_SUB_SPORT.into()),
-        ]))
-        .order_by(OrderBy::Asc(session_cols::DATE))
-        .fetch_in(conn)
-        .await?
-        .iter()
-        .map(|row| row.get_u32(session_cols::DATE.as_ref()))
-        .collect();
+    // Oldest first
+    let timestamps: Vec<u32> = Session::get_sessions(
+        conn,
+        Some(from.into()),
+        Some(to.into()),
+        Some(STRENGTH_SPORT),
+        Some(STRENGTH_SUB_SPORT),
+    )
+    .await?
+    .iter()
+    .rev()
+    .map(|s| s.date)
+    .collect();
     let session_details = fetch_sessions_details(conn, &timestamps, false, false).await?;
 
     // Sorted and deduplicated; sets without exercise are skipped
@@ -60,7 +51,11 @@ pub(super) async fn report_data(
         }
     }
 
-    let mut body_metrics = fetch_body_measures(conn, Some((from, to))).await?;
+    let mut body_metrics = BodyMetric::get_by_range(conn, Some((from, to)))
+        .await?
+        .iter()
+        .map(BodyMetricListItem::from)
+        .collect::<Vec<_>>();
     body_metrics.reverse();
 
     Ok(ReportData {
