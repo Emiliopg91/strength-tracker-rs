@@ -10,10 +10,11 @@ No account required, no cloud, no Garmin Express (which doesn't exist on Linux a
 
 ## Screenshots
 
-| ![Screenshot 1](resources/screenshots/screenshot1.png) | ![Screenshot 2](resources/screenshots/screenshot2.png) |
+| ![Home: training status, last session and next planned workout](resources/screenshots/screenshot1.png) | ![Sessions list](resources/screenshots/screenshot2.png) |
 | :----------------------------------------------------: | :----------------------------------------------------: |
-| ![Screenshot 3](resources/screenshots/screenshot3.png) | ![Screenshot 4](resources/screenshots/screenshot4.png) |
-| ![Screenshot 5](resources/screenshots/screenshot5.png) |
+| ![Strength session: worked muscles, heart rate and sets](resources/screenshots/screenshot3.png) | ![Running session with map and heart rate zones](resources/screenshots/screenshot4.png) |
+| ![Workouts and planning calendar](resources/screenshots/screenshot5.png) | ![Exercises with personal records and 1RM](resources/screenshots/screenshot6.png) |
+| ![Exercise detail with progression suggestion](resources/screenshots/screenshot7.png) | ![Body metrics](resources/screenshots/screenshot8.png) |
 
 ## The training loop
 
