@@ -1,4 +1,3 @@
-import { Marker } from "react-leaflet";
 import {
     BodyMetricListItem,
     ExerciseSession,
@@ -454,12 +453,9 @@ export class SessionUtils {
     public static START_ICON = SessionUtils.makeMarkerIcon("#249d56", "play");
     public static END_ICON = SessionUtils.makeMarkerIcon("#e74c3c", "stop");
 
-    public static makeLapMarker(
-        idx: number,
-        lap: [number, number],
-    ): React.JSX.Element {
+    public static makeLapIcon(idx: number): L.DivIcon {
         const lapColor = "#2A81CB";
-        const icon = L.divIcon({
+        return L.divIcon({
             className: "",
             html: `<svg width="25" height="41" viewBox="0 0 25 41" xmlns="http://www.w3.org/2000/svg">
           <path d="M12.5 0C5.6 0 0 5.6 0 12.5c0 9.4 12.5 28.5 12.5 28.5S25 21.9 25 12.5C25 5.6 19.4 0 12.5 0z" fill="${lapColor}" stroke="white" stroke-width="1.5"/>
@@ -470,8 +466,6 @@ export class SessionUtils {
             iconAnchor: [12, 41],
             popupAnchor: [1, -34],
         });
-
-        return <Marker key={idx} position={lap} icon={icon} />;
     }
 
     private static MAX_ESTIMATION_REPS = 20;

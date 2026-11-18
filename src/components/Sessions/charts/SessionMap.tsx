@@ -3,7 +3,6 @@ import { SessionLapDto } from "@/utils/backend/models";
 import { SessionUtils } from "@/utils/SessionUtils";
 import { useContext, useEffect, useRef, useState } from "react";
 import { IconButton, Tooltip } from "@mui/material";
-import { MapContainer, Marker, Polyline, TileLayer } from "react-leaflet";
 import MapIcon from "@mui/icons-material/Map";
 import SatelliteAltIcon from "@mui/icons-material/SatelliteAlt";
 import L from "leaflet";
@@ -12,6 +11,8 @@ const urls = [
     "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
     "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
 ];
+
+const BOUNDS_PADDING: L.PointExpression = [20, 20];
 
 type Props = {
     validPoints: [number, number][];
@@ -33,60 +34,71 @@ export function SessionMap({
 }: Props) {
     const { translate } = useContext(I18nSettingsContext);
     const [url, setUrl] = useState(1);
-    const typeControlRef = useRef<HTMLDivElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
+    const mapRef = useRef<L.Map | null>(null);
+    const tilesRef = useRef<L.TileLayer | null>(null);
+    // The view is fitted to the route once; later data changes (session edits) keep the user's pan/zoom
+    const fittedRef = useRef(false);
 
     useEffect(() => {
-        if (typeControlRef.current) {
-            L.DomEvent.disableClickPropagation(typeControlRef.current);
-        }
+        const map = L.map(containerRef.current!, {
+            attributionControl: false,
+        });
+        mapRef.current = map;
+        return () => {
+            map.remove();
+            mapRef.current = null;
+            tilesRef.current = null;
+            fittedRef.current = false;
+        };
     }, []);
+
+    useEffect(() => {
+        const map = mapRef.current!;
+        tilesRef.current?.remove();
+        tilesRef.current = L.tileLayer(urls[url]).addTo(map);
+    }, [url]);
+
+    useEffect(() => {
+        const map = mapRef.current!;
+        const group = L.layerGroup();
+
+        for (const segment of gpsSegments) {
+            L.polyline(segment.coordinates, {
+                color: segment.color,
+                weight: 4,
+            }).addTo(group);
+        }
+        L.marker(startPoint, { icon: SessionUtils.START_ICON }).addTo(group);
+        L.marker(finishPoint, { icon: SessionUtils.END_ICON }).addTo(group);
+        for (const lap of laps) {
+            if (lap.start_latitude && lap.start_longitude) {
+                L.marker([lap.start_latitude, lap.start_longitude], {
+                    icon: SessionUtils.makeLapIcon(lap.idx + 1),
+                }).addTo(group);
+            }
+        }
+        group.addTo(map);
+
+        if (!fittedRef.current) {
+            map.fitBounds(validPoints, { padding: BOUNDS_PADDING });
+            fittedRef.current = true;
+        }
+
+        return () => {
+            group.remove();
+        };
+    }, [validPoints, gpsSegments, startPoint, finishPoint, laps]);
 
     const toggleMapType = () => {
         setUrl((current) => (current === 0 ? 1 : 0));
     };
 
     return (
-        <MapContainer
-            bounds={validPoints}
-            boundsOptions={{ padding: [20, 20] }}
-            attributionControl={false}
-            className="session-map"
-        >
-            <TileLayer url={urls[url]} attribution={""} />
-
-            {gpsSegments.map((val, idx) => (
-                <Polyline
-                    key={"segment-" + idx}
-                    positions={val.coordinates}
-                    color={val.color}
-                    weight={4}
-                />
-            ))}
-
-            <Marker
-                position={startPoint}
-                icon={SessionUtils.START_ICON}
-            ></Marker>
-
-            <Marker
-                position={finishPoint}
-                icon={SessionUtils.END_ICON}
-            ></Marker>
-
-            {laps
-                .filter((lap) => lap.start_latitude && lap.start_longitude)
-                .map((lap) =>
-                    SessionUtils.makeLapMarker(lap.idx + 1, [
-                        lap.start_latitude!,
-                        lap.start_longitude!,
-                    ]),
-                )}
-
+        <div className="session-map">
+            <div ref={containerRef} className="session-map-canvas" />
             <div className="leaflet-bottom leaflet-right">
-                <div
-                    ref={typeControlRef}
-                    className="leaflet-control session-map-control"
-                >
+                <div className="leaflet-control session-map-control">
                     <Tooltip
                         title={translate(
                             url === 0 ? "satellite_map" : "street_map",
@@ -102,6 +114,6 @@ export function SessionMap({
                     </Tooltip>
                 </div>
             </div>
-        </MapContainer>
+        </div>
     );
 }

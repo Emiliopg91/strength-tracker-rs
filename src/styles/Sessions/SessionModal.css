@@ -3,7 +3,13 @@
 }
 
 .session-map {
+  position: relative;
   height: 240px;
+  width: 100%;
+}
+
+.session-map-canvas {
+  height: 100%;
   width: 100%;
 }
 
