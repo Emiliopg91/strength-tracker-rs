@@ -1,6 +1,6 @@
 [package]
 name = "strength-coach-for-garmin"
-version = "5.1.1"
+version = "5.1.2"
 description = "Sync your devices and track your strength training"
 authors = ["Emiliopg91 <ojosdeserbio@gmail.com>"]
 edition = "2024"
