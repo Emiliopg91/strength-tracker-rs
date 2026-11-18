@@ -499,6 +499,9 @@ step_type_other:
 repeat:
   en: Repeat
   es: Repetir
+workout_structure:
+  en: Workout structure
+  es: Estructura del entrenamiento
 delete:
   en: Delete
   es: Eliminar

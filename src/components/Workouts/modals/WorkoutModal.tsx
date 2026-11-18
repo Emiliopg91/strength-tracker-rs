@@ -1,7 +1,10 @@
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
-import { WorkoutDetails } from "@/utils/backend/models";
+import { ExerciseListItem, WorkoutDetails } from "@/utils/backend/models";
 import { useContext, useState } from "react";
 import {
+    Accordion,
+    AccordionDetails,
+    AccordionSummary,
     Box,
     Dialog,
     DialogContent,
@@ -10,6 +13,7 @@ import {
     Switch,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { BackendClient } from "@/utils/backend/client";
 import { useLoadingTask } from "@/hooks/useLoadingTask";
 import { useBackendEvent } from "@/hooks/useBackendEvent";
@@ -17,6 +21,7 @@ import { WorkoutVolumeChart } from "../charts/WorkoutVolumeChart";
 import { WorkoutActionsMenu } from "../menus/WorkoutActionsMenu";
 import { BackendListener } from "@/utils/backend/listener";
 import { MuscleModel } from "../../Exercises/charts/MuscleModel";
+import { WorkoutStructure } from "../views/WorkoutStructure";
 
 type Props = {
     workout: WorkoutDetails;
@@ -49,6 +54,8 @@ export function WorkoutModal({
     } = useContext(I18nSettingsContext);
     const [workout, setWorkout] = useState(initialWorkout);
     const [enabled, setEnabled] = useState(initialWorkout.enabled);
+    // Needed by the structure for unilateral reps and inherited notes, loaded on first expand
+    const [exercises, setExercises] = useState<ExerciseListItem[]>();
 
     // Reset to the new prop during render instead of in an effect
     const [prevInitialWorkout, setPrevInitialWorkout] =
@@ -76,6 +83,12 @@ export function WorkoutModal({
             onSuggestChange!(!enabled);
             setEnabled((prev) => !prev);
         });
+    };
+
+    const onStructureToggle = (_: React.SyntheticEvent, expanded: boolean) => {
+        if (expanded && !exercises) {
+            withLoading(BackendClient.getExercises()).then(setExercises);
+        }
     };
 
     return (
@@ -211,6 +224,44 @@ export function WorkoutModal({
                         </div>
                     </div>
                 </div>
+                {workout.steps.length > 0 && (
+                    <Accordion
+                        disableGutters
+                        onChange={onStructureToggle}
+                        slotProps={{ transition: { unmountOnExit: true } }}
+                        sx={{
+                            backgroundColor: "transparent",
+                            backgroundImage: "none",
+                            boxShadow: "none",
+                            border: "1px solid #e4e4e450",
+                            borderRadius: "4px",
+                            overflow: "hidden",
+                            "&::before": { display: "none" },
+                        }}
+                    >
+                        <AccordionSummary
+                            expandIcon={<ExpandMoreIcon />}
+                            sx={{
+                                backgroundColor: "#ffffff0d",
+                                "&:hover": { backgroundColor: "#ffffff1a" },
+                                "&.Mui-expanded": {
+                                    borderBottom: "1px solid #e4e4e450",
+                                },
+                            }}
+                        >
+                            <b>{translate("workout_structure")}</b>
+                        </AccordionSummary>
+                        <AccordionDetails>
+                            {exercises && (
+                                <WorkoutStructure
+                                    workout={workout}
+                                    exercises={exercises}
+                                    notesAsTooltip
+                                />
+                            )}
+                        </AccordionDetails>
+                    </Accordion>
+                )}
                 {workout.sessions.length > 1 && (
                     <>
                         <hr />
