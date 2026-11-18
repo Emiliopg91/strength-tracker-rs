@@ -1,6 +1,7 @@
 {
   "name": "strength-coach-for-garmin",
   "private": true,
+  "license": "GPL-3.0-or-later",
   "version": "5.1.2",
   "type": "module",
   "scripts": {

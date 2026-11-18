@@ -4,6 +4,7 @@ version = "5.1.2"
 description = "Sync your devices and track your strength training"
 authors = ["Emiliopg91 <ojosdeserbio@gmail.com>"]
 edition = "2024"
+license = "GPL-3.0-or-later"
 repository = "https://github.com/Emiliopg91/strength-coach-for-garmin"
 categories = ["Utilities"]
 

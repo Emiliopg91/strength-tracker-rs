@@ -2,6 +2,9 @@
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Emiliopg91/strength-coach-for-garmin)
 
+> [!NOTE]
+> Strength Coach for Garmin is an independent, unofficial project. It is not affiliated with, endorsed by, sponsored by or supported by Garmin Ltd. or its subsidiaries. Garmin, Garmin Connect and Garmin Express are trademarks of Garmin Ltd. or its subsidiaries, used here only to describe compatibility. Garmin Connect integration relies on unofficial interfaces that may change or stop working at any time.
+
 **Everything Garmin Connect doesn't do for your strength training — on Linux, offline, with your data in a local file.**
 
 Your Garmin watch records every set you lift, but Garmin Connect does little with it: exercises get misdetected, sets are tedious to fix, and nothing tells you when it's time to add weight. Strength Coach for Garmin is a Linux desktop app that takes over from there. Plug in your watch, and your sessions are imported, analyzed and turned into your next workout — which goes straight back to the watch.
@@ -102,6 +105,28 @@ make lint         # eslint, tsc and clippy
 
 Development builds use [`mold`](https://github.com/rui314/mold) as the linker and [`sccache`](https://github.com/mozilla/sccache) for compilation caching to speed up iteration; install both for the best experience (or adjust the `Makefile` if you don't have them).
 
+## Acknowledgements
+
+Strength Coach for Garmin builds on the work of these projects and services:
+
+- **[garmin-cli](https://github.com/vicentereig/garmin-cli) (`gccli`)** by Vicente Reig Rincon de Arellano (MIT): the Garmin Connect client in `src-tauri/src/connect/client/` was vendored from version 2.2.0 and adapted.
+- **[garth](https://github.com/matin/garth)** by Matin Tamizi (MIT): the Garmin SSO login flow follows its approach, including its published OAuth consumer credentials.
+- **[rustyfit](https://github.com/muktihari/rustyfit)** by Hikmatulloh Hari Mukti (BSD-3-Clause): FIT file decoding and encoding.
+- **[mtp-rs](https://github.com/vdavid/mtp-rs)** by David Veszelovszki (MIT or Apache-2.0): USB access to the watch over MTP.
+- **[keyring-rs](https://github.com/hwchen/keyring-rs)** (MIT or Apache-2.0): Garmin Connect session storage in the system keyring.
+- **[react-body-highlighter](https://www.npmjs.com/package/@mjcdev/react-body-highlighter)** by MichaelMJC (MIT): the front and back muscle body map.
+- **[Tauri](https://tauri.app/)**, **[React](https://react.dev/)**, **[MUI](https://mui.com/)**, **[Recharts](https://recharts.org/)** and **[Leaflet](https://leafletjs.com/)**: the application framework, UI, charts and maps.
+- **[rclone](https://rclone.org/)**: cloud backups to OneDrive and Dropbox.
+- **Map data and services**: street tiles © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors (ODbL), satellite imagery from [Esri World Imagery](https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9) (Esri, Maxar, Earthstar Geographics and the GIS User Community), and reverse geocoding by [Nominatim](https://nominatim.org/), using OpenStreetMap data.
+
 ## License
 
-Distributed under the GPL-2.0 license, as declared in the project's `PKGBUILD`.
+Strength Coach for Garmin is free software: you can redistribute it and/or modify it under the terms of the [GNU General Public License](LICENSE) as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version (`GPL-3.0-or-later`).
+
+It is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the [LICENSE](LICENSE) file for details.
+
+Third-party code keeps its own license:
+
+- The Garmin Connect client vendored from garmin-cli (`src-tauri/src/connect/client/`) remains under the MIT license, with its copyright notice kept in the source.
+- Dependencies are used under their own permissive or weak-copyleft licenses (MIT, Apache-2.0, BSD, ISC, MPL-2.0, Zlib, Unicode-3.0 and similar), all compatible with the GPL-3.0.
+- Map tiles, satellite imagery and geocoding results are subject to the terms of their providers (see [Acknowledgements](#acknowledgements)).
