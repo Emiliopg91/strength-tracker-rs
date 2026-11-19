@@ -1,3 +1,5 @@
+use std::collections::{HashMap, HashSet};
+
 use rusqlite_orm::{
     Entity,
     dao::Repository,
@@ -5,7 +7,7 @@ use rusqlite_orm::{
     types::{order_by::OrderBy, where_clause::Where},
 };
 
-use crate::dao::workout::{self, Workout};
+use crate::dao::workout::{self, Workout, WorkoutRepository};
 
 #[derive(Entity)]
 #[entity("workout_planning")]
@@ -55,8 +57,24 @@ impl WorkoutPlanning {
             .order_by(OrderBy::Asc(entity::columns::WORKOUT))
             .fetch_in(conn)
             .await?;
+        if plans.is_empty() {
+            return Ok(plans);
+        }
+
+        // Their workouts in a single query, instead of one per plan as the relationship fetcher would
+        let names: HashSet<&str> = plans.iter().map(|plan| plan.workout.as_str()).collect();
+        let workouts: HashMap<String, Workout> = WorkoutRepository::select()
+            .where_(Where::In(
+                workout::entity::columns::NAME,
+                names.into_iter().map(Into::into).collect(),
+            ))
+            .fetch_in(conn)
+            .await?
+            .into_iter()
+            .map(|workout| (workout.name.clone(), workout))
+            .collect();
         for plan in &mut plans {
-            plan.fetch_workout_obj_relationship_in(conn).await?;
+            plan.workout_obj = workouts.get(&plan.workout).cloned();
         }
         Ok(plans)
     }

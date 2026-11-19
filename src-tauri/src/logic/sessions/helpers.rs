@@ -665,7 +665,8 @@ pub(crate) async fn import_file_list(
     };
     let mut handled_workouts = HashSet::new();
 
-    for session in &mut sessions {
+    // Newest first, as `insert_full` stores each workout only with its latest session
+    for session in sessions.iter_mut().rev() {
         let formatted_time = match Local.timestamp_opt(session.date as i64, 0) {
             LocalResult::Single(date) => date.format("%H:%M:%S %d/%m/%Y").to_string(),
             _ => String::new(),
@@ -689,6 +690,8 @@ pub(crate) async fn import_file_list(
         existing_sessions.insert(session.date);
         success.push(session.date);
     }
+    // Back to chronological order
+    success.reverse();
 
     let (new_prs, imported_progression, any_progression) = if success.is_empty() {
         (false, false, None)

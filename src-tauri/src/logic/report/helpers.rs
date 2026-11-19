@@ -3,7 +3,9 @@ use std::collections::BTreeSet;
 use crate::{
     dao::{body_metric::BodyMetric, session::Session},
     dto::{body_metrics::BodyMetricListItem, report::ReportData},
-    logic::{exercises::helpers::exercise_details, sessions::helpers::fetch_sessions_details},
+    logic::{
+        exercises::helpers::fetch_exercises_details, sessions::helpers::fetch_sessions_details,
+    },
 };
 
 const STRENGTH_SPORT: u8 = 10;
@@ -39,16 +41,9 @@ pub(super) async fn report_data(
         .filter_map(|set| Some((set.ex_cat?, set.ex_id?)))
         .collect();
 
-    // Loaded once, by the first exercise needing them, and shared by the rest
-    let mut all_body_metrics = None;
-    let mut exercises = Vec::new();
-    for (category, id) in trained {
-        if let Ok(mut details) =
-            exercise_details(conn, category, id, Some((from, to)), &mut all_body_metrics).await
-        {
-            details.workouts.reverse();
-            exercises.push(details);
-        }
+    let mut exercises = fetch_exercises_details(conn, &trained, Some((from, to))).await?;
+    for details in &mut exercises {
+        details.workouts.reverse();
     }
 
     let mut body_metrics = BodyMetric::get_by_range(conn, Some((from, to)))

@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use rusqlite_orm::{
     Entity,
@@ -165,23 +165,36 @@ impl Workout {
         tx: &Transaction<'_>,
         created_times: &[(String, u32)],
     ) -> rusqlite_orm::errors::Result<usize> {
+        if created_times.is_empty() {
+            return Ok(0);
+        }
+        let created_by_id: HashMap<&str, u32> = created_times
+            .iter()
+            .map(|(connect_id, created)| (connect_id.as_str(), *created))
+            .collect();
+
+        // A single query: most listed workouts are not in the database
+        let linked = WorkoutRepository::select()
+            .where_(Where::In(
+                entity::columns::CONNECT_ID,
+                created_by_id.keys().map(|id| (*id).into()).collect(),
+            ))
+            .fetch_in(tx)
+            .await?;
+
         let mut changed = Vec::new();
-        for (connect_id, created) in created_times {
-            let stale = WorkoutRepository::select()
-                .where_(Where::And(vec![
-                    Where::Eq(entity::columns::CONNECT_ID, connect_id.clone().into()),
-                    Where::Or(vec![
-                        Where::Null(entity::columns::CONNECT_CREATED_TIME),
-                        Where::NotEq(entity::columns::CONNECT_CREATED_TIME, (*created).into()),
-                    ]),
-                ]))
-                .fetch_in(tx)
-                .await?;
-            for mut workout in stale {
-                workout.connect_created_time = Some(*created);
-                workout.update_by_id_in(tx).await?;
-                changed.push(workout.name);
+        for mut workout in linked {
+            let created = workout
+                .connect_id
+                .as_deref()
+                .and_then(|id| created_by_id.get(id))
+                .copied();
+            if created.is_none() || workout.connect_created_time == created {
+                continue;
             }
+            workout.connect_created_time = created;
+            workout.update_by_id_in(tx).await?;
+            changed.push(workout.name);
         }
         WorkoutDevice::requeue_on_devices(tx, &changed).await?;
         Ok(changed.len())

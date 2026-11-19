@@ -1,10 +1,15 @@
 use std::{
-    collections::{BTreeSet, HashSet},
+    collections::{BTreeSet, HashMap, HashSet},
     num::ParseIntError,
 };
 
 use mtp_rs::DeviceInfo;
-use rusqlite_orm::{Entity, dao::Repository, rusqlite::Connection, types::where_clause::Where};
+use rusqlite_orm::{
+    Entity,
+    dao::Repository,
+    rusqlite::Connection,
+    types::{value::Value, where_clause::Where},
+};
 use serde::{Deserialize, Serialize};
 
 use crate::{connect::client::DeviceSummary, dao::session::Session, utils::constants};
@@ -37,15 +42,27 @@ impl Device {
         tx: &rusqlite_orm::rusqlite::Transaction<'_>,
         listed: &[Device],
     ) -> rusqlite_orm::errors::Result<Vec<Device>> {
-        let mut discovered = Vec::new();
-        for mut dao in listed.iter().cloned() {
-            match DeviceRepository::select_by_id_in(tx, &dao.serial).await? {
-                None => {
-                    DeviceRepository::insert()
-                        .item(&mut dao)
-                        .execute_in(tx)
-                        .await?;
-                }
+        // A single query for both the listed devices and the ones flagged as Connect
+        let mut conditions = vec![Where::Eq(entity::columns::CONNECT, true.into())];
+        if !listed.is_empty() {
+            conditions.push(Where::In(
+                entity::columns::SERIAL,
+                listed.iter().map(|d| d.serial.clone().into()).collect(),
+            ));
+        }
+        let mut known: HashMap<String, Device> = DeviceRepository::select()
+            .where_(Where::Or(conditions))
+            .fetch_in(tx)
+            .await?
+            .into_iter()
+            .map(|db| (db.serial.clone(), db))
+            .collect();
+
+        let mut discovered = listed.to_vec();
+        let mut added = Vec::new();
+        for dao in &mut discovered {
+            match known.remove(&dao.serial) {
+                None => added.push(dao),
                 Some(db)
                     if !db.connect
                         || db.model != dao.model
@@ -67,25 +84,25 @@ impl Device {
                 }
                 Some(_) => {}
             }
-
-            discovered.push(dao);
+        }
+        if !added.is_empty() {
+            let mut insert = DeviceRepository::insert();
+            for dao in added {
+                insert = insert.item(dao);
+            }
+            insert.execute_in(tx).await?;
         }
 
-        let removed: Vec<Device> = DeviceRepository::select()
-            .where_(Where::Eq(entity::columns::CONNECT, true.into()))
-            .fetch_in(tx)
-            .await?
-            .into_iter()
-            .filter(|db| !listed.iter().any(|d| d.serial == db.serial))
+        // What is left was flagged as Connect but no longer listed
+        let removed: Vec<Value> = known
+            .into_values()
+            .filter(|db| db.connect)
+            .map(|db| db.serial.into())
             .collect();
-
         if !removed.is_empty() {
             DeviceRepository::update()
                 .set(entity::columns::CONNECT, false.into())
-                .where_(Where::In(
-                    entity::columns::SERIAL,
-                    removed.iter().map(|d| d.serial.clone().into()).collect(),
-                ))
+                .where_(Where::In(entity::columns::SERIAL, removed))
                 .execute_in(tx)
                 .await?;
         }

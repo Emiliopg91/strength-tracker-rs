@@ -4,9 +4,10 @@ use crate::{
     dao::{
         device::{Device, DeviceRepository},
         session::{Session, SessionRepository},
+        workout::{Workout, WorkoutRepository},
     },
     fit::{FitFile, parser::FitParser},
-    logic::sessions::helpers::{import_file_list, parse_files},
+    logic::sessions::helpers::{ParsedFiles, import_file_list, parse_files},
     tests::common,
 };
 
@@ -129,4 +130,44 @@ async fn local_file_has_no_connect_id() {
     let file = FitFile::read(fixture_path("strength_1")).unwrap();
 
     assert_eq!(import_connect_id(&db, file).await, None);
+}
+
+fn session_of_workout(date: u32, notes: &str) -> Session {
+    let mut session = common::session(date);
+    session.workout = Some("Legs".to_string());
+    session.workout_obj = Some(Workout {
+        name: "Legs".to_string(),
+        enabled: true,
+        notes: Some(notes.to_string()),
+        steps: Vec::new(),
+        connect_id: None,
+        connect_created_time: None,
+    });
+    session
+}
+
+#[tokio::test]
+async fn workout_keeps_the_notes_of_its_latest_session() {
+    let db = common::test_db().await;
+    // Oldest first, as `parse_files` hands them
+    let parsed = ParsedFiles {
+        sessions: vec![
+            session_of_workout(1, "Oldest"),
+            session_of_workout(2, "Middle"),
+            session_of_workout(3, "Latest"),
+        ],
+        failed: Vec::new(),
+    };
+
+    let imported = db
+        .run_in_transaction(async move |tx| Ok(import_file_list(tx, parsed).await?))
+        .await
+        .unwrap();
+
+    assert_eq!(imported.sessions, [1, 2, 3]);
+    let workout = WorkoutRepository::select_by_id(&db, "Legs")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(workout.notes.as_deref(), Some("Latest"));
 }

@@ -49,6 +49,27 @@ pub struct SessionStep {
 }
 
 /// Values of `(category, id)` keys, for a `Where::InMultiple` over the exercise columns.
+/// A set competing for an exercise's personal record.
+struct PrCandidate {
+    weight: Option<f32>,
+    reps: Option<u16>,
+    session: u32,
+    idx: u8,
+}
+
+impl PrCandidate {
+    /// Whether it beats `other` as a record: heavier, then more reps, then earlier (session, then
+    /// index). A missing weight or reps loses to any value, as in SQL's ordering.
+    fn beats(&self, other: &Self) -> bool {
+        self.weight
+            .partial_cmp(&other.weight)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then(self.reps.cmp(&other.reps))
+            .then((other.session, other.idx).cmp(&(self.session, self.idx)))
+            .is_gt()
+    }
+}
+
 pub(crate) fn exercise_key_values(
     keys: impl IntoIterator<Item = impl Borrow<(u16, u16)>>,
 ) -> Vec<Vec<Value>> {
@@ -77,6 +98,34 @@ impl SessionStep {
             ]),
         )
         .await
+    }
+
+    /// Steps of each exercise in `keys`, newest session first and by index within a session, in a
+    /// single query. Exercises without steps are left out.
+    pub async fn get_by_exercises<'a>(
+        conn: &Connection,
+        keys: impl IntoIterator<Item = &'a (u16, u16)>,
+    ) -> rusqlite_orm::errors::Result<HashMap<(u16, u16), Vec<SessionStep>>> {
+        let keys = exercise_key_values(keys);
+        if keys.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let mut by_exercise: HashMap<(u16, u16), Vec<SessionStep>> = HashMap::new();
+        for step in SessionStepRepository::select()
+            .where_(Where::InMultiple(
+                vec![entity::columns::EX_CAT, entity::columns::EX_ID],
+                keys,
+            ))
+            .order_by(OrderBy::Desc(entity::columns::SESSION))
+            .order_by(OrderBy::Asc(entity::columns::IDX))
+            .fetch_in(conn)
+            .await?
+        {
+            if let Some(key) = step.ex_cat.zip(step.ex_id) {
+                by_exercise.entry(key).or_default().push(step);
+            }
+        }
+        Ok(by_exercise)
     }
 
     /// Steps of every session in `dates`, unordered.
@@ -334,30 +383,50 @@ impl SessionStep {
         exercises: &HashSet<(u16, u16)>,
         sessions: &[u32],
     ) -> rusqlite_orm::errors::Result<bool> {
-        let mut new_prs = false;
+        if exercises.is_empty() {
+            return Ok(false);
+        }
 
-        let mut update_false_conditions = vec![];
-        let mut update_true_conditions = vec![];
-
-        for exer in exercises {
-            update_false_conditions.push(vec![exer.0.into(), exer.1.into()]);
-            if let Some(pr) = SessionStepRepository::select()
-                .where_(Where::And(vec![
-                    Where::Eq(entity::columns::EX_CAT, exer.0.into()),
-                    Where::Eq(entity::columns::EX_ID, exer.1.into()),
-                ]))
-                .order_by(OrderBy::Desc(entity::columns::WEIGHT))
-                .order_by(OrderBy::Desc(entity::columns::REPS))
-                .order_by(OrderBy::Asc(entity::columns::SESSION))
-                .order_by(OrderBy::Asc(entity::columns::IDX))
-                .limit(1)
-                .fetch_one_in(tx)
-                .await?
-            {
-                update_true_conditions.push(vec![pr.session.into(), pr.idx.into()]);
-                new_prs = new_prs || sessions.contains(&pr.session);
+        // A single query for every set of the exercises; the best of each is picked here
+        // (heaviest, then most reps, then earliest), as one query per exercise would
+        let mut best: HashMap<(u16, u16), PrCandidate> = HashMap::new();
+        for row in SessionStepRepository::select()
+            .columns(&[
+                entity::columns::EX_CAT,
+                entity::columns::EX_ID,
+                entity::columns::WEIGHT,
+                entity::columns::REPS,
+                entity::columns::SESSION,
+                entity::columns::IDX,
+            ])
+            .where_(Where::InMultiple(
+                vec![entity::columns::EX_CAT, entity::columns::EX_ID],
+                exercise_key_values(exercises),
+            ))
+            .fetch_in(tx)
+            .await?
+        {
+            let key = (
+                row.get_u16(entity::columns::EX_CAT.as_ref()),
+                row.get_u16(entity::columns::EX_ID.as_ref()),
+            );
+            let set = PrCandidate {
+                weight: row.get_f32_nullable(entity::columns::WEIGHT.as_ref()),
+                reps: row.get_u16_nullable(entity::columns::REPS.as_ref()),
+                session: row.get_u32(entity::columns::SESSION.as_ref()),
+                idx: row.get_u8(entity::columns::IDX.as_ref()),
+            };
+            if best.get(&key).is_none_or(|current| set.beats(current)) {
+                best.insert(key, set);
             }
         }
+
+        let new_prs = best.values().any(|pr| sessions.contains(&pr.session));
+        let update_false_conditions = exercise_key_values(exercises);
+        let update_true_conditions: Vec<Vec<Value>> = best
+            .into_values()
+            .map(|pr| vec![pr.session.into(), pr.idx.into()])
+            .collect();
 
         if !update_true_conditions.is_empty() {
             SessionStepRepository::update()

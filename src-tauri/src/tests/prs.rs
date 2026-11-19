@@ -132,3 +132,20 @@ async fn new_record_moves_the_flag() {
     insert_and_update(&db, vec![(2, vec![common::set(2, 0, SQUAT, 5, 105.0)])]).await;
     assert_eq!(pr_sets(&db).await, vec![(2, 0, SQUAT.0, SQUAT.1)]);
 }
+
+#[tokio::test]
+async fn set_without_weight_loses_to_a_weighted_one() {
+    let db = common::test_db().await;
+    let mut bodyweight = common::set(1, 0, SQUAT, 30, 0.0);
+    bodyweight.weight = None;
+    insert_and_update(
+        &db,
+        vec![
+            (1, vec![bodyweight]),
+            (2, vec![common::set(2, 0, SQUAT, 1, 10.0)]),
+        ],
+    )
+    .await;
+
+    assert_eq!(pr_sets(&db).await, vec![(2, 0, SQUAT.0, SQUAT.1)]);
+}

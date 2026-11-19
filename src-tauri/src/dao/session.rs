@@ -261,7 +261,8 @@ impl Session {
 
     /// Inserts a session with its sets, laps and additional data, creating its workout (and
     /// steps, if missing) when the session references one, and links it to the plan it fulfils.
-    /// Child collections are restored on the session after insertion.
+    /// The workout is only stored if not in `handled_workouts` yet, so a batch must be inserted
+    /// newest first. Child collections are restored on the session after insertion.
     pub async fn insert_full(
         tx: &Transaction<'_>,
         session: &mut Session,
@@ -271,7 +272,11 @@ impl Session {
         let mut laps = std::mem::take(&mut session.laps);
         let mut add_data = session.data.take();
 
-        if let Some(workout) = &session.workout_obj {
+        // Once per batch: the caller hands the sessions newest first, so the notes of the latest
+        // session of each workout win without updating them again for every older one
+        if let Some(workout) = &session.workout_obj
+            && handled_workouts.insert(workout.name.clone())
+        {
             let updated = WorkoutRepository::update()
                 .set(workout_cols::NOTES, workout.notes.clone().into())
                 .where_(Where::Eq(workout_cols::NAME, workout.name.clone().into()))
@@ -292,9 +297,7 @@ impl Session {
                     .await?;
             }
 
-            if handled_workouts.insert(workout.name.clone())
-                && WorkoutStepRepository::count_by_workout_in(tx, &workout.name).await? == 0
-            {
+            if WorkoutStepRepository::count_by_workout_in(tx, &workout.name).await? == 0 {
                 WorkoutStep::insert_all(tx, &mut workout.steps.clone()).await?;
             }
         }

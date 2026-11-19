@@ -1,8 +1,17 @@
 use rusqlite_orm::{dao::Repository, database::DatabasePool, types::where_clause::Where};
 
+use std::collections::{BTreeSet, HashSet};
+
 use crate::{
-    dao::exercise::{self, Exercise, ExerciseRepository},
-    logic::sessions::helpers::{fetch_session_details, fetch_sessions_details},
+    dao::{
+        body_metric::{BodyMetric, BodyMetricRepository},
+        exercise::{self, Exercise, ExerciseRepository},
+        session_step::SessionStep,
+    },
+    logic::{
+        exercises::helpers::{fetch_exercise_details, fetch_exercises_details},
+        sessions::helpers::{fetch_session_details, fetch_sessions_details},
+    },
     tests::common,
 };
 
@@ -124,4 +133,71 @@ async fn no_sessions_give_no_details() {
         .unwrap();
 
     assert!(details.is_empty());
+}
+
+/// Exercise details as JSON with their muscle lists sorted, as the batched and the relationship
+/// fetchers may list them in different orders.
+fn normalized_exercises(details: &[crate::dto::exercises::ExerciseDetails]) -> serde_json::Value {
+    let mut value = serde_json::to_value(details).unwrap();
+    for detail in value.as_array_mut().unwrap() {
+        for key in ["primary_muscles", "secondary_muscles"] {
+            detail[key]
+                .as_array_mut()
+                .unwrap()
+                .sort_by_key(|m| m.as_str().unwrap().to_string());
+        }
+    }
+    value
+}
+
+#[tokio::test]
+async fn batched_exercise_details_match_single_ones() {
+    let db = common::test_db().await;
+    db.run_in_transaction(async move |tx| {
+        // Session 3 falls outside the range asked for
+        for (date, exercise) in [(10, BENCH), (20, CABLE_ROW), (30, BENCH)] {
+            let mut session = common::session(date);
+            session.steps = vec![
+                common::set(date, 0, exercise, 10, 5.0),
+                common::set(date, 1, exercise, 8, date as f32),
+            ];
+            common::insert_session(tx, session).await;
+        }
+        BodyMetricRepository::insert()
+            .item(&mut BodyMetric {
+                date: 5,
+                weight: 80.0,
+                fat_ratio: 0.0,
+                muscle_mass: 0.0,
+                water_ratio: 0.0,
+            })
+            .execute_in(tx)
+            .await?;
+        SessionStep::update_prs(tx, &HashSet::from([BENCH, CABLE_ROW]), &[]).await?;
+        Ok(())
+    })
+    .await
+    .unwrap();
+
+    // PULL_UP has no sets: only the exercise itself
+    let keys = BTreeSet::from([BENCH, CABLE_ROW, PULL_UP]);
+    let range = Some((0, 25));
+    let (batched, single) = db
+        .run_in_connection(async move |conn| {
+            let batched = fetch_exercises_details(conn, &keys, range).await?;
+            let mut single = Vec::new();
+            for (category, id) in keys {
+                single.push(fetch_exercise_details(conn, category, id, range).await?);
+            }
+            Ok((batched, single))
+        })
+        .await
+        .unwrap();
+
+    let batched = normalized_exercises(&batched);
+    assert_eq!(batched, normalized_exercises(&single));
+    assert_eq!(batched.as_array().unwrap().len(), 3);
+    // Bench's record is in session 30, outside the range, but its session 10 is listed
+    assert_eq!(batched[0]["pr_date"], 30);
+    assert_eq!(batched[0]["workouts"].as_array().unwrap().len(), 1);
 }

@@ -3,6 +3,7 @@ mod batch_queries;
 mod commands;
 mod common;
 mod connect;
+mod device_sync;
 mod dto;
 mod dump;
 mod exercise_notes;
