@@ -65,6 +65,22 @@ impl GarminClient {
         self.get_json(&path).await
     }
 
+    /// List the activities started from `from` to `to` (both included, in Connect's local days),
+    /// most recent first.
+    pub async fn search_activities(
+        &self,
+        from: NaiveDate,
+        to: NaiveDate,
+        limit: u32,
+        start: u32,
+    ) -> Result<Vec<ActivitySummary>> {
+        let path = format!(
+            "/activitylist-service/activities/search/activities?startDate={}&endDate={}&limit={}&start={}",
+            from, to, limit, start
+        );
+        self.get_json(&path).await
+    }
+
     pub async fn get_activity(&self, id: u64) -> Result<ActivityDetails> {
         self.get_json(&format!("/activity-service/activity/{}", id))
             .await

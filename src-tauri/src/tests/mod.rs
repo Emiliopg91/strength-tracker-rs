@@ -17,6 +17,7 @@ mod progressions;
 mod prs;
 mod schedule;
 mod schema;
+mod session_names;
 mod settings;
 mod translations;
 mod workout_push;

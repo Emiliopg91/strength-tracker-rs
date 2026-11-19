@@ -66,6 +66,12 @@ pub struct ActivitySummary {
     pub has_polyline: Option<bool>,
     #[serde(default)]
     pub owner_display_name: Option<String>,
+    /// Start time in milliseconds since the epoch
+    #[serde(default)]
+    pub begin_timestamp: Option<u64>,
+    /// Place name Connect gives the activity from its GPS start
+    #[serde(default)]
+    pub location_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

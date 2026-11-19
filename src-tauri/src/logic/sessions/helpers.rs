@@ -280,11 +280,13 @@ fn notify_parse_error(name: &str, error: &str, lang: Languages) {
 /// loaded and queried again on every import.
 static GEOLOCATION_SKIPPED: Mutex<BTreeSet<u32>> = Mutex::const_new(BTreeSet::new());
 
-/// Names the unnamed sessions recorded with GPS after the place where they started.
+/// Names the unnamed sessions recorded with GPS after the place where they started: the one
+/// Garmin Connect gives their activity when logged in, otherwise the one Nominatim finds at their
+/// first position.
 pub(crate) async fn update_pending_geolocation<R: Runtime>(app: &AppHandle<R>) {
     let mut skipped = GEOLOCATION_SKIPPED.lock().await;
     info!("Looking for sessions pending geolocation...");
-    let pending: Vec<u32> = match pool(app)
+    let mut pending: Vec<u32> = match pool(app)
         .run_in_connection(async |conn| Ok(SessionData::get_pending_geolocation(conn).await?))
         .await
     {
@@ -301,6 +303,14 @@ pub(crate) async fn update_pending_geolocation<R: Runtime>(app: &AppHandle<R>) {
         info!("Found no pending sessions");
         return;
     }
+    info!("Found {} pending sessions", pending.len());
+
+    let from_connect = connect_locations(app, &pending).await;
+    pending.retain(|session| !from_connect.contains_key(session));
+    name_after_locations(app, from_connect.into_iter().collect()).await;
+    if pending.is_empty() {
+        return;
+    }
 
     let pending = match pool(app)
         .run_in_connection(
@@ -315,7 +325,8 @@ pub(crate) async fn update_pending_geolocation<R: Runtime>(app: &AppHandle<R>) {
         }
     };
 
-    info!("Found {} pending sessions", pending.len());
+    info!("Geocoding {} pending sessions", pending.len());
+    let mut geocoded = Vec::new();
     for data in pending {
         let session = data.session;
         // The blob may hold only invalid positions
@@ -329,23 +340,7 @@ pub(crate) async fn update_pending_geolocation<R: Runtime>(app: &AppHandle<R>) {
         };
 
         match geocode(lat, lon).await {
-            Ok(Some(location)) => {
-                let name = location.clone();
-                let res = pool(app)
-                    .run_in_connection(async move |conn| {
-                        Ok(Session::set_name(conn, session, &name).await?)
-                    })
-                    .await;
-                match res {
-                    Ok(1) => {
-                        info!("Updated location for session @ {session}");
-                        let payload: SessionLocation = SessionLocation { session, location };
-                        let _ = app.emit("session_location_update", payload);
-                    }
-                    Ok(_) => info!("Missing session @ {session}"),
-                    Err(e) => error!("Error while updating session {session}: {e}"),
-                }
-            }
+            Ok(Some(location)) => geocoded.push((session, location)),
             Ok(None) => {
                 skipped.insert(session);
             }
@@ -354,6 +349,68 @@ pub(crate) async fn update_pending_geolocation<R: Runtime>(app: &AppHandle<R>) {
 
         // Nominatim allows one request per second
         tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+    name_after_locations(app, geocoded).await;
+}
+
+/// Place names Garmin Connect gives the activities of `sessions`, found in a single search
+/// instead of a geocoding query per session. Empty when not logged in or on failure, so they are
+/// geocoded instead.
+async fn connect_locations<R: Runtime>(
+    app: &AppHandle<R>,
+    sessions: &[u32],
+) -> HashMap<u32, String> {
+    let connect = app.state::<ConnectLock>();
+    let mut connect = connect.lock().await;
+    if connect.logged_user().is_none() {
+        return HashMap::new();
+    }
+    connect
+        .find_activity_locations(sessions)
+        .await
+        .unwrap_or_else(|e| {
+            error!("Error looking for the locations in Connect: {e}");
+            HashMap::new()
+        })
+}
+
+/// Names each session of `locations` after its place in a single transaction, with one update
+/// per distinct place, and once committed lets the frontend know.
+async fn name_after_locations<R: Runtime>(app: &AppHandle<R>, locations: Vec<(u32, String)>) {
+    if locations.is_empty() {
+        return;
+    }
+    let mut by_location: HashMap<String, Vec<u32>> = HashMap::new();
+    for (session, location) in locations {
+        by_location.entry(location).or_default().push(session);
+    }
+
+    let res = pool(app)
+        .run_in_transaction(async move |tx| {
+            let mut updated = 0;
+            for (location, sessions) in &by_location {
+                updated += Session::set_name(tx, sessions, location).await?;
+            }
+            Ok((by_location, updated))
+        })
+        .await;
+    match res {
+        Ok((by_location, updated)) => {
+            info!(
+                "Updated location for {updated} sessions in {} places",
+                by_location.len()
+            );
+            for (location, sessions) in by_location {
+                for session in sessions {
+                    let payload: SessionLocation = SessionLocation {
+                        session,
+                        location: location.clone(),
+                    };
+                    let _ = app.emit("session_location_update", payload);
+                }
+            }
+        }
+        Err(e) => error!("Error while updating session locations: {e}"),
     }
 }
 

@@ -240,15 +240,21 @@ impl Session {
             .await
     }
 
-    /// Renames the session; returns the number of rows changed.
+    /// Renames every session of `sessions` to `name`; returns the number of rows changed.
     pub async fn set_name(
         conn: &Connection,
-        session: u32,
+        sessions: &[u32],
         name: &str,
     ) -> rusqlite_orm::errors::Result<usize> {
+        if sessions.is_empty() {
+            return Ok(0);
+        }
         SessionRepository::update()
             .set(entity::columns::NAME, name.into())
-            .where_(Where::Eq(entity::columns::DATE, session.into()))
+            .where_(Where::In(
+                entity::columns::DATE,
+                sessions.iter().map(|s| (*s).into()).collect(),
+            ))
             .execute_in(conn)
             .await
     }

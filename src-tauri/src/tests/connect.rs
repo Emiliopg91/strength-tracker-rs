@@ -1,14 +1,17 @@
+use std::collections::BTreeSet;
+
 use chrono::{Local, NaiveDate, TimeZone};
 
 use crate::connect::{
-    calendar_months, calendar_page_items,
+    activity_search_range, calendar_months, calendar_page_items,
     client::{
-        CalendarItem, CalendarItemType, CalendarMonth, ExerciseSetType, ExerciseSets,
-        ScheduledWorkout, WorkoutSchedule, WorkoutScheduleExport, WorkoutScheduleRequest,
+        ActivitySummary, CalendarItem, CalendarItemType, CalendarMonth, ExerciseSetType,
+        ExerciseSets, ScheduledWorkout, WorkoutSchedule, WorkoutScheduleExport,
+        WorkoutScheduleRequest,
         api::{calendar_month_path, workout_schedule_path},
         models::ActivityDescriptionUpdate,
     },
-    next_schedule_window, session_activity_id,
+    next_schedule_window, session_activity_id, take_activity_locations,
 };
 use serde_json::{Value, json};
 
@@ -810,4 +813,52 @@ fn schedule_window_going_backwards_ends_the_listing() {
     let window: WorkoutScheduleExport = serde_json::from_str(json).unwrap();
 
     assert_eq!(next_schedule_window(&window), None);
+}
+
+#[test]
+fn activity_search_range_widens_the_days_by_one() {
+    // 2026-11-15 09:40:58 and 2026-11-18 17:43:37 UTC
+    let timestamps = BTreeSet::from([1795023817, 1794735658]);
+
+    assert_eq!(
+        activity_search_range(&timestamps),
+        Some((day(2026, 11, 14), day(2026, 11, 19)))
+    );
+    assert_eq!(activity_search_range(&BTreeSet::new()), None);
+}
+
+#[test]
+fn activity_summary_reads_start_and_location() {
+    let json = r#"{"activityId": 25123050853, "startTimeLocal": "2026-11-18 18:43:37",
+        "beginTimestamp": 1795023817000, "locationName": "Priego de Córdoba"}"#;
+
+    let activity: ActivitySummary = serde_json::from_str(json).unwrap();
+
+    assert_eq!(activity.begin_timestamp, Some(1795023817000));
+    assert_eq!(activity.location_name.as_deref(), Some("Priego de Córdoba"));
+}
+
+#[test]
+fn activity_locations_are_taken_by_start() {
+    let activity = |begin: u64, location: Option<&str>| {
+        serde_json::from_value::<ActivitySummary>(json!({
+            "activityId": begin,
+            "beginTimestamp": begin * 1000,
+            "locationName": location,
+        }))
+        .unwrap()
+    };
+    let page = [
+        activity(400, Some("Elsewhere")),
+        activity(300, Some(" Priego de Córdoba ")),
+        activity(200, None),
+        activity(100, Some("  ")),
+    ];
+    let mut pending = BTreeSet::from([100, 200, 300, 500]);
+
+    let locations = take_activity_locations(&page, &mut pending);
+
+    assert_eq!(locations, [(300, "Priego de Córdoba".to_string())]);
+    // Found without a place are not looked for again; the missing one still is
+    assert_eq!(pending, BTreeSet::from([500]));
 }

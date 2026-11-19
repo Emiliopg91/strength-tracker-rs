@@ -1,17 +1,15 @@
 pub mod commands;
 pub mod helpers;
 
-use std::collections::HashMap;
-
 use rusqlite_orm::errors::DatabaseError;
 use tauri::{AppHandle, Runtime};
-use tauri_plugin_log::log::{error, info};
+use tauri_plugin_log::log::info;
 
 use self::helpers::{get_devices_from_connect, queue_workout_on_connect, up_to_date_connect};
 use crate::{
     ConnectLock, SettingsLock,
-    connect::{ConnectClient, client::CalendarItemType},
-    dao::{body_metric::BodyMetric, device::Device, session::Session, session_data::SessionData},
+    connect::client::CalendarItemType,
+    dao::{body_metric::BodyMetric, device::Device},
     logic::{
         devices::helpers::{notify_workout_sent, set_workout_on_device},
         pool, report_error,
@@ -55,68 +53,15 @@ pub async fn import_from_connect<R: Runtime>(
             .await
             .map_err(|e| e.to_string())?;
 
-        // The mark only follows what Connect has listed, so activities uploaded late are not missed
-        let imported_sessions = import_pending_sessions(app, files, &mut device, lang, None)
+        // The mark only follows what Connect has listed, so activities uploaded late are not
+        // missed. Their places are looked up once finished, with the rest of sessions pending it.
+        import_pending_sessions(app, files, &mut device, lang, None)
             .await
-            .map_err(|e: DatabaseError| e.to_string())?;
-
-        let ids: HashMap<u32, u64> = calendar_items
-            .iter()
-            .filter_map(|e| e.start_timestamp_local.zip(e.id))
-            .collect();
-        name_from_connect_location(app, &mut connect, &imported_sessions, &ids).await;
-
-        Ok(imported_sessions)
+            .map_err(|e: DatabaseError| e.to_string())
     }
     .await;
 
     finish_session_import(app, res)
-}
-
-/// Names the `imported` sessions waiting for geocoding (unnamed, with GPS) after the place Connect
-/// gives their activity, found in `ids` by start time, sparing the geocoding query. Those Connect
-/// has no place for stay pending. Failures are only logged.
-async fn name_from_connect_location<R: Runtime>(
-    app: &AppHandle<R>,
-    connect: &mut ConnectClient,
-    imported: &[u32],
-    ids: &HashMap<u32, u64>,
-) {
-    let pending = match pool(app)
-        .run_in_connection(async |conn| Ok(SessionData::get_pending_geolocation(conn).await?))
-        .await
-    {
-        Ok(pending) => pending,
-        Err(e) => {
-            error!("Error looking for sessions pending geolocation: {e}");
-            return;
-        }
-    };
-
-    for session in pending {
-        if !imported.contains(&session) {
-            continue;
-        }
-        let Some(id) = ids.get(&session) else {
-            continue;
-        };
-        let location = match connect.get_activity_location(*id).await {
-            Ok(Some(location)) => location,
-            Ok(None) => continue,
-            Err(e) => {
-                error!("Error fetching the location of activity {id}: {e}");
-                continue;
-            }
-        };
-        let name = location.clone();
-        let res = pool(app)
-            .run_in_connection(async move |conn| Ok(Session::set_name(conn, session, &name).await?))
-            .await;
-        match res {
-            Ok(_) => info!("Session @ {session} named '{location}' after its Connect location"),
-            Err(e) => error!("Error naming session {session}: {e}"),
-        }
-    }
 }
 
 pub async fn import_weight_from_connect<R: Runtime>(

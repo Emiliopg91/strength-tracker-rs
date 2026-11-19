@@ -5,9 +5,10 @@ pub mod errors;
 use crate::{
     connect::{
         client::{
-            ActivityDetails, CalendarItem, CalendarItemType, DeviceMessage, DeviceSummary,
-            ExerciseSets, GarminClient, GarminError, OAuth1Token, OAuth2Token, SsoClient,
-            WeightEntry, WeightRange, WorkoutSchedule, WorkoutScheduleExport, WorkoutSummary,
+            ActivityDetails, ActivitySummary, CalendarItem, CalendarItemType, DeviceMessage,
+            DeviceSummary, ExerciseSets, GarminClient, GarminError, OAuth1Token, OAuth2Token,
+            SsoClient, WeightEntry, WeightRange, WorkoutSchedule, WorkoutScheduleExport,
+            WorkoutSummary,
         },
         errors::{ConnectError, Result},
     },
@@ -16,13 +17,14 @@ use crate::{
     utils::constants,
 };
 use bytes::Bytes;
-use chrono::{Datelike, Local, NaiveDate, TimeZone};
+use chrono::{Datelike, Local, NaiveDate, TimeZone, Utc};
 use futures_util::{
     future::BoxFuture,
     stream::{self, StreamExt, TryStreamExt},
 };
 use serde::{Serialize, de::DeserializeOwned};
 use std::{
+    collections::{BTreeSet, HashMap},
     io::{Cursor, Read},
     sync::Arc,
     time::Duration,
@@ -42,6 +44,7 @@ const RETRY_ATTEMPTS: u32 = 4;
 const RETRY_BASE_DELAY: Duration = Duration::from_secs(2);
 const TOKEN_EXPIRY_MARGIN_SECS: i64 = 300;
 const CALENDAR_RECENT_DAYS: u64 = 15;
+const ACTIVITY_SEARCH_STEP: u32 = 1000;
 
 /// Year and month (1-12) of every calendar page covering the days from `from` to `to`.
 pub fn calendar_months(from: NaiveDate, to: NaiveDate) -> Vec<(u16, u8)> {
@@ -85,6 +88,37 @@ pub fn session_activity_id(items: &[CalendarItem], timestamp: u32) -> Option<u64
                 && item.start_timestamp_local == Some(timestamp)
         })
         .and_then(|item| item.id)
+}
+
+/// Days to search for the activities started at `timestamps`: their UTC days widened by one on
+/// each side, so the timezone Connect reads them in cannot leave any out. `None` if there are none.
+pub fn activity_search_range(timestamps: &BTreeSet<u32>) -> Option<(NaiveDate, NaiveDate)> {
+    let day = |timestamp: u32| {
+        Utc.timestamp_opt(i64::from(timestamp), 0)
+            .single()
+            .map(|date| date.date_naive())
+    };
+    let from = day(*timestamps.first()?)?.pred_opt()?;
+    let to = day(*timestamps.last()?)?.succ_opt()?;
+    Some((from, to))
+}
+
+/// Takes out of `pending` the activities of `page` that started at one of its timestamps, and
+/// returns the place name Connect gives each of them that has one.
+pub fn take_activity_locations(
+    page: &[ActivitySummary],
+    pending: &mut BTreeSet<u32>,
+) -> Vec<(u32, String)> {
+    page.iter()
+        .filter_map(|activity| {
+            let start = u32::try_from(activity.begin_timestamp? / 1000).ok()?;
+            if !pending.remove(&start) {
+                return None;
+            }
+            let name = activity.location_name.as_deref()?.trim();
+            (!name.is_empty()).then(|| (start, name.to_string()))
+        })
+        .collect()
 }
 
 /// Start of the schedule window that follows `window`, or `None` when `window` holds no workouts
@@ -379,16 +413,55 @@ impl ConnectClient {
         Ok(activity.description.filter(|notes| !notes.is_empty()))
     }
 
-    /// Place name Connect gives the activity `id`, from its GPS start.
-    pub async fn get_activity_location(&mut self, id: u64) -> Result<Option<String>> {
-        info!("Fetching location of activity {}...", id);
+    /// Place names Connect gives the activities started at any of `timestamps`, as sessions are
+    /// keyed by their start. The activities of the days they span are listed newest first, a page
+    /// at a time, until every one is found or the oldest is passed, so it usually takes a single
+    /// request. Those Connect does not have, or has no place for, are left out.
+    pub async fn find_activity_locations(
+        &mut self,
+        timestamps: &[u32],
+    ) -> Result<HashMap<u32, String>> {
+        let mut pending: BTreeSet<u32> = timestamps.iter().copied().collect();
+        let (Some(&oldest), Some((from, to))) = (pending.first(), activity_search_range(&pending))
+        else {
+            return Ok(HashMap::new());
+        };
+        info!(
+            "Looking for the location of {} activities from {} to {}...",
+            pending.len(),
+            from,
+            to
+        );
 
-        let activity = self.fetch_activity(id).await?;
+        let client = self.api_client().await?;
+        let mut locations = HashMap::new();
+        let mut start = 0;
+        loop {
+            let page =
+                with_retry(|| client.search_activities(from, to, ACTIVITY_SEARCH_STEP, start))
+                    .await
+                    .map_err(|e| {
+                        log_error(
+                            "Error fetching activities",
+                            ConnectError::FetchActivities(e),
+                        )
+                    })?;
+            locations.extend(take_activity_locations(&page, &mut pending));
 
-        Ok(activity
-            .location_name
-            .map(|name| name.trim().to_string())
-            .filter(|name| !name.is_empty()))
+            // Newest first: once a page reaches the oldest start, no later page can hold any
+            let reached_oldest = page
+                .iter()
+                .filter_map(|activity| activity.begin_timestamp)
+                .min()
+                .is_none_or(|begin| begin / 1000 <= u64::from(oldest));
+            if pending.is_empty() || reached_oldest {
+                break;
+            }
+            start += page.len() as u32;
+        }
+        info!("Found the location of {} activities.", locations.len());
+
+        Ok(locations)
     }
 
     /// Replaces the notes (description) of the activity `id`; empty `notes` clear them.
