@@ -33,6 +33,8 @@ interface I18nSettingsContextType {
     formatDate: (date: number) => string;
     formatTimeDate: (date: number) => string;
     formatWeekday: (date: number) => string;
+    /** Month and year of `date` (seconds), e.g. "Noviembre 2026". */
+    formatMonth: (date: number) => string;
     parseLocalDateTime: (dateStr: string) => Date;
     formatNumber: (value: number, decimals: number) => string;
     formatPercent: (
@@ -82,6 +84,9 @@ const defaultValue: I18nSettingsContextType = {
         return "";
     },
     formatWeekday: () => {
+        return "";
+    },
+    formatMonth: () => {
         return "";
     },
     parseLocalDateTime: () => {

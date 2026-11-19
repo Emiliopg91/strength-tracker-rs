@@ -7,8 +7,59 @@
 
 .planning-calendar {
   flex-shrink: 0;
+  /* Both boxes end at the same line, whichever is taller */
+  align-self: stretch;
   background-color: #262626;
   border-radius: 8px;
+
+  display: flex;
+  flex-direction: column;
+
+  /* Without its header, the calendar drops MUI's fixed height and fills the box instead: every
+     level down to the weeks stretches, and the six weeks share the height */
+  .MuiDateCalendar-root {
+    flex: 1;
+    height: auto;
+    max-height: none;
+    padding-bottom: 6px;
+    /* MUI hides the overflow, which lets the box shrink below its six weeks and clip the last
+       one; visible, it can't get shorter than them (the month slide is still clipped below) */
+    overflow: visible;
+  }
+
+  .MuiDateCalendar-root,
+  .MuiDateCalendar-viewTransitionContainer,
+  .MuiDateCalendar-viewTransitionContainer > div,
+  .MuiDayCalendar-root,
+  .MuiDayCalendar-slideTransition {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+  }
+
+  /* Positioned absolutely by MUI for the slide between months: pinned to the bottom too */
+  .MuiDayCalendar-monthContainer {
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .MuiDayCalendar-weekContainer {
+    flex: 1;
+    margin: 0;
+    align-items: center;
+  }
+
+  .MuiDayCalendar-weekDayLabel,
+  .MuiPickersDay-root {
+    height: 28px;
+  }
+
+  /* Six weeks of at least 40px each, so months spanning six weeks show them all; the panel grows
+     to fit them when the day box is shorter */
+  .MuiDayCalendar-slideTransition {
+    min-height: calc(6 * 40px);
+  }
 
   /* Planned days get a dot under the number */
   .planned-day {
@@ -17,7 +68,8 @@
     &::after {
       content: "";
       position: absolute;
-      bottom: 3px;
+      /* Close to the number, as the rows are shorter */
+      bottom: 1px;
       left: 50%;
       transform: translateX(-50%);
       width: 5px;
@@ -39,6 +91,13 @@
       background-color: white;
     }
   }
+}
+
+.planning-calendar-month {
+  padding: 8px 16px 2px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  opacity: 0.7;
 }
 
 .planning-day {

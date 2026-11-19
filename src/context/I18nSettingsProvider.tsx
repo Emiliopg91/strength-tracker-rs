@@ -167,6 +167,12 @@ export function I18nSettingsProvider({
         return day.charAt(0).toUpperCase() + day.slice(1);
     };
 
+    // Standalone month name, capitalized as Spanish month names are lowercase
+    const formatMonth = (date: number) => {
+        const month = format(date * 1000, "LLLL yyyy", { locale });
+        return month.charAt(0).toUpperCase() + month.slice(1);
+    };
+
     const parseLocalDateTime = (dateStr: string) => {
         const local = parse(dateStr, TIME_DATE_FORMAT, new Date(), {
             locale,
@@ -235,6 +241,7 @@ export function I18nSettingsProvider({
         formatDate,
         formatTimeDate,
         formatWeekday,
+        formatMonth,
         parseLocalDateTime,
         formatNumber,
         formatPercent,
