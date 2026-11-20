@@ -117,6 +117,7 @@ pub(super) async fn workout_details(
         session_count: count,
         sessions: session_list,
         enabled: workout.enabled,
+        progression: workout.progression,
         notes: workout.notes,
         steps: workout.steps,
         primary_muscles,

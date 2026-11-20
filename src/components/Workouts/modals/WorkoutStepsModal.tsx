@@ -27,7 +27,12 @@ type Props = {
 export function WorkoutStepsModal({ workout, isEdit, onClose }: Props) {
     const withLoading = useLoadingTask();
     const { translate, fromKg, toKg } = useContext(I18nSettingsContext);
-    const { exercisesCatalog } = useContext(AppContext);
+    const { exercisesCatalog: fullCatalog } = useContext(AppContext);
+    // Exercise notes only reach the steps of workouts with progression, so they aren't offered as
+    // the placeholder of the step notes otherwise
+    const exercisesCatalog = workout.progression
+        ? fullCatalog
+        : fullCatalog.map((e) => ({ ...e, notes: null }));
 
     const [name, setName] = useState(workout?.name);
     const [notes, setNotes] = useState(workout?.notes);
@@ -82,6 +87,7 @@ export function WorkoutStepsModal({ workout, isEdit, onClose }: Props) {
             const newWorkout: Workout = {
                 id: isEdit ? workout.id : 0,
                 enabled: workout.enabled,
+                progression: workout.progression,
                 name,
                 steps: WorkoutUtils.toWorkoutSteps(
                     steps,

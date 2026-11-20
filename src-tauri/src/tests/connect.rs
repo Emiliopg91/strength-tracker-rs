@@ -91,7 +91,7 @@ fn steps_json(steps: &[WorkoutStep]) -> Value {
 }
 
 fn steps_json_in(steps: &[WorkoutStep], weight_unit: WeightUnit) -> Value {
-    serde_json::to_value(connect::WorkoutStep::from_workout(steps, weight_unit)).unwrap()
+    serde_json::to_value(connect::WorkoutStep::from_workout(steps, weight_unit, true)).unwrap()
 }
 
 /// `(stepOrder, childStepId)` of every step, depth-first, as Connect expects them
@@ -172,6 +172,19 @@ fn step_without_notes_inherits_exercise_notes() {
     let json = steps_json(&[with_exercise_notes(reps(0, 10, None), "Elbows in")]);
 
     assert_eq!(json[0]["description"], "Elbows in");
+}
+
+#[test]
+fn step_without_notes_does_not_inherit_exercise_notes_without_progression() {
+    let steps = [with_exercise_notes(reps(0, 10, None), "Elbows in")];
+    let json = serde_json::to_value(connect::WorkoutStep::from_workout(
+        &steps,
+        WeightUnit::Kilograms,
+        false,
+    ))
+    .unwrap();
+
+    assert!(json[0].get("description").is_none());
 }
 
 #[test]

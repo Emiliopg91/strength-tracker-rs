@@ -220,7 +220,7 @@ export interface Settings {
   weight_unit: WeightUnit;
 }
 
-// From src-tauri/src/dao/workout_step.rs:290
+// From src-tauri/src/dao/workout_step.rs:306
 export enum StepType {
 	Exercise = "Exercise",
 	Warmup = "Warmup",
@@ -245,6 +245,7 @@ export interface Workout {
   id: number;
   name: string;
   notes: string | null;
+  progression: boolean;
   steps: WorkoutStep[];
 }
 
@@ -258,6 +259,7 @@ export interface WorkoutDetails {
   name: string;
   notes: string | null;
   primary_muscles: string[];
+  progression: boolean;
   secondary_muscles: string[];
   session_count: number;
   sessions: WorkoutSession[];
@@ -276,7 +278,7 @@ export interface WorkoutListItem {
   sessions: number;
 }
 
-// From src-tauri/src/dto/workouts.rs:51
+// From src-tauri/src/dto/workouts.rs:52
 export interface WorkoutPlanListItem {
   date: number;
   session: number | null;

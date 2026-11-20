@@ -111,6 +111,7 @@ export function WorkoutsList() {
                     avg_time: 0,
                     avg_volume: 0,
                     enabled: true,
+                    progression: true,
                     latest_session: 0,
                     session_count: 0,
                     sessions: [],

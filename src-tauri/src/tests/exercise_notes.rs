@@ -116,6 +116,19 @@ async fn disable(db: &DatabasePool, name: &str) {
     .unwrap();
 }
 
+async fn disable_progression(db: &DatabasePool, name: &str) {
+    let name = name.to_string();
+    db.run_in_transaction(async move |tx| {
+        let mut workout = WorkoutRepository::select_by_name_in(tx, &name)
+            .await?
+            .unwrap();
+        workout.progression = false;
+        Ok(workout.update_by_id_in(tx).await?)
+    })
+    .await
+    .unwrap();
+}
+
 async fn save_notes(db: &DatabasePool, exercise: (u16, u16), notes: Option<&str>) -> Vec<String> {
     let notes = notes.map(str::to_string);
     let mut workouts = db
@@ -266,4 +279,41 @@ async fn disabled_workout_is_returned_but_not_queued() {
 
     assert_eq!(save_notes(&db, BENCH, Some("Elbows in")).await, ["Push"]);
     assert!(none_pending(&db, "Push").await);
+}
+
+#[tokio::test]
+async fn workout_without_progression_is_neither_returned_nor_queued() {
+    let db = setup().await;
+    program(&db, "Push", &[(BENCH, None)]).await;
+    program(&db, "Fixed", &[(BENCH, None)]).await;
+    disable_progression(&db, "Fixed").await;
+
+    assert_eq!(save_notes(&db, BENCH, Some("Elbows in")).await, ["Push"]);
+    assert!(all_pending(&db, "Push").await);
+    assert!(none_pending(&db, "Fixed").await);
+}
+
+#[tokio::test]
+async fn device_workout_inherits_notes_only_with_progression() {
+    let db = setup().await;
+    program(&db, "Push", &[(BENCH, None)]).await;
+    program(&db, "Fixed", &[(BENCH, None)]).await;
+    disable_progression(&db, "Fixed").await;
+    save_notes(&db, BENCH, Some("Elbows in")).await;
+
+    let step_notes = |name: &'static str| {
+        let db = &db;
+        async move {
+            db.run_in_connection(async move |conn| {
+                let id = Workout::get_id(conn, name).await?.unwrap();
+                Ok(Workout::get_for_device(conn, id).await?.unwrap().steps[0]
+                    .notes
+                    .clone())
+            })
+            .await
+            .unwrap()
+        }
+    };
+    assert_eq!(step_notes("Push").await.as_deref(), Some("Elbows in"));
+    assert_eq!(step_notes("Fixed").await, None);
 }

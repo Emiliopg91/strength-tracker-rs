@@ -1,7 +1,7 @@
 pub mod commands;
 pub mod helpers;
 
-use tauri::{AppHandle, Runtime, WebviewWindow};
+use tauri::{AppHandle, Emitter, Runtime, WebviewWindow};
 use tauri_plugin_log::log::info;
 
 use self::helpers::{workout_details, workout_list};
@@ -18,6 +18,7 @@ use crate::{
             delete_pending_from_connected, push_pending_to_usb,
             send_enabled_workout_to_connect_devices, send_schedule_to_connected,
         },
+        exercises::helpers::progression_suggestions,
         notifications::show_notification,
         open_window, pool, print_to_pdf, report_error, settings_language,
     },
@@ -84,6 +85,40 @@ pub async fn set_workout_status<R: Runtime>(
     }
 
     res
+}
+
+pub async fn set_workout_progression<R: Runtime>(
+    app: &AppHandle<R>,
+    settings: &SettingsLock,
+    connect: &ConnectLock,
+    workout: u16,
+    value: bool,
+) -> Result<(), String> {
+    let res = pool(app)
+        .run_in_transaction(async move |tx| {
+            Workout::set_progression(tx, workout, value).await?;
+            Ok(!progression_suggestions(tx).await?.is_empty())
+        })
+        .await;
+
+    match res {
+        Ok(any_progression) => {
+            info!("Updated progression flag for workout {workout}");
+            // Typed binding: the TypeScript generator reads the payload type from it
+            let payload: bool = any_progression;
+            let _ = app.emit("progressions_available", payload);
+            // The inherited exercise notes change with the flag
+            sync_workouts_connect(app, connect, settings, &[workout]).await;
+            push_pending_to_usb(app).await;
+            Ok(())
+        }
+        Err(e) => Err(report_error(
+            e,
+            settings,
+            "error_workout_save",
+            "Error updating progression flag for workout",
+        )),
+    }
 }
 
 pub async fn save_workout<R: Runtime>(

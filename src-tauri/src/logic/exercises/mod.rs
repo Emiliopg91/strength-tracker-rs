@@ -13,7 +13,7 @@ use self::helpers::{
 };
 use crate::{
     ConnectLock, SettingsLock,
-    dao::{exercise::Exercise, workout_step::WorkoutStep},
+    dao::{exercise::Exercise, workout::Workout, workout_step::WorkoutStep},
     dto::exercises::{ExerciseDetails, ExerciseListItem, ProgressionSuggestion},
     logic::{
         connect::helpers::sync_workouts_connect, devices::helpers::push_pending_to_usb, pool,
@@ -156,7 +156,8 @@ pub async fn get_progression_status<R: Runtime>(
 ) -> Result<Option<ProgressionSuggestion>, String> {
     pool(app)
         .run_in_connection(async move |conn| {
-            Ok(WorkoutStep::get_highest_load(conn, category, id).await?)
+            let workouts = Workout::with_progression(conn).await?;
+            Ok(WorkoutStep::get_highest_load(conn, category, id, &workouts).await?)
         })
         .await
         .map(|load| load.map(|(weight, reps)| ProgressionSuggestion { weight, reps }))

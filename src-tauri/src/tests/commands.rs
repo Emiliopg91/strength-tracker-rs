@@ -284,6 +284,97 @@ async fn applying_a_progression_leaves_warmups_untouched() {
 }
 
 #[tokio::test]
+async fn applied_progression_skips_workouts_without_progression() {
+    let app = test_app().await;
+    save_workout(
+        &app,
+        false,
+        workout("Push", vec![step(0, Intensity::ACTIVE, 100.0, 8)]),
+    )
+    .await;
+    let mut fixed = workout("Fixed", vec![step(0, Intensity::ACTIVE, 100.0, 8)]);
+    fixed.progression = false;
+    save_workout(&app, false, fixed).await;
+
+    exercises::apply_progression_suggestion(
+        app.handle(),
+        &app.state::<SettingsLock>(),
+        &app.state::<ConnectLock>(),
+        BENCH.0,
+        BENCH.1,
+        ProgressionSuggestion {
+            weight: 102.0,
+            reps: 8,
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(workout_steps(&app, "Push").await[0].weight, Some(102.0));
+    assert_eq!(workout_steps(&app, "Fixed").await[0].weight, Some(100.0));
+}
+
+#[tokio::test]
+async fn progression_status_ignores_workouts_without_progression() {
+    let app = test_app().await;
+    save_workout(
+        &app,
+        false,
+        workout("Push", vec![step(0, Intensity::ACTIVE, 100.0, 8)]),
+    )
+    .await;
+    let mut fixed = workout("Fixed", vec![step(0, Intensity::ACTIVE, 120.0, 10)]);
+    fixed.progression = false;
+    save_workout(&app, false, fixed).await;
+
+    let status = exercises::get_progression_status(app.handle(), BENCH.0, BENCH.1)
+        .await
+        .unwrap();
+    assert_eq!(
+        status,
+        Some(ProgressionSuggestion {
+            weight: 100.0,
+            reps: 8,
+        })
+    );
+}
+
+#[tokio::test]
+async fn workout_progression_flag_is_stored_and_kept_on_edit() {
+    let app = test_app().await;
+    save_workout(
+        &app,
+        false,
+        workout("Push", vec![step(0, Intensity::ACTIVE, 100.0, 8)]),
+    )
+    .await;
+    let id = workout_id(&app, "Push").await;
+    let details = || async {
+        workouts::get_workout_details(app.handle(), &app.state::<SettingsLock>(), id)
+            .await
+            .unwrap()
+    };
+    assert!(details().await.progression);
+
+    workouts::set_workout_progression(
+        app.handle(),
+        &app.state::<SettingsLock>(),
+        &app.state::<ConnectLock>(),
+        id,
+        false,
+    )
+    .await
+    .unwrap();
+    assert!(!details().await.progression);
+
+    let mut edited = workout("Push", vec![step(0, Intensity::ACTIVE, 105.0, 8)]);
+    edited.id = id;
+    edited.progression = false;
+    save_workout(&app, true, edited).await;
+    assert!(!details().await.progression);
+}
+
+#[tokio::test]
 async fn progression_status_ignores_warmups() {
     let app = test_app().await;
     save_workout(

@@ -38,6 +38,22 @@ pub async fn set_workout_status(app: AppHandle, workout: u16, status: bool) -> R
     super::set_workout_status(&app, workout, status).await
 }
 
+/// Enables or disables progression for `workout`: suggestions for its exercises and the exercise
+/// notes inherited by its steps. Emits `progressions_available`, then re-sends the workout to
+/// Connect and the connected USB devices that have it. On failure, shows a persistent error
+/// notification and rejects with the message.
+#[traced_command]
+#[tauri::command]
+pub async fn set_workout_progression(
+    app: AppHandle,
+    settings: State<'_, SettingsLock>,
+    connect: State<'_, ConnectLock>,
+    workout: u16,
+    value: bool,
+) -> Result<(), String> {
+    super::set_workout_progression(&app, &settings, &connect, workout, value).await
+}
+
 /// Creates `workout`, or replaces the notes and steps of the existing one with its id when `edit`
 /// (its name is kept), and uploads it to Connect. When editing, it is also pushed to the connected
 /// USB devices that have it. Notifies on success. On failure, shows a persistent error notification

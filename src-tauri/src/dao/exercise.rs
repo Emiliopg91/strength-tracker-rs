@@ -181,7 +181,7 @@ impl Exercise {
     }
 
     /// Exercises with progression enabled that could have a suggestion: performed at least once
-    /// and programmed in an enabled workout. Prunes the catalog in SQL so the per-exercise checks
+    /// and programmed in an enabled workout with progression. Prunes the catalog in SQL so the per-exercise checks
     /// only run for the handful of exercises actually in use.
     pub async fn get_progression_candidates(
         conn: &Connection,
@@ -201,7 +201,10 @@ impl Exercise {
                     workout_step_cols::WORKOUT,
                     WorkoutRepository::select()
                         .columns(&[workout_cols::ID])
-                        .where_(Where::Eq(workout_cols::ENABLED, true.into()))
+                        .where_(Where::And(vec![
+                            Where::Eq(workout_cols::ENABLED, true.into()),
+                            Where::Eq(workout_cols::PROGRESSION, true.into()),
+                        ]))
                         .to_subquery(),
                 ),
             ]))
@@ -264,8 +267,8 @@ impl Exercise {
         Ok(())
     }
 
-    /// Stores the exercise notes and queues for upload the workouts inheriting them.
-    /// Returns every workout inheriting the notes.
+    /// Stores the exercise notes and queues for upload the workouts inheriting them, those with
+    /// progression. Returns every workout inheriting the notes.
     pub async fn update_notes(
         tx: &Transaction<'_>,
         category: u16,
@@ -287,6 +290,13 @@ impl Exercise {
                     Where::Null(workout_step_cols::NOTES),
                     Where::Eq(workout_step_cols::NOTES, "".into()),
                 ]),
+                Where::InSub(
+                    workout_step_cols::WORKOUT,
+                    WorkoutRepository::select()
+                        .columns(&[workout_cols::ID])
+                        .where_(Where::Eq(workout_cols::PROGRESSION, true.into()))
+                        .to_subquery(),
+                ),
             ]))
             .fetch_in(tx)
             .await?

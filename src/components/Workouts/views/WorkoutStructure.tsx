@@ -29,6 +29,8 @@ type Formatters = {
     fromKg: (weight: number) => number;
     getWeightUnit: () => string;
     notesAsTooltip: boolean;
+    /** Exercise notes only reach the steps of workouts with progression. */
+    inheritNotes: boolean;
 };
 
 /** Notes and steps of a workout, as repeat blocks and step tables. */
@@ -52,6 +54,7 @@ export function WorkoutStructure({
         fromKg,
         getWeightUnit,
         notesAsTooltip,
+        inheritNotes: workout.progression,
     };
 
     // Consecutive steps outside any repeat share a table, so their rows never end up loose
@@ -184,8 +187,11 @@ function leafToHtml(idx: number, leaf: LeafStep, fmt: Formatters): JSX.Element {
         ) !== undefined;
     const notes =
         leaf.notes ||
-        exercises.find((e) => e.category == leaf.ex_cat && e.id == leaf.ex_id)
-            ?.notes;
+        (fmt.inheritNotes
+            ? exercises.find(
+                  (e) => e.category == leaf.ex_cat && e.id == leaf.ex_id,
+              )?.notes
+            : null);
 
     return stepRow(
         idx,

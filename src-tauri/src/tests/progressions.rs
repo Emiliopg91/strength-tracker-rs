@@ -362,6 +362,30 @@ async fn steps_of_disabled_workouts_give_no_suggestion() {
 }
 
 #[tokio::test]
+async fn steps_of_workouts_without_progression_give_no_suggestion() {
+    let db = common::test_db().await;
+    configure(&db, BENCH, false, "8-10-12").await;
+    log_session(&db, 1, BENCH, &[(12, 100.0), (11, 100.0)]).await;
+    program(&db, BENCH, 100.0, 10).await;
+    db.run_in_transaction(async move |tx| {
+        WorkoutRepository::update()
+            .set(workout::entity::columns::PROGRESSION, false.into())
+            .execute_in(tx)
+            .await?;
+        Ok(())
+    })
+    .await
+    .unwrap();
+
+    assert_eq!(suggestion(&db, BENCH).await, None);
+    let suggested = db
+        .run_in_connection(async move |conn| Ok(progression_suggestions(conn).await?))
+        .await
+        .unwrap();
+    assert!(suggested.is_empty());
+}
+
+#[tokio::test]
 async fn disabled_progression_gives_no_suggestion() {
     let db = common::test_db().await;
     configure(&db, BENCH, false, "8-10-12").await;

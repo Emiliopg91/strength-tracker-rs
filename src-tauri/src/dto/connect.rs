@@ -28,7 +28,11 @@ impl ConnectWorkout {
             description: value.notes.clone(),
             sport_type: SportType::default(),
             workout_segments: vec![WorkoutSegment {
-                workout_steps: WorkoutStep::from_workout(&value.steps, weight_unit),
+                workout_steps: WorkoutStep::from_workout(
+                    &value.steps,
+                    weight_unit,
+                    value.progression,
+                ),
                 ..Default::default()
             }],
         }
@@ -78,11 +82,14 @@ pub enum WorkoutStep {
 }
 
 impl WorkoutStep {
+    /// Connect steps for `steps`; those without notes of their own inherit the exercise notes if
+    /// `inherit_notes`, as workouts with progression do.
     pub fn from_workout(
         steps: &[workout_step::WorkoutStep],
         weight_unit: settings::WeightUnit,
+        inherit_notes: bool,
     ) -> Vec<Self> {
-        let mut res = Self::from_range(steps, 0..steps.len(), weight_unit);
+        let mut res = Self::from_range(steps, 0..steps.len(), weight_unit, inherit_notes);
         Self::assign_step_order(&mut res, &mut 1, &mut 1, None);
         res
     }
@@ -124,6 +131,7 @@ impl WorkoutStep {
         steps: &[workout_step::WorkoutStep],
         range: Range<usize>,
         weight_unit: settings::WeightUnit,
+        inherit_notes: bool,
     ) -> Vec<Self> {
         let mut res: Vec<WorkoutStep> = Vec::new();
 
@@ -142,7 +150,12 @@ impl WorkoutStep {
                         end_condition_value: step.reps.flatten().unwrap() as f64,
                         number_of_iterations: step.reps.flatten().unwrap(),
                         smart_repeat: false,
-                        workout_steps: WorkoutStep::from_range(steps, begin..idx, weight_unit),
+                        workout_steps: WorkoutStep::from_range(
+                            steps,
+                            begin..idx,
+                            weight_unit,
+                            inherit_notes,
+                        ),
                     }));
                     end = begin;
                     continue;
@@ -197,7 +210,12 @@ impl WorkoutStep {
                             .notes
                             .clone()
                             .filter(|notes| !notes.is_empty())
-                            .or_else(|| step.exercise.as_ref().and_then(|e| e.notes.clone())),
+                            .or_else(|| {
+                                step.exercise
+                                    .as_ref()
+                                    .filter(|_| inherit_notes)
+                                    .and_then(|e| e.notes.clone())
+                            }),
                         category: step
                             .exercise
                             .as_ref()

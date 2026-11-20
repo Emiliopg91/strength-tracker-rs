@@ -119,9 +119,9 @@ impl WorkoutStep {
             .collect())
     }
 
-    /// Loads programmed with reps for the exercises in `keys` in enabled workouts, as
-    /// `(exercise, weight, reps)`, a missing weight counting as 0. Steps of disabled workouts
-    /// are left out.
+    /// Loads programmed with reps for the exercises in `keys` in enabled workouts with progression,
+    /// as `(exercise, weight, reps)`, a missing weight counting as 0. Steps of other workouts are
+    /// left out.
     pub async fn get_programmed_loads(
         conn: &Connection,
         keys: &HashSet<(u16, u16)>,
@@ -140,13 +140,7 @@ impl WorkoutStep {
                     vec![entity::columns::EX_CAT, entity::columns::EX_ID],
                     exercise_key_values(keys),
                 ),
-                Where::InSub(
-                    entity::columns::WORKOUT,
-                    WorkoutRepository::select()
-                        .columns(&[workout_cols::ID])
-                        .where_(Where::Eq(workout_cols::ENABLED, true.into()))
-                        .to_subquery(),
-                ),
+                in_progression_workouts(true),
             ]))
             .fetch_in(conn)
             .await?
@@ -165,12 +159,13 @@ impl WorkoutStep {
             .collect())
     }
 
-    /// Highest load programmed for the exercise across workouts, as weight and reps, a missing
-    /// value counting as 0.
+    /// Highest load programmed for the exercise across the workouts in `workouts_with_prog`, as
+    /// weight and reps, a missing value counting as 0.
     pub async fn get_highest_load(
         conn: &Connection,
         category: u16,
         id: u16,
+        workouts_with_prog: &[u16],
     ) -> rusqlite_orm::errors::Result<Option<(f32, u16)>> {
         Ok(WorkoutStepRepository::select()
             .columns(&[entity::columns::REPS, entity::columns::WEIGHT])
@@ -178,6 +173,10 @@ impl WorkoutStep {
                 Where::Eq(entity::columns::EX_CAT, category.into()),
                 Where::Eq(entity::columns::EX_ID, id.into()),
                 Where::Eq(entity::columns::KIND, StepType::Exercise.into()),
+                Where::In(
+                    entity::columns::WORKOUT,
+                    workouts_with_prog.iter().map(|&w| w.into()).collect(),
+                ),
             ]))
             .order_by(OrderBy::Desc(entity::columns::WEIGHT))
             .order_by(OrderBy::Desc(entity::columns::REPS))
@@ -193,8 +192,9 @@ impl WorkoutStep {
             }))
     }
 
-    /// Raises the exercise steps programmed below `weight` x `reps` and queues their workouts for
-    /// the devices. Returns whether any step changed and the workouts programming the exercise.
+    /// Raises the exercise steps programmed below `weight` x `reps` in workouts with progression and
+    /// queues those workouts for the devices. Returns whether any step changed and the workouts
+    /// with progression programming the exercise.
     pub async fn apply_progression(
         tx: &Transaction<'_>,
         category: u16,
@@ -207,6 +207,7 @@ impl WorkoutStep {
                 Where::Eq(entity::columns::EX_CAT, category.into()),
                 Where::Eq(entity::columns::EX_ID, id.into()),
                 Where::Eq(entity::columns::KIND, StepType::Exercise.into()),
+                in_progression_workouts(false),
             ]
         };
 
@@ -253,6 +254,21 @@ impl WorkoutStep {
 
         Ok((modified > 0, workouts))
     }
+}
+
+/// Steps of workouts with progression enabled, only the enabled ones if `only_enabled`.
+fn in_progression_workouts(only_enabled: bool) -> Where<WorkoutStep> {
+    let mut conditions = vec![Where::Eq(workout_cols::PROGRESSION, true.into())];
+    if only_enabled {
+        conditions.push(Where::Eq(workout_cols::ENABLED, true.into()));
+    }
+    Where::InSub(
+        entity::columns::WORKOUT,
+        WorkoutRepository::select()
+            .columns(&[workout_cols::ID])
+            .where_(Where::And(conditions))
+            .to_subquery(),
+    )
 }
 
 /// Steps programmed below `weight` x `reps`; steps already at or above it are never lowered.

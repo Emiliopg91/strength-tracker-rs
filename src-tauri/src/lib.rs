@@ -65,7 +65,7 @@ use crate::{
         workouts::commands::{
             add_planned_workout, delete_planned_workout, get_next_planned_workout,
             get_planned_workouts, get_workout_details, get_workout_list, load_workout_page,
-            save_workout, set_workout_status, workout_print_ready,
+            save_workout, set_workout_progression, set_workout_status, workout_print_ready,
         },
     },
     mtp::MtpClient,
@@ -317,6 +317,7 @@ pub fn run(log_level: LevelFilter) {
             get_workout_list,
             get_workout_details,
             set_workout_status,
+            set_workout_progression,
             save_workout,
             load_workout_page,
             workout_print_ready,

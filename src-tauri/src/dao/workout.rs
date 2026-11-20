@@ -77,7 +77,7 @@ impl Workout {
     }
 
     /// The workout with its steps in order, those without notes of their own inheriting the
-    /// exercise notes, `None` if it doesn't exist.
+    /// exercise notes when the workout has progression, `None` if it doesn't exist.
     pub async fn get_for_device(
         conn: &Connection,
         id: u16,
@@ -85,6 +85,11 @@ impl Workout {
         let Some(mut wk) = Workout::get_with_steps(conn, id).await? else {
             return Ok(None);
         };
+
+        // Exercise notes only reach workouts with progression
+        if !wk.progression {
+            return Ok(Some(wk));
+        }
 
         // Exercise steps without their own notes inherit the exercise notes
         let pending: Vec<(usize, (u16, u16))> = wk
@@ -259,7 +264,7 @@ impl Workout {
         res
     }
 
-    /// Inserts the workout, or replaces the notes and steps of the existing one with its id when
+    /// Inserts the workout, or replaces the notes, progression flag and steps of the existing one with its id when
     /// editing (its name is kept), and queues it for the devices that already have it. Returns the
     /// id of the workout.
     pub async fn store(
@@ -285,6 +290,7 @@ impl Workout {
                     })
                     .into(),
                 )
+                .set(entity::columns::PROGRESSION, workout.progression.into())
                 .where_(Where::Eq(entity::columns::ID, id.into()))
                 .execute_in(tx)
                 .await?;
@@ -323,9 +329,32 @@ impl Workout {
         Ok(id)
     }
 
-    pub async fn workout_with_progression(
-        conn: &Connection,
-    ) -> rusqlite_orm::errors::Result<Vec<u16>> {
+    /// Enables or disables progression for the workout: suggestions for its exercises and their
+    /// notes inherited by its steps. As the inherited notes change, an enabled workout is queued
+    /// again for the devices that have it.
+    pub async fn set_progression(
+        tx: &Transaction<'_>,
+        workout: u16,
+        value: bool,
+    ) -> rusqlite_orm::errors::Result<()> {
+        WorkoutRepository::update()
+            .set(entity::columns::PROGRESSION, value.into())
+            .where_(Where::Eq(entity::columns::ID, workout.into()))
+            .execute_in(tx)
+            .await?;
+
+        // On a disabled workout `pending` means deletion from the device
+        if WorkoutRepository::select_by_id_in(tx, workout)
+            .await?
+            .is_some_and(|w| w.enabled)
+        {
+            WorkoutDevice::requeue_on_devices(tx, &[workout]).await?;
+        }
+        Ok(())
+    }
+
+    /// Ids of the workouts with progression enabled.
+    pub async fn with_progression(conn: &Connection) -> rusqlite_orm::errors::Result<Vec<u16>> {
         Ok(WorkoutRepository::select()
             .columns(&[entity::columns::ID])
             .where_(Where::Eq(entity::columns::PROGRESSION, true.into()))

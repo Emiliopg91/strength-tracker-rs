@@ -85,6 +85,16 @@ export function WorkoutModal({
         );
     };
 
+    const toggleProgression = () => {
+        const progression = !workout.progression;
+        withLoading(
+            BackendClient.setWorkoutProgression(workout.id, progression),
+        ).then(() => {
+            // Kept on the workout so a later edit saves the current value
+            setWorkout((prev) => ({ ...prev, progression }));
+        });
+    };
+
     const onStructureToggle = (_: React.SyntheticEvent, expanded: boolean) => {
         if (expanded && !exercises) {
             withLoading(BackendClient.getExercises()).then(setExercises);
@@ -203,6 +213,27 @@ export function WorkoutModal({
                                                             "aria-label":
                                                                 translate(
                                                                     "enabled",
+                                                                ),
+                                                        },
+                                                    }}
+                                                />
+                                            </td>
+                                        </tr>
+                                    )}
+                                    {showEnable && (
+                                        <tr>
+                                            <td>{translate("progression")}:</td>
+                                            <td>
+                                                <Switch
+                                                    checked={
+                                                        workout.progression
+                                                    }
+                                                    onChange={toggleProgression}
+                                                    slotProps={{
+                                                        input: {
+                                                            "aria-label":
+                                                                translate(
+                                                                    "progression",
                                                                 ),
                                                         },
                                                     }}
