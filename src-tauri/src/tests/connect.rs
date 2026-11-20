@@ -26,7 +26,7 @@ use crate::dto::connect::{self, ConnectWorkout};
 
 fn step(idx: u16, kind: StepType) -> WorkoutStep {
     WorkoutStep {
-        workout: "Push".to_string(),
+        workout: 0,
         idx,
         kind,
         ex_cat: None,
@@ -395,12 +395,14 @@ fn nested_repeats_are_numbered_depth_first() {
 #[test]
 fn workout_envelope() {
     let workout = Workout {
+        id: 0,
         name: "Push".to_string(),
         enabled: true,
         notes: Some("Chest day".to_string()),
         connect_id: Some("123456".to_string()),
         connect_created_time: None,
         steps: vec![reps(0, 10, Some(60.0))],
+        progression: true,
     };
     let json = serde_json::to_value(ConnectWorkout::from(&workout, WeightUnit::Kilograms)).unwrap();
 
@@ -419,12 +421,14 @@ fn workout_envelope() {
 #[test]
 fn new_workout_omits_id_and_description() {
     let workout = Workout {
+        id: 0,
         name: "Pull".to_string(),
         enabled: true,
         notes: None,
         connect_id: None,
         connect_created_time: None,
         steps: Vec::new(),
+        progression: true,
     };
     let json = serde_json::to_value(ConnectWorkout::from(&workout, WeightUnit::Kilograms)).unwrap();
 

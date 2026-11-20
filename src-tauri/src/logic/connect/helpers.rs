@@ -19,19 +19,19 @@ use crate::{
     utils::constants,
 };
 
-/// Uploads `workout` to Connect, notifying the user if it fails.
+/// Uploads the workout `id` to Connect, notifying the user if it fails.
 /// The workout is left pending of upload on failure and cleared on success.
 pub async fn send_workout_connect<R: Runtime>(
     app: &AppHandle<R>,
     connect: &ConnectLock,
     settings: &SettingsLock,
-    workout: &str,
+    id: u16,
 ) -> Result<String, String> {
-    let res = upload_workout_connect(app, connect, settings, workout).await;
-    mark_connect_pending(app, &[workout.to_string()], res.is_err()).await;
+    let res = upload_workout_connect(app, connect, settings, id).await;
+    mark_connect_pending(app, &[id], res.is_err()).await;
     res.map_err(|e| {
         report_error(
-            format!("{workout}: {e}"),
+            e,
             settings,
             "error_workout_send_connect",
             "Error sending workout to Garmin Connect",
@@ -45,7 +45,7 @@ pub(crate) async fn sync_workouts_connect<R: Runtime>(
     app: &AppHandle<R>,
     connect: &ConnectLock,
     settings: &SettingsLock,
-    workouts: &[String],
+    workouts: &[u16],
 ) {
     if workouts.is_empty() {
         return;
@@ -53,7 +53,7 @@ pub(crate) async fn sync_workouts_connect<R: Runtime>(
 
     if connect.lock().await.logged_user().is_some() {
         for workout in workouts {
-            let _ = send_workout_connect(app, connect, settings, workout).await;
+            let _ = send_workout_connect(app, connect, settings, *workout).await;
         }
     } else {
         mark_connect_pending(app, workouts, true).await;
@@ -92,19 +92,19 @@ pub(crate) async fn up_to_date_connect<R: Runtime>(app: &AppHandle<R>) {
             pending_workouts.len()
         );
         let settings = app.state::<SettingsLock>();
-        for workout in pending_workouts {
-            let res = upload_workout_connect(app, &connect, &settings, &workout).await;
+        for (id, workout) in pending_workouts {
+            let res = upload_workout_connect(app, &connect, &settings, id).await;
             if let Err(e) = &res {
                 error!("Error uploading pending workout '{workout}' to Connect: {e}");
             }
-            mark_connect_pending(app, std::slice::from_ref(&workout), res.is_err()).await;
+            mark_connect_pending(app, &[id], res.is_err()).await;
         }
     }
 
     if !pending_plans.is_empty() {
         info!("Uploading {} pending plans to Connect", pending_plans.len());
         for (date, workout) in pending_plans {
-            push_plan_to_connect(app, date, &workout).await;
+            push_plan_to_connect(app, date, workout).await;
         }
     }
 }
@@ -140,7 +140,7 @@ async fn align_workouts_connect<R: Runtime>(app: &AppHandle<R>, connect: &Connec
 
 pub(super) async fn mark_connect_pending<R: Runtime>(
     app: &AppHandle<R>,
-    workouts: &[String],
+    workouts: &[u16],
     pending: bool,
 ) {
     let workouts = workouts.to_vec();
@@ -155,21 +155,34 @@ pub(super) async fn mark_connect_pending<R: Runtime>(
     }
 }
 
+/// Uploads the workout `id` to Connect and stores the keys Connect gives it. Errors start with the
+/// name of the workout once loaded.
 pub async fn upload_workout_connect<R: Runtime>(
     app: &AppHandle<R>,
     connect: &ConnectLock,
     settings: &SettingsLock,
-    workout: &str,
+    id: u16,
 ) -> Result<String, String> {
     let weight_unit = settings.read().unwrap().weight_unit;
 
-    let id = workout.to_string();
-    let mut workout = pool(app)
-        .run_in_connection(async move |conn| Ok(Workout::get_with_exercises(conn, &id).await?))
+    let workout = pool(app)
+        .run_in_connection(async move |conn| Ok(Workout::get_with_exercises(conn, id).await?))
         .await
         .map_err(|e| e.to_string())?
-        .ok_or_else(|| format!("Workout {workout} not found"))?;
+        .ok_or_else(|| format!("Workout {id} not found"))?;
 
+    let name = workout.name.clone();
+    upload_loaded_workout_connect(app, connect, workout, weight_unit)
+        .await
+        .map_err(|e| format!("{name}: {e}"))
+}
+
+async fn upload_loaded_workout_connect<R: Runtime>(
+    app: &AppHandle<R>,
+    connect: &ConnectLock,
+    mut workout: Workout,
+    weight_unit: crate::dao::settings::WeightUnit,
+) -> Result<String, String> {
     let mut client = connect.lock().await;
     let original_id = workout.connect_id.clone();
     let original_created = workout.connect_created_time;
@@ -269,38 +282,35 @@ pub(crate) async fn get_devices_from_connect<R: Runtime>(app_orig: &AppHandle<R>
     }
 }
 
-/// Queues `workout` in Connect for delivery to the device `serial`, first uploading the workout
-/// to Connect if it has no Connect id yet.
+/// Queues the workout `id` in Connect for delivery to the device `serial`, first uploading the
+/// workout to Connect if it has no Connect id yet.
 pub(crate) async fn queue_workout_on_connect<R: Runtime>(
     app: &AppHandle<R>,
-    workout: &str,
+    id: u16,
     serial: &str,
 ) -> Result<(), String> {
-    let fetch_connect_id = async |workout: String| {
+    let fetch_workout = async || {
         pool(app)
-            .run_in_connection(async move |conn| Ok(Workout::get_connect_id(conn, &workout).await?))
+            .run_in_connection(async move |conn| Ok(Workout::get(conn, id).await?))
             .await
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| format!("Workout {id} not found"))
     };
 
-    let connect_id = match fetch_connect_id(workout.to_string())
-        .await
-        .map_err(|e| e.to_string())?
-    {
-        Some(id) => id,
-        None => {
-            send_workout_connect(
-                app,
-                &app.state::<ConnectLock>(),
-                &app.state::<SettingsLock>(),
-                workout,
-            )
-            .await?;
-            fetch_connect_id(workout.to_string())
-                .await
-                .map_err(|e| e.to_string())?
-                .ok_or_else(|| format!("Workout {workout} has no Connect id"))?
-        }
-    };
+    let mut workout = fetch_workout().await?;
+    if workout.connect_id.is_none() {
+        send_workout_connect(
+            app,
+            &app.state::<ConnectLock>(),
+            &app.state::<SettingsLock>(),
+            id,
+        )
+        .await?;
+        workout = fetch_workout().await?;
+    }
+    let connect_id = workout
+        .connect_id
+        .ok_or_else(|| format!("Workout {} has no Connect id", workout.name))?;
     let workout_id = connect_id
         .parse::<u64>()
         .map_err(|e| format!("Invalid Connect workout id '{connect_id}': {e}"))?;
@@ -309,7 +319,7 @@ pub(crate) async fn queue_workout_on_connect<R: Runtime>(
     app.state::<ConnectLock>()
         .lock()
         .await
-        .send_workout_to_device(workout_id, workout, unit_id)
+        .send_workout_to_device(workout_id, &workout.name, unit_id)
         .await
         .map_err(|e| e.to_string())
 }
@@ -414,14 +424,13 @@ pub(super) async fn update_session_sets(
     let _ = connect.update_session_sets(&original_sets).await;
 }
 
-pub async fn push_plan_to_connect<R: Runtime>(app: &AppHandle<R>, date: u32, workout: &str) {
+pub async fn push_plan_to_connect<R: Runtime>(app: &AppHandle<R>, date: u32, workout: u16) {
     let connect_state = app.state::<ConnectLock>();
     let connect = connect_state.lock().await;
     if connect.logged_user().is_some() {
         drop(connect);
-        let name = workout.to_string();
         let workout_id = match pool(app)
-            .run_in_connection(async move |conn| Ok(Workout::get(conn, &name).await?))
+            .run_in_connection(async move |conn| Ok(Workout::get(conn, workout).await?))
             .await
         {
             Err(e) => {
@@ -435,7 +444,7 @@ pub async fn push_plan_to_connect<R: Runtime>(app: &AppHandle<R>, date: u32, wor
                         app,
                         &app.state::<ConnectLock>(),
                         &app.state::<SettingsLock>(),
-                        &workout.name,
+                        workout.id,
                     )
                     .await
                     .ok()
@@ -456,13 +465,12 @@ pub async fn push_plan_to_connect<R: Runtime>(app: &AppHandle<R>, date: u32, wor
             .await
         {
             Ok(schedule_id) => {
-                let workout = workout.to_string();
                 let res = pool(app)
                     .run_in_connection(async move |conn| {
                         Ok(WorkoutPlanning::set_schedule_id(
                             conn,
                             date,
-                            &workout,
+                            workout,
                             &schedule_id.to_string(),
                         )
                         .await?)

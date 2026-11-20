@@ -210,14 +210,16 @@ fn parses_strength_sessions() {
         let session = parse_fixture(expected.fixture);
         assert_session(&session, expected, (STRENGTH_SPORT, STRENGTH_SUB_SPORT));
 
-        assert_eq!(session.workout.as_deref(), Some(expected.name));
+        // Only stored workouts have an id, set when the session is stored
+        assert_eq!(session.workout, None);
+        assert_eq!(session.name, expected.name, "{}", expected.fixture);
         assert!(session.laps.is_empty(), "{}", expected.fixture);
 
         let workout = session.workout_obj.as_ref().unwrap();
         assert_eq!(workout.name, expected.name, "{}", expected.fixture);
         assert!(!workout.steps.is_empty(), "{}", expected.fixture);
         for (idx, step) in workout.steps.iter().enumerate() {
-            assert_eq!(step.workout, expected.name, "{}", expected.fixture);
+            assert_eq!(step.workout, 0, "{}", expected.fixture);
             assert_eq!(step.idx as usize, idx, "{}", expected.fixture);
             if let Some(begin) = step.begin_idx {
                 assert!(begin < step.idx, "{}", expected.fixture);

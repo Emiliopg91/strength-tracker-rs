@@ -8,7 +8,7 @@ use tauri_plugin_log::log::{error, info};
 
 use self::helpers::{
     notify_workout_pending, notify_workout_sent, register_workout_on_device,
-    send_workout_to_device, set_workout_on_device,
+    send_workout_to_device, set_workout_on_device, workout_name,
 };
 use crate::{
     MtpLock, SettingsLock,
@@ -24,10 +24,11 @@ use crate::{
 pub async fn send_to_device<R: Runtime>(
     app: &AppHandle<R>,
     settings: &SettingsLock,
-    workout: &str,
+    id: u16,
     serial: &str,
 ) -> Result<(), String> {
     let (lang, weight_unit) = fit_settings(app);
+    let workout = &workout_name(app, id).await;
 
     let mtp_client = app.state::<MtpLock>();
     let connected = mtp_client
@@ -38,10 +39,10 @@ pub async fn send_to_device<R: Runtime>(
         .map_err(|e| e.to_string())?;
 
     let res: Result<bool, String> = if connected {
-        match send_workout_to_device(app, lang, weight_unit, workout, serial).await {
+        match send_workout_to_device(app, lang, weight_unit, id, serial).await {
             Ok(_) => {
                 // Register the pair so later changes (e.g. progressions) get re-sent to this device
-                if let Err(e) = register_workout_on_device(app, workout, serial).await {
+                if let Err(e) = register_workout_on_device(app, id, serial).await {
                     error!("Error registering workout '{workout}' for device {serial}: {e}");
                 }
 
@@ -50,7 +51,7 @@ pub async fn send_to_device<R: Runtime>(
             Err(e) => Err(e),
         }
     } else {
-        set_workout_on_device(app, workout, serial, true)
+        set_workout_on_device(app, id, serial, true)
             .await
             .map_err(|e| e.to_string())?;
 

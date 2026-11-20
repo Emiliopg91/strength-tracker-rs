@@ -26,7 +26,7 @@ use crate::dao::{
 #[index("exercise",(ex_cat, ex_id))]
 pub struct WorkoutStep {
     #[serde(skip)]
-    pub workout: String,
+    pub workout: u16,
     pub idx: u16,
     pub kind: StepType,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -106,16 +106,16 @@ impl WorkoutStep {
             .collect())
     }
 
-    /// Names of the workouts with some step stored.
+    /// Ids of the workouts with some step stored.
     pub async fn get_workouts_with_steps(
         conn: &Connection,
-    ) -> rusqlite_orm::errors::Result<HashSet<String>> {
+    ) -> rusqlite_orm::errors::Result<HashSet<u16>> {
         Ok(WorkoutStepRepository::select()
             .distinct(&[entity::columns::WORKOUT])
             .fetch_in(conn)
             .await?
             .iter()
-            .map(|r| r.get_text(entity::columns::WORKOUT.as_ref()))
+            .map(|r| r.get_u16(entity::columns::WORKOUT.as_ref()))
             .collect())
     }
 
@@ -143,7 +143,7 @@ impl WorkoutStep {
                 Where::InSub(
                     entity::columns::WORKOUT,
                     WorkoutRepository::select()
-                        .columns(&[workout_cols::NAME])
+                        .columns(&[workout_cols::ID])
                         .where_(Where::Eq(workout_cols::ENABLED, true.into()))
                         .to_subquery(),
                 ),
@@ -201,7 +201,7 @@ impl WorkoutStep {
         id: u16,
         weight: f32,
         reps: u16,
-    ) -> rusqlite_orm::errors::Result<(bool, Vec<String>)> {
+    ) -> rusqlite_orm::errors::Result<(bool, Vec<u16>)> {
         let of_exercise = || {
             vec![
                 Where::Eq(entity::columns::EX_CAT, category.into()),
@@ -236,7 +236,7 @@ impl WorkoutStep {
                 .fetch_in(tx)
                 .await?
                 .iter()
-                .map(|r| r.get_text(entity::columns::WORKOUT.as_ref()))
+                .map(|r| r.get_u16(entity::columns::WORKOUT.as_ref()))
                 .collect();
             WorkoutDeviceRepository::update()
                 .set(workout_device_cols::PENDING, true.into())
@@ -355,9 +355,9 @@ impl From<Intensity> for StepType {
 }
 
 impl WorkoutStep {
-    pub fn new(workout: &str, idx: u16, kind: StepType) -> Self {
+    pub fn new(workout: u16, idx: u16, kind: StepType) -> Self {
         Self {
-            workout: workout.to_string(),
+            workout,
             idx,
             kind,
             begin_idx: None,
@@ -370,14 +370,14 @@ impl WorkoutStep {
             exercise: None,
         }
     }
-    pub fn rest(workout: &str, idx: u16, time: Option<u32>, notes: Option<String>) -> Self {
+    pub fn rest(workout: u16, idx: u16, time: Option<u32>, notes: Option<String>) -> Self {
         let mut inst = Self::new(workout, idx, StepType::Rest);
         inst.time = Some(time);
         inst.notes = notes;
         inst
     }
 
-    pub fn repeat(workout: &str, idx: u16, from: u16, reps: u16) -> Self {
+    pub fn repeat(workout: u16, idx: u16, from: u16, reps: u16) -> Self {
         let mut inst = Self::new(workout, idx, StepType::Repeat);
         inst.begin_idx = Some(from);
         inst.reps = Some(Some(reps));
@@ -386,7 +386,7 @@ impl WorkoutStep {
 
     #[allow(clippy::too_many_arguments)]
     pub fn active(
-        workout: &str,
+        workout: u16,
         idx: u16,
         kind: Intensity,
         exercise: Option<(u16, u16)>,

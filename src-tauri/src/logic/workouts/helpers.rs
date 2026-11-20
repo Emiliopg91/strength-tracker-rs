@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use rusqlite_orm::rusqlite::Connection;
 use tauri_plugin_log::log::info;
@@ -30,19 +30,15 @@ pub(super) async fn workout_list(
     let workouts = Workout::get_all(conn).await?;
     let sessions = Session::get_workout_sessions(conn).await?;
 
-    let mut workout_stats: HashMap<_, WorkoutStats> = workouts
+    let mut workout_stats: HashMap<u16, WorkoutStats> = workouts
         .iter()
-        .map(|w| (w.name.clone(), WorkoutStats::default()))
-        .collect();
-
-    let suggested_workouts: HashSet<_> = workouts
-        .iter()
-        .filter(|w| w.enabled)
-        .map(|w| w.name.clone())
+        .map(|w| (w.id, WorkoutStats::default()))
         .collect();
 
     for s in &sessions {
-        let stats = workout_stats.entry(s.name.clone()).or_default();
+        let Some(stats) = s.workout.and_then(|id| workout_stats.get_mut(&id)) else {
+            continue;
+        };
         stats.sessions += 1;
         stats.total_time += s.total_elapsed_time;
         stats.latest_session.get_or_insert(s.date);
@@ -51,16 +47,20 @@ pub(super) async fn workout_list(
 
     let with_steps = WorkoutStep::get_workouts_with_steps(conn).await?;
 
-    let mut res: Vec<_> = workout_stats
+    let mut res: Vec<_> = workouts
         .into_iter()
-        .map(|(name, stats)| WorkoutListItem {
-            has_steps: with_steps.contains(&name),
-            enabled: suggested_workouts.contains(&name),
-            sessions: stats.sessions,
-            avg_time: stats.total_time.checked_div(stats.sessions).unwrap_or(0),
-            avg_load: stats.total_load.checked_div(stats.sessions).unwrap_or(0) as u16,
-            latest_session: stats.latest_session,
-            name,
+        .map(|workout| {
+            let stats = workout_stats.remove(&workout.id).unwrap_or_default();
+            WorkoutListItem {
+                id: workout.id,
+                has_steps: with_steps.contains(&workout.id),
+                enabled: workout.enabled,
+                sessions: stats.sessions,
+                avg_time: stats.total_time.checked_div(stats.sessions).unwrap_or(0),
+                avg_load: stats.total_load.checked_div(stats.sessions).unwrap_or(0) as u16,
+                latest_session: stats.latest_session,
+                name: workout.name,
+            }
         })
         .collect();
 
@@ -72,16 +72,16 @@ pub(super) async fn workout_list(
 /// The workout with its steps, worked muscles and every session with its volume.
 pub(super) async fn workout_details(
     conn: &Connection,
-    name: &str,
+    id: u16,
 ) -> rusqlite_orm::errors::Result<WorkoutDetails> {
-    info!("Getting details for workout {}", name);
+    info!("Getting details for workout {}", id);
 
-    let workout = Workout::get_with_steps(conn, name)
+    let workout = Workout::get_with_steps(conn, id)
         .await?
-        .unwrap_or_else(|| panic!("Workout {name} not found"));
-    let sessions = Session::get_by_name(conn, name).await?;
+        .unwrap_or_else(|| panic!("Workout {id} not found"));
+    let sessions = Session::get_by_workout(conn, id).await?;
 
-    let mut exercises = Exercise::get_by_workout(conn, &workout.name).await?;
+    let mut exercises = Exercise::get_by_workout(conn, id).await?;
     Exercise::fill_muscles(conn, &mut exercises).await?;
     let (primary_muscles, secondary_muscles) = split_muscles(&exercises);
 
@@ -90,7 +90,7 @@ pub(super) async fn workout_details(
     let mut time = 0_u32;
     let mut volume = 0_f32;
 
-    let volume_by_session = SessionStep::get_volume_by_session(conn, name).await?;
+    let volume_by_session = SessionStep::get_volume_by_session(conn, id).await?;
 
     let mut session_list = Vec::new();
     for session in &sessions {
@@ -105,7 +105,8 @@ pub(super) async fn workout_details(
     }
 
     let details = WorkoutDetails {
-        name: name.to_string(),
+        id,
+        name: workout.name,
         avg_time: if !sessions.is_empty() {
             time / (sessions.len() as u32)
         } else {

@@ -5,9 +5,9 @@ import { WorkoutActionsMenu } from "../menus/WorkoutActionsMenu";
 
 type Props = {
     workout: WorkoutListItem;
-    onSelect: (name: string) => void;
-    onOpenEdit: (name: string) => void;
-    onOpenDuplicate: (name: string) => void;
+    onSelect: (id: number) => void;
+    onOpenEdit: (id: number) => void;
+    onOpenDuplicate: (id: number) => void;
 };
 
 export function WorkoutRow({
@@ -24,7 +24,7 @@ export function WorkoutRow({
             className={
                 "clickable-row" + (workout.enabled ? "" : " workout-disabled")
             }
-            onClick={() => onSelect(workout.name)}
+            onClick={() => onSelect(workout.id)}
         >
             <td className="text-left">
                 {workout.name.length > 0 && <span>{workout.name}</span>}
@@ -41,9 +41,9 @@ export function WorkoutRow({
             <td onClick={(e) => e.stopPropagation()}>
                 {workout.has_steps && (
                     <WorkoutActionsMenu
-                        workoutName={workout.name}
-                        onOpenEdit={() => onOpenEdit(workout.name)}
-                        onOpenDuplicate={() => onOpenDuplicate(workout.name)}
+                        workoutId={workout.id}
+                        onOpenEdit={() => onOpenEdit(workout.id)}
+                        onOpenDuplicate={() => onOpenDuplicate(workout.id)}
                         send={workout.enabled}
                         dense
                     />

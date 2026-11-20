@@ -7,6 +7,7 @@ use crate::{
         session_step::SessionStep,
         sport::Sport,
         sub_sport::SubSport,
+        workout::Workout,
         workout_step::{StepType, WorkoutStep},
     },
     fit::parser::{
@@ -175,11 +176,27 @@ impl TryFrom<FitParser> for Session {
             ad.max_hr = max_heart_rate;
         }
 
+        // A workout other than a strength one has no steps to keep, just its name: stored disabled,
+        // so the session still links to it
+        let workout_obj = workout_obj.or_else(|| {
+            session_data.workout.clone().map(|name| Workout {
+                id: 0,
+                name,
+                enabled: false,
+                notes: None,
+                connect_id: None,
+                connect_created_time: None,
+                steps: Vec::new(),
+                progression: true,
+            })
+        });
+
         Ok(Session {
             date: session_data.timestamp,
             name: session_data.workout.clone().unwrap_or_default(),
             workout_obj,
-            workout: session_data.workout,
+            // Set once the workout is stored, when the session is
+            workout: None,
             total_elapsed_time: session_data.total_elapsed_time,
             active_time: session_data.active_time,
             active_calories: session_data.total_calories - session_data.metabolic_calories,

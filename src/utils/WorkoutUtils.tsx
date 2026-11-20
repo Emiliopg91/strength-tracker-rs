@@ -149,7 +149,7 @@ export class WorkoutUtils {
 
     public static toWorkoutSteps(
         steps: WorkoutStepData[],
-        workout: string,
+        workout: number,
         toKg: (value: number) => number,
     ): WorkoutStep[] {
         const result: WorkoutStep[] = [];
@@ -160,7 +160,7 @@ export class WorkoutUtils {
     // Steps are numbered in order; a group's repeat goes right after its last wrapped step
     private static appendWorkoutSteps(
         steps: WorkoutStepData[],
-        workout: string,
+        workout: number,
         toKg: (value: number) => number,
         result: WorkoutStep[],
     ) {
@@ -201,7 +201,7 @@ export class WorkoutUtils {
 
     private static leafToWorkoutStep(
         leaf: LeafStep,
-        workout: string,
+        workout: number,
         idx: number,
         toKg: (value: number) => number,
     ): WorkoutStep {

@@ -237,21 +237,23 @@ export enum WeightUnit {
 	Pounds = "Pounds",
 }
 
-// From src-tauri/src/dao/workout.rs:24
+// From src-tauri/src/dao/workout.rs:25
 export interface Workout {
   connect_created_time: number | null;
   connect_id: string | null;
   enabled: boolean;
+  id: number;
   name: string;
   notes: string | null;
   steps: WorkoutStep[];
 }
 
-// From src-tauri/src/dto/workouts.rs:34
+// From src-tauri/src/dto/workouts.rs:35
 export interface WorkoutDetails {
   avg_time: number;
   avg_volume: number;
   enabled: boolean;
+  id: number;
   latest_session: number | null;
   name: string;
   notes: string | null;
@@ -268,19 +270,20 @@ export interface WorkoutListItem {
   avg_time: number;
   enabled: boolean;
   has_steps: boolean;
+  id: number;
   latest_session: number | null;
   name: string;
   sessions: number;
 }
 
-// From src-tauri/src/dto/workouts.rs:49
+// From src-tauri/src/dto/workouts.rs:51
 export interface WorkoutPlanListItem {
   date: number;
   session: number | null;
-  workout: string;
+  workout: number;
 }
 
-// From src-tauri/src/dto/workouts.rs:17
+// From src-tauri/src/dto/workouts.rs:18
 export interface WorkoutSession {
   date: number;
   time: number;
@@ -299,6 +302,6 @@ export interface WorkoutStep {
   reps: number | null | null;
   time: number | null | null;
   weight: number | null;
-  workout: string;
+  workout: number;
 }
 

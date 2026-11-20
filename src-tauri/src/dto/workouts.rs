@@ -4,6 +4,7 @@ use crate::dao::{session::Session, workout_planning::WorkoutPlanning, workout_st
 
 #[derive(Serialize)]
 pub struct WorkoutListItem {
+    pub id: u16,
     pub name: String,
     pub latest_session: Option<u32>,
     pub sessions: u32,
@@ -32,6 +33,7 @@ impl From<&Session> for WorkoutSession {
 
 #[derive(Serialize)]
 pub struct WorkoutDetails {
+    pub id: u16,
     pub name: String,
     pub latest_session: Option<u32>,
     pub session_count: u32,
@@ -48,7 +50,7 @@ pub struct WorkoutDetails {
 #[derive(Serialize)]
 pub struct WorkoutPlanListItem {
     pub date: u32,
-    pub workout: String,
+    pub workout: u16,
     pub session: Option<u32>,
 }
 
@@ -56,7 +58,7 @@ impl From<&WorkoutPlanning> for WorkoutPlanListItem {
     fn from(value: &WorkoutPlanning) -> Self {
         Self {
             date: value.date,
-            workout: value.workout.clone(),
+            workout: value.workout,
             session: value.session,
         }
     }

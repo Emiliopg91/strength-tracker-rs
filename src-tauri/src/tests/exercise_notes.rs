@@ -25,24 +25,28 @@ async fn program(db: &DatabasePool, name: &str, steps: &[((u16, u16), Option<&st
         .map(|(exercise, notes)| (*exercise, notes.map(str::to_string)))
         .collect();
     db.run_in_transaction(async move |tx| {
+        let mut workout = Workout {
+            id: 0,
+            name: name.clone(),
+            enabled: true,
+            notes: None,
+            steps: Vec::new(),
+            connect_id: None,
+            connect_created_time: None,
+            progression: true,
+        };
         WorkoutRepository::insert()
-            .item(&mut Workout {
-                name: name.clone(),
-                enabled: true,
-                notes: None,
-                steps: Vec::new(),
-                connect_id: None,
-                connect_created_time: None,
-            })
+            .item(&mut workout)
             .execute_in(tx)
             .await?;
+        let id = workout.id;
 
         let mut steps: Vec<_> = steps
             .iter()
             .enumerate()
             .map(|(idx, (exercise, notes))| {
                 WorkoutStep::active(
-                    &name,
+                    id,
                     idx as u16,
                     Intensity::ACTIVE,
                     Some(*exercise),
@@ -62,7 +66,7 @@ async fn program(db: &DatabasePool, name: &str, steps: &[((u16, u16), Option<&st
         for device in [WATCH, EDGE] {
             WorkoutDeviceRepository::insert()
                 .item(&mut WorkoutDevice {
-                    workout: name.clone(),
+                    workout: id,
                     device: device.to_string(),
                     pending: false,
                 })
@@ -102,7 +106,7 @@ async fn setup() -> DatabasePool {
 async fn disable(db: &DatabasePool, name: &str) {
     let name = name.to_string();
     db.run_in_transaction(async move |tx| {
-        let mut workout = WorkoutRepository::select_by_id_in(tx, &name)
+        let mut workout = WorkoutRepository::select_by_name_in(tx, &name)
             .await?
             .unwrap();
         workout.enabled = false;
@@ -116,7 +120,11 @@ async fn save_notes(db: &DatabasePool, exercise: (u16, u16), notes: Option<&str>
     let notes = notes.map(str::to_string);
     let mut workouts = db
         .run_in_transaction(async move |tx| {
-            Ok(Exercise::update_notes(tx, exercise.0, exercise.1, notes).await?)
+            let mut names = Vec::new();
+            for id in Exercise::update_notes(tx, exercise.0, exercise.1, notes).await? {
+                names.push(Workout::get(tx, id).await?.unwrap().name);
+            }
+            Ok(names)
         })
         .await
         .unwrap();
@@ -125,6 +133,7 @@ async fn save_notes(db: &DatabasePool, exercise: (u16, u16), notes: Option<&str>
 }
 
 async fn pending(db: &DatabasePool, workout: &str, device: &str) -> bool {
+    let workout = common::workout_id_in(db, workout).await;
     WorkoutDeviceRepository::select_by_id(db, workout, device)
         .await
         .unwrap()
@@ -234,7 +243,8 @@ async fn clearing_notes_queues_workouts() {
     program(&db, "Push", &[(BENCH, None)]).await;
     save_notes(&db, BENCH, Some("Elbows in")).await;
     db.run_in_transaction(async move |tx| {
-        let mut device = WorkoutDeviceRepository::select_by_id_in(tx, "Push", WATCH)
+        let push = common::workout_id(tx, "Push").await;
+        let mut device = WorkoutDeviceRepository::select_by_id_in(tx, push, WATCH)
             .await?
             .unwrap();
         device.pending = false;

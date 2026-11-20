@@ -16,13 +16,13 @@ use crate::dao::workout::{self, Workout, WorkoutRepository};
 #[index("session", (session))]
 pub struct WorkoutPlanning {
     pub date: u32,
-    pub workout: String,
+    pub workout: u16,
     /// Session that fulfilled this plan; set to NULL by the DB if that session is deleted
     pub session: Option<u32>,
     pub connect_id: Option<String>,
 
     #[allow(dead_code)]
-    #[relationship((workout, workout::entity::columns::NAME))]
+    #[relationship((workout, workout::entity::columns::ID))]
     pub workout_obj: Option<Workout>,
 }
 
@@ -30,7 +30,7 @@ impl WorkoutPlanning {
     /// Plan schedules that still have to be uploaded to Connect.
     pub async fn get_pending_connect(
         conn: &rusqlite_orm::rusqlite::Connection,
-    ) -> rusqlite_orm::errors::Result<Vec<(u32, String)>> {
+    ) -> rusqlite_orm::errors::Result<Vec<(u32, u16)>> {
         Ok(WorkoutPlanningRepository::select()
             .where_(Where::And(vec![Where::Null(entity::columns::CONNECT_ID)]))
             .order_by(OrderBy::Asc(entity::columns::DATE))
@@ -62,16 +62,16 @@ impl WorkoutPlanning {
         }
 
         // Their workouts in a single query, instead of one per plan as the relationship fetcher would
-        let names: HashSet<&str> = plans.iter().map(|plan| plan.workout.as_str()).collect();
-        let workouts: HashMap<String, Workout> = WorkoutRepository::select()
+        let ids: HashSet<u16> = plans.iter().map(|plan| plan.workout).collect();
+        let workouts: HashMap<u16, Workout> = WorkoutRepository::select()
             .where_(Where::In(
-                workout::entity::columns::NAME,
-                names.into_iter().map(Into::into).collect(),
+                workout::entity::columns::ID,
+                ids.into_iter().map(Into::into).collect(),
             ))
             .fetch_in(conn)
             .await?
             .into_iter()
-            .map(|workout| (workout.name.clone(), workout))
+            .map(|workout| (workout.id, workout))
             .collect();
         for plan in &mut plans {
             plan.workout_obj = workouts.get(&plan.workout).cloned();
@@ -88,7 +88,7 @@ impl WorkoutPlanning {
     pub async fn get(
         conn: &Connection,
         date: u32,
-        workout: &str,
+        workout: u16,
     ) -> rusqlite_orm::errors::Result<Option<WorkoutPlanning>> {
         WorkoutPlanningRepository::select_by_id_in(conn, date, workout).await
     }
@@ -112,11 +112,11 @@ impl WorkoutPlanning {
     pub async fn insert(
         conn: &Connection,
         date: u32,
-        workout: &str,
+        workout: u16,
     ) -> rusqlite_orm::errors::Result<()> {
         let mut item = WorkoutPlanning {
             date,
-            workout: workout.to_string(),
+            workout,
             workout_obj: None,
             session: None,
             connect_id: None,
@@ -133,7 +133,7 @@ impl WorkoutPlanning {
     pub async fn set_schedule_id(
         conn: &Connection,
         date: u32,
-        workout: &str,
+        workout: u16,
         schedule_id: &str,
     ) -> rusqlite_orm::errors::Result<()> {
         WorkoutPlanningRepository::update()

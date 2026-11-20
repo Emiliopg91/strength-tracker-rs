@@ -12,17 +12,19 @@ import {
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import { I18nSettingsContext } from "@/context/I18nSettingsContext";
+import { WorkoutListItem } from "@/utils/backend/models";
 
 type Props = {
     day: Date;
-    workouts: string[];
-    onAdd: (workout: string) => void;
+    workouts: WorkoutListItem[];
+    onAdd: (workout: number) => void;
     onClose: () => void;
 };
 
 export function PlanWorkoutModal({ day, workouts, onAdd, onClose }: Props) {
     const { translate, formatDate } = useContext(I18nSettingsContext);
-    const [workout, setWorkout] = useState(workouts[0] ?? "");
+    // 0 when there is none: ids start at 1
+    const [workout, setWorkout] = useState(workouts[0]?.id ?? 0);
 
     return (
         <Dialog open={true} onClose={onClose} fullWidth maxWidth="xs">
@@ -45,11 +47,11 @@ export function PlanWorkoutModal({ day, workouts, onAdd, onClose }: Props) {
                         labelId="plan-workout-label"
                         label={translate("workout")}
                         value={workout}
-                        onChange={(e) => setWorkout(e.target.value)}
+                        onChange={(e) => setWorkout(Number(e.target.value))}
                     >
-                        {workouts.map((name) => (
-                            <MenuItem key={name} value={name}>
-                                {name}
+                        {workouts.map((w) => (
+                            <MenuItem key={w.id} value={w.id}>
+                                {w.name}
                             </MenuItem>
                         ))}
                     </Select>
@@ -58,7 +60,7 @@ export function PlanWorkoutModal({ day, workouts, onAdd, onClose }: Props) {
                 <Button
                     variant="contained"
                     className="full-width-button"
-                    disabled={workout == ""}
+                    disabled={workout == 0}
                     onClick={() => onAdd(workout)}
                 >
                     {translate("add")}

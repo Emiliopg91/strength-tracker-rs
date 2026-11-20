@@ -73,8 +73,8 @@ fn record_messages(data: &SessionData, start: u32, elapsed: u32) -> Vec<Message>
 
 /// One step per set, as the sets don't keep which step of the original workout they came from
 /// (and that workout may have changed since). The parser reads the targets back from these steps.
-fn workout_step(name: &str, idx: u16, step: &SessionStep) -> WorkoutStep {
-    let mut wkt_step = WorkoutStep::new(name, idx, step.kind.clone());
+fn workout_step(workout: u16, idx: u16, step: &SessionStep) -> WorkoutStep {
+    let mut wkt_step = WorkoutStep::new(workout, idx, step.kind.clone());
     wkt_step.ex_cat = step.ex_cat;
     wkt_step.ex_id = step.ex_id;
     wkt_step.weight = step.weight_ref;
@@ -185,7 +185,9 @@ fn workout_messages(
         return Ok(vec![]);
     }
 
+    let workout_id = session.workout.unwrap_or_default();
     let workout = Workout {
+        id: workout_id,
         name: session.name.clone(),
         enabled: true,
         notes: session.workout_obj.as_ref().and_then(|w| w.notes.clone()),
@@ -200,8 +202,9 @@ fn workout_messages(
         steps: sorted_steps(session)
             .into_iter()
             .enumerate()
-            .map(|(idx, step)| workout_step(&session.name, idx as u16, step))
+            .map(|(idx, step)| workout_step(workout_id, idx as u16, step))
             .collect(),
+        progression: true,
     };
 
     let mut messages = workout.to_fit_messages(lang, weight_unit)?;

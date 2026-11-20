@@ -131,7 +131,6 @@ async fn session_roundtrip_with_relationships() {
     let db = common::test_db().await;
 
     let mut session = common::session(1_700_000_000);
-    session.workout = Some("Leg day".to_string());
     session.steps = vec![common::set(1_700_000_000, 0, (28, 0), 5, 100.0)];
     session.laps = vec![common::lap(1_700_000_000, 0, Some((1, 2)))];
     let mut data = common::additional_data(1_700_000_000);
@@ -139,19 +138,23 @@ async fn session_roundtrip_with_relationships() {
     data.distance = Some(1_000.0);
     session.data = Some(data);
 
-    let tx_session = session.clone();
+    let mut tx_session = session.clone();
     db.run_in_transaction(async move |tx| {
+        let mut workout = crate::dao::workout::Workout {
+            id: 0,
+            name: "Leg day".to_string(),
+            enabled: true,
+            notes: Some(String::new()),
+            steps: Vec::new(),
+            connect_id: None,
+            connect_created_time: None,
+            progression: true,
+        };
         WorkoutRepository::insert()
-            .item(&mut crate::dao::workout::Workout {
-                name: "Leg day".to_string(),
-                enabled: true,
-                notes: Some(String::new()),
-                steps: Vec::new(),
-                connect_id: None,
-                connect_created_time: None,
-            })
+            .item(&mut workout)
             .execute_in(tx)
             .await?;
+        tx_session.workout = Some(workout.id);
         common::insert_session(tx, tx_session).await;
         Ok(())
     })
@@ -180,7 +183,9 @@ async fn session_roundtrip_with_relationships() {
     let data = stored.data.unwrap();
     assert_eq!(data.notes.as_deref(), Some("Felt strong"));
     assert_eq!(data.distance, Some(1_000.0));
-    assert!(stored.workout_obj.unwrap().enabled);
+    let workout = stored.workout_obj.unwrap();
+    assert!(workout.enabled);
+    assert_eq!(workout.name, "Leg day");
 }
 
 #[tokio::test]
@@ -466,10 +471,8 @@ async fn migration_28_drops_chart_flag_and_cascades_workout_device() {
         entries.sort();
         entries
     };
-    assert_eq!(
-        entries(&db).await,
-        [("a".to_string(), true), ("b".to_string(), false)]
-    );
+    // Workouts are numbered by name when they get their id
+    assert_eq!(entries(&db).await, [(1, true), (2, false)]);
 
     let has_chart_flag: bool = db
         .run_in_connection(async move |conn| {
@@ -490,7 +493,7 @@ async fn migration_28_drops_chart_flag_and_cascades_workout_device() {
         .execute(&db)
         .await
         .unwrap();
-    assert_eq!(entries(&db).await, [("b".to_string(), false)]);
+    assert_eq!(entries(&db).await, [(2, false)]);
 }
 
 #[tokio::test]

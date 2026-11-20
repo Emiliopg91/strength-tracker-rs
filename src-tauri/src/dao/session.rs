@@ -35,7 +35,7 @@ pub struct Session {
     pub active_calories: u16,
     pub training_load: u16,
     pub device: Option<String>,
-    pub workout: Option<String>,
+    pub workout: Option<u16>,
     pub sport: u8,
     pub sub_sport: u8,
     pub connect_id: Option<String>,
@@ -55,7 +55,7 @@ pub struct Session {
     #[relationship((sport, sub_sport::entity::columns::SPORT),(sub_sport, sub_sport::entity::columns::ID))]
     pub sub_sport_obj: Option<SubSport>,
 
-    #[relationship((workout, workout::entity::columns::NAME))]
+    #[relationship((workout, workout::entity::columns::ID))]
     pub workout_obj: Option<Workout>,
 }
 
@@ -187,17 +187,16 @@ impl Session {
             .await
     }
 
-    /// Sessions named `name`, newest first.
-    pub async fn get_by_name(
+    /// Sessions recorded following the workout `workout`, newest first.
+    pub async fn get_by_workout(
         conn: &Connection,
-        name: &str,
+        workout: u16,
     ) -> rusqlite_orm::errors::Result<Vec<Session>> {
-        SessionRepository::select_by_name_in(
-            conn,
-            name,
-            Some(&[OrderBy::Desc(entity::columns::DATE)]),
-        )
-        .await
+        SessionRepository::select()
+            .where_(Where::Eq(entity::columns::WORKOUT, workout.into()))
+            .order_by(OrderBy::Desc(entity::columns::DATE))
+            .fetch_in(conn)
+            .await
     }
 
     /// The session with its sets, laps, additional data and workout, `None` if it doesn't exist.
@@ -260,13 +259,14 @@ impl Session {
     }
 
     /// Inserts a session with its sets, laps and additional data, creating its workout (and
-    /// steps, if missing) when the session references one, and links it to the plan it fulfils.
-    /// The workout is only stored if not in `handled_workouts` yet, so a batch must be inserted
-    /// newest first. Child collections are restored on the session after insertion.
+    /// steps, if missing) when it carries one in `workout_obj`, whose id it then takes, and links
+    /// it to the plan it fulfils. A session without `workout_obj` keeps its `workout` as is. The
+    /// workout is only stored if not in `handled_workouts` (ids by name) yet, so a batch must be
+    /// inserted newest first. Child collections are restored on the session after insertion.
     pub async fn insert_full(
         tx: &Transaction<'_>,
         session: &mut Session,
-        handled_workouts: &mut HashSet<String>,
+        handled_workouts: &mut HashMap<String, u16>,
     ) -> rusqlite_orm::errors::Result<()> {
         let mut series = std::mem::take(&mut session.steps);
         let mut laps = std::mem::take(&mut session.laps);
@@ -274,32 +274,16 @@ impl Session {
 
         // Once per batch: the caller hands the sessions newest first, so the notes of the latest
         // session of each workout win without updating them again for every older one
-        if let Some(workout) = &session.workout_obj
-            && handled_workouts.insert(workout.name.clone())
-        {
-            let updated = WorkoutRepository::update()
-                .set(workout_cols::NOTES, workout.notes.clone().into())
-                .where_(Where::Eq(workout_cols::NAME, workout.name.clone().into()))
-                .execute_in(tx)
-                .await?;
-            if updated == 0 {
-                WorkoutRepository::insert()
-                    .or_ignore()
-                    .item(&mut Workout {
-                        name: workout.name.clone(),
-                        enabled: true,
-                        notes: workout.notes.clone(),
-                        steps: Vec::new(),
-                        connect_id: None,
-                        connect_created_time: None,
-                    })
-                    .execute_in(tx)
-                    .await?;
-            }
-
-            if WorkoutStepRepository::count_by_workout_in(tx, &workout.name).await? == 0 {
-                WorkoutStep::insert_all(tx, &mut workout.steps.clone()).await?;
-            }
+        if let Some(workout) = &session.workout_obj {
+            let id = match handled_workouts.get(&workout.name) {
+                Some(id) => *id,
+                None => {
+                    let id = Self::store_workout(tx, workout).await?;
+                    handled_workouts.insert(workout.name.clone(), id);
+                    id
+                }
+            };
+            session.workout = Some(id);
         }
 
         SessionRepository::insert()
@@ -330,7 +314,7 @@ impl Session {
             insert.execute_in(tx).await?;
         }
 
-        if let Some(workout) = session.workout.clone()
+        if let Some(workout) = session.workout
             && let Some(plan_date) = local_midnight(session.date as i64)
         {
             WorkoutPlanningRepository::update()
@@ -349,5 +333,55 @@ impl Session {
         session.data = add_data;
 
         Ok(())
+    }
+
+    /// Stores the workout recorded with a session: updates the notes of the stored one with its
+    /// name, or creates it, and stores its steps if it has none yet. Only workouts read with their
+    /// steps carry notes. Returns its id.
+    async fn store_workout(
+        tx: &Transaction<'_>,
+        workout: &Workout,
+    ) -> rusqlite_orm::errors::Result<u16> {
+        let id = match Workout::get_id(tx, &workout.name).await? {
+            Some(id) => {
+                if !workout.steps.is_empty() {
+                    WorkoutRepository::update()
+                        .set(workout_cols::NOTES, workout.notes.clone().into())
+                        .where_(Where::Eq(workout_cols::ID, id.into()))
+                        .execute_in(tx)
+                        .await?;
+                }
+                id
+            }
+            None => {
+                let mut item = Workout {
+                    id: 0,
+                    name: workout.name.clone(),
+                    enabled: workout.enabled,
+                    notes: workout.notes.clone(),
+                    steps: Vec::new(),
+                    connect_id: None,
+                    connect_created_time: None,
+                    progression: true,
+                };
+                WorkoutRepository::insert()
+                    .item(&mut item)
+                    .execute_in(tx)
+                    .await?;
+                item.id
+            }
+        };
+
+        if !workout.steps.is_empty()
+            && WorkoutStepRepository::count_by_workout_in(tx, id).await? == 0
+        {
+            let mut steps = workout.steps.clone();
+            for step in &mut steps {
+                step.workout = id;
+            }
+            WorkoutStep::insert_all(tx, &mut steps).await?;
+        }
+
+        Ok(id)
     }
 }

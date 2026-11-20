@@ -21,13 +21,14 @@ use crate::{
 
 fn written_intensity(kind: Intensity) -> Intensity {
     let workout = Workout {
+        id: 0,
         name: "Push".to_string(),
         enabled: true,
         notes: None,
         connect_id: None,
         connect_created_time: None,
         steps: vec![WorkoutStep::active(
-            "Push",
+            0,
             0,
             kind,
             Some((0, 1)),
@@ -36,6 +37,7 @@ fn written_intensity(kind: Intensity) -> Intensity {
             None,
             None,
         )],
+        progression: true,
     };
 
     let messages = workout
@@ -69,13 +71,14 @@ fn step_kinds_survive_a_fit_round_trip() {
 #[test]
 fn step_without_exercise_writes_no_exercise_category() {
     let workout = Workout {
+        id: 0,
         name: "Push".to_string(),
         enabled: true,
         notes: None,
         connect_id: None,
         connect_created_time: None,
         steps: vec![WorkoutStep::active(
-            "Push",
+            0,
             0,
             Intensity::WARMUP,
             None,
@@ -84,6 +87,7 @@ fn step_without_exercise_writes_no_exercise_category() {
             None,
             None,
         )],
+        progression: true,
     };
 
     let messages = workout
@@ -275,12 +279,14 @@ fn session_set_without_duration_keeps_it_empty() {
 #[test]
 fn step_time_is_in_milliseconds_only_inside_the_fit_file() {
     let workout = Workout {
+        id: 0,
         name: "Push".to_string(),
         enabled: true,
         notes: None,
         connect_id: None,
         connect_created_time: None,
-        steps: vec![WorkoutStep::rest("Push", 0, Some(90), None)],
+        steps: vec![WorkoutStep::rest(0, 0, Some(90), None)],
+        progression: true,
     };
     let messages = workout
         .to_fit_messages(Languages::English, WeightUnit::Kilograms)
@@ -332,12 +338,14 @@ fn generic_exercise_survives_a_fit_round_trip() {
 
 fn workout_created(connect_created_time: Option<u32>) -> i64 {
     let workout = Workout {
+        id: 0,
         name: "Push".to_string(),
         enabled: true,
         notes: None,
         connect_id: Some("1746212841".to_string()),
         connect_created_time,
         steps: vec![],
+        progression: true,
     };
 
     let id = FitWriter::from(&workout).file_id();
@@ -382,16 +390,18 @@ fn plan(
 ) -> WorkoutPlanning {
     WorkoutPlanning {
         date,
-        workout: "Progresion 2 - Torso".to_string(),
+        workout: 1,
         session,
         connect_id: None,
         workout_obj: Some(Workout {
+            id: 1,
             name: "Progresion 2 - Torso".to_string(),
             enabled: true,
             notes: None,
             connect_id: connect_id.map(str::to_string),
             connect_created_time: created,
             steps: vec![],
+            progression: true,
         }),
     }
 }
@@ -465,12 +475,14 @@ fn schedule_file_key_follows_its_content() {
 fn written_training_file(connect_created_time: Option<u32>) -> (Session, mesgdef::TrainingFile) {
     let mut session = parse_fixture("strength_1");
     session.workout_obj = Some(Workout {
+        id: 0,
         name: session.name.clone(),
         enabled: true,
         notes: None,
         connect_id: Some("1746212841".to_string()),
         connect_created_time,
         steps: vec![],
+        progression: true,
     });
     let messages = session
         .to_fit_messages(Languages::English, WeightUnit::Kilograms)

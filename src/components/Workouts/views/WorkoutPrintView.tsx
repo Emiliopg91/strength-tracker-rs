@@ -7,11 +7,12 @@ import { WorkoutStructure } from "./WorkoutStructure";
 import "@/styles/Workouts/WorkoutPrintView.css";
 
 type Props = {
-    workout: string;
+    /** Id of the workout to print. */
+    workout: number;
 };
 
 export default function WorkoutPrintView({
-    workout: workout_name,
+    workout: workoutId,
 }: Props): JSX.Element {
     const { appReady } = useContext(AppContext);
     const [workout, setWorkout] = useState<WorkoutDetails>();
@@ -19,9 +20,12 @@ export default function WorkoutPrintView({
 
     useEffect(() => {
         if (!appReady) return;
-        BackendClient.getWorkoutDetails(workout_name).then(setWorkout);
+        BackendClient.getWorkoutDetails(workoutId).then((details) => {
+            document.title = details.name;
+            setWorkout(details);
+        });
         BackendClient.getExercises().then(setExercises);
-    }, [appReady, workout_name]);
+    }, [appReady, workoutId]);
 
     useEffect(() => {
         if (!workout || !exercises) return;

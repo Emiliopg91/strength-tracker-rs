@@ -72,22 +72,25 @@ async fn log_session(db: &DatabasePool, date: u32, exercise: (u16, u16), sets: &
 async fn program(db: &DatabasePool, exercise: (u16, u16), weight: f32, reps: u16) {
     let name = format!("Plan {}-{}", exercise.0, exercise.1);
     db.run_in_transaction(async move |tx| {
+        let mut workout = Workout {
+            id: 0,
+            name: name.clone(),
+            enabled: true,
+            notes: None,
+            steps: Vec::new(),
+            connect_id: None,
+            connect_created_time: None,
+            progression: true,
+        };
         WorkoutRepository::insert()
-            .item(&mut Workout {
-                name: name.clone(),
-                enabled: true,
-                notes: None,
-                steps: Vec::new(),
-                connect_id: None,
-                connect_created_time: None,
-            })
+            .item(&mut workout)
             .execute_in(tx)
             .await?;
 
         let mut steps: Vec<_> = (0..3)
             .map(|idx| {
                 WorkoutStep::active(
-                    &name,
+                    workout.id,
                     idx,
                     Intensity::ACTIVE,
                     Some(exercise),
@@ -399,9 +402,10 @@ async fn programmed_warmup_alone_does_not_trigger_the_suggestion() {
     log_session(&db, 1, BENCH, &[(10, 100.0), (10, 100.0)]).await;
     program(&db, BENCH, 100.0, 12).await;
     db.run_in_transaction(async move |tx| {
+        let plan = common::workout_id(tx, "Plan 0-1").await;
         WorkoutStepRepository::insert()
             .item(&mut WorkoutStep::active(
-                "Plan 0-1",
+                plan,
                 3,
                 Intensity::WARMUP,
                 Some(BENCH),

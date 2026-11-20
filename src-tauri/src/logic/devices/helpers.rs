@@ -81,13 +81,13 @@ pub(crate) fn start_device_watcher<R: Runtime>(app: &AppHandle<R>) {
 /// re-sent to it. An existing entry is kept as it is.
 pub(crate) async fn register_workout_on_device<R: Runtime>(
     app: &AppHandle<R>,
-    workout: &str,
+    workout: u16,
     serial: &str,
 ) -> Result<usize, DatabaseError> {
-    let (workout, serial) = (workout.to_string(), serial.to_string());
+    let serial = serial.to_string();
     pool(app)
         .run_in_connection(async move |conn| {
-            Ok(WorkoutDevice::insert_or_ignore(conn, &workout, &serial).await?)
+            Ok(WorkoutDevice::insert_or_ignore(conn, workout, &serial).await?)
         })
         .await
 }
@@ -96,24 +96,39 @@ pub(crate) async fn register_workout_on_device<R: Runtime>(
 /// replacing any existing entry.
 pub(crate) async fn set_workout_on_device<R: Runtime>(
     app: &AppHandle<R>,
-    workout: &str,
+    workout: u16,
     serial: &str,
     pending: bool,
 ) -> Result<usize, DatabaseError> {
-    let (workout, serial) = (workout.to_string(), serial.to_string());
+    let serial = serial.to_string();
     pool(app)
         .run_in_connection(async move |conn| {
-            Ok(WorkoutDevice::insert_or_replace(conn, &workout, &serial, pending).await?)
+            Ok(WorkoutDevice::insert_or_replace(conn, workout, &serial, pending).await?)
         })
         .await
 }
 
+/// Name of the workout `id`, for logs and notifications; its id if it can't be read.
+pub(crate) async fn workout_name<R: Runtime>(app: &AppHandle<R>, id: u16) -> String {
+    pool(app)
+        .run_in_connection(async move |conn| Ok(Workout::get(conn, id).await?))
+        .await
+        .ok()
+        .flatten()
+        .map_or_else(|| id.to_string(), |workout| workout.name)
+}
+
 /// Takes the workout off the queue of the device `serial`, logging a failure.
-async fn clear_workout_pending<R: Runtime>(app: &AppHandle<R>, workout: &str, serial: &str) {
-    let (wkt, device) = (workout.to_string(), serial.to_string());
+async fn clear_workout_pending<R: Runtime>(
+    app: &AppHandle<R>,
+    workout: &str,
+    id: u16,
+    serial: &str,
+) {
+    let device = serial.to_string();
     if let Err(e) = pool(app)
         .run_in_connection(async move |conn| {
-            Ok(WorkoutDevice::clear_pending(conn, &wkt, &device).await?)
+            Ok(WorkoutDevice::clear_pending(conn, id, &device).await?)
         })
         .await
     {
@@ -257,7 +272,7 @@ pub(crate) async fn push_pending_to_usb<R: Runtime>(app: &AppHandle<R>) {
 /// so call it after `push_pending_to_usb` for USB to take precedence.
 pub(crate) async fn send_enabled_workout_to_connect_devices<R: Runtime>(
     app: &AppHandle<R>,
-    workout: &str,
+    id: u16,
 ) {
     if app
         .state::<ConnectLock>()
@@ -271,27 +286,30 @@ pub(crate) async fn send_enabled_workout_to_connect_devices<R: Runtime>(
 
     // Held for the whole run: a waiting caller re-reads the queue after this one has cleared it
     let _guard = PUSH_LOCK.lock().await;
-    let name = workout.to_string();
     let serials = match pool(app)
         .run_in_connection(async move |conn| {
-            Ok(WorkoutDevice::get_pending_connect_devices(conn, &name).await?)
+            Ok(WorkoutDevice::get_pending_connect_devices(conn, id).await?)
         })
         .await
     {
         Ok(serials) => serials,
         Err(e) => {
-            error!("Error fetching Connect devices waiting for workout '{workout}': {e}");
+            error!("Error fetching Connect devices waiting for workout {id}: {e}");
             return;
         }
     };
+    if serials.is_empty() {
+        return;
+    }
 
+    let workout = workout_name(app, id).await;
     let lang = language(app);
     for serial in serials {
-        if let Err(e) = queue_workout_on_connect(app, workout, &serial).await {
+        if let Err(e) = queue_workout_on_connect(app, id, &serial).await {
             error!("Error pushing pending workout '{workout}' to {serial}: {e}");
             continue;
         }
-        finish_push(app, workout, &serial, lang).await;
+        finish_push(app, &workout, id, &serial, lang).await;
     }
 }
 
@@ -329,12 +347,12 @@ pub(super) async fn push_pending_workouts<R: Runtime>(app: &AppHandle<R>, serial
     }
 
     let (lang, weight_unit) = fit_settings(app);
-    for workout in pending {
-        if let Err(e) = send_workout_to_device(app, lang, weight_unit, &workout, &serial).await {
+    for (id, workout) in pending {
+        if let Err(e) = send_workout_to_device(app, lang, weight_unit, id, &serial).await {
             error!("Error pushing pending workout '{workout}' to {serial}: {e}");
             continue;
         }
-        finish_push(app, &workout, &serial, lang).await;
+        finish_push(app, &workout, id, &serial, lang).await;
     }
 }
 
@@ -342,10 +360,11 @@ pub(super) async fn push_pending_workouts<R: Runtime>(app: &AppHandle<R>, serial
 pub(super) async fn finish_push<R: Runtime>(
     app: &AppHandle<R>,
     workout: &str,
+    id: u16,
     serial: &str,
     lang: Languages,
 ) {
-    clear_workout_pending(app, workout, serial).await;
+    clear_workout_pending(app, workout, id, serial).await;
     notify_workout_sent(workout, serial, lang);
 }
 
@@ -372,10 +391,10 @@ pub(super) async fn delete_pending_workouts<R: Runtime>(app: &AppHandle<R>, seri
     }
 
     let lang = language(app);
-    for workout in pending {
+    for (id, workout) in pending {
         match delete_workout_from_device(app, &workout, &serial).await {
             Ok(deleted) => {
-                clear_workout_pending(app, &workout, &serial).await;
+                clear_workout_pending(app, &workout, id, &serial).await;
                 if deleted {
                     info!("Workout '{workout}' deleted from device {serial}");
                     show_notification(NotificationDefinition {
@@ -428,18 +447,22 @@ pub(super) async fn store_pending_workouts<R: Runtime>(
         }
     }
 
-    let mut workout_names: Vec<String> = Vec::new();
+    let mut workout_ids: Vec<u16> = Vec::new();
     for (mut workout, file) in workouts_to_insert {
         let name = workout.name.clone();
         let res = pool(app)
-            .run_in_transaction(async move |tx| Ok(Workout::store_steps(tx, &mut workout).await?))
+            .run_in_transaction(async move |tx| {
+                Workout::store_steps(tx, &mut workout).await?;
+                Ok(workout.id)
+            })
             .await;
 
-        if let Err(e) = res {
-            error!("Error storing workout {} from {}: {}", name, serial, e);
-            failed.push(file);
-        } else {
-            workout_names.push(name);
+        match res {
+            Ok(id) => workout_ids.push(id),
+            Err(e) => {
+                error!("Error storing workout {} from {}: {}", name, serial, e);
+                failed.push(file);
+            }
         }
     }
 
@@ -450,8 +473,8 @@ pub(super) async fn store_pending_workouts<R: Runtime>(
     )
     .await;
 
-    if !workout_names.is_empty() {
-        let _ = app.emit("added_workout_steps", workout_names);
+    if !workout_ids.is_empty() {
+        let _ = app.emit("added_workout_steps", workout_ids);
     }
 }
 
@@ -490,15 +513,14 @@ pub(super) async fn send_workout_to_device<R: Runtime>(
     app: &AppHandle<R>,
     lang: Languages,
     weight_unit: WeightUnit,
-    workout: &str,
+    id: u16,
     serial: &str,
 ) -> Result<(), String> {
-    let name = workout.to_string();
     let workout = pool(app)
-        .run_in_connection(async move |conn| Ok(Workout::get_for_device(conn, &name).await?))
+        .run_in_connection(async move |conn| Ok(Workout::get_for_device(conn, id).await?))
         .await
         .map_err(|e| e.to_string())?
-        .ok_or_else(|| format!("Workout {workout} not found"))?;
+        .ok_or_else(|| format!("Workout {id} not found"))?;
 
     // File name is kept as-is since it becomes the workout file name on the device
     let file_name = workout.get_workout_file_name();
@@ -625,11 +647,11 @@ async fn upload_missing_workouts<R: Runtime>(
             return;
         }
     };
-    let mut missing: Vec<&str> = plans
+    let mut missing: Vec<(u16, &str)> = plans
         .iter()
         .filter_map(|p| p.workout_obj.as_ref())
-        .filter(|w| w.file_created().is_some() && !on_device.contains(&w.name))
-        .map(|w| w.name.as_str())
+        .filter(|w| w.file_created().is_some() && !on_device.contains(&w.id))
+        .map(|w| (w.id, w.name.as_str()))
         .collect();
     missing.sort_unstable();
     missing.dedup();
@@ -638,14 +660,14 @@ async fn upload_missing_workouts<R: Runtime>(
     }
 
     let (lang, weight_unit) = fit_settings(app);
-    for workout in missing {
+    for (id, workout) in missing {
         info!("Planned workout '{workout}' missing on {serial}, uploading it");
-        if let Err(e) = send_workout_to_device(app, lang, weight_unit, workout, serial).await {
+        if let Err(e) = send_workout_to_device(app, lang, weight_unit, id, serial).await {
             error!("Error uploading planned workout '{workout}' to {serial}: {e}");
             continue;
         }
 
-        if let Err(e) = set_workout_on_device(app, workout, serial, false).await {
+        if let Err(e) = set_workout_on_device(app, id, serial, false).await {
             error!("Error registering workout '{workout}' for device {serial}: {e}");
         }
     }

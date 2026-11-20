@@ -70,19 +70,18 @@ export function WorkoutsList() {
     );
 
     const isPastDay = selectedDay < startOfDay(new Date(currentDay));
-    const availableWorkouts = workouts
-        .filter(
-            (w) =>
-                w.enabled &&
-                !plans.some(
-                    (p) =>
-                        p.workout == w.name &&
-                        isSameDay(new Date(p.date * 1000), selectedDay),
-                ),
-        )
-        .map((w) => w.name);
+    const availableWorkouts = workouts.filter(
+        (w) =>
+            w.enabled &&
+            !plans.some(
+                (p) =>
+                    p.workout == w.id &&
+                    isSameDay(new Date(p.date * 1000), selectedDay),
+            ),
+    );
+    const workoutNames = new Map(workouts.map((w) => [w.id, w.name]));
 
-    const addPlan = (workout: string) => {
+    const addPlan = (workout: number) => {
         withLoading(
             BackendClient.addPlannedWorkout(
                 selectedDay.getTime() / 1000,
@@ -107,6 +106,7 @@ export function WorkoutsList() {
         } else {
             if (workout === undefined) {
                 const workout: WorkoutDetails = {
+                    id: 0,
                     name: "",
                     avg_time: 0,
                     avg_volume: 0,
@@ -117,7 +117,7 @@ export function WorkoutsList() {
                     notes: null,
                     steps: WorkoutUtils.toWorkoutSteps(
                         [structuredClone(WorkoutUtils.DEFAULT_GROUP)],
-                        "",
+                        0,
                         toKg,
                     ),
                     primary_muscles: [],
@@ -125,42 +125,46 @@ export function WorkoutsList() {
                 };
                 setWorkoutEdit(workout);
             } else {
-                workout.name = workout.name + " - 2";
-                setWorkoutEdit(workout);
+                // A duplicate is a new workout, so it gets an id of its own when saved
+                setWorkoutEdit({
+                    ...workout,
+                    id: 0,
+                    name: workout.name + " - 2",
+                });
             }
         }
         setWorkoutDetails(undefined);
     };
 
-    useBackendEvent(BackendListener.onAddedWorkoutSteps, (names) => {
+    useBackendEvent(BackendListener.onAddedWorkoutSteps, (ids) => {
         setWorkouts((prev) =>
             prev.map((w) =>
-                names.includes(w.name) ? { ...w, has_steps: true } : w,
+                ids.includes(w.id) ? { ...w, has_steps: true } : w,
             ),
         );
     });
 
-    const getWorkoutDetails = (name: string) => {
-        withLoading(BackendClient.getWorkoutDetails(name)).then((details) => {
+    const getWorkoutDetails = (id: number) => {
+        withLoading(BackendClient.getWorkoutDetails(id)).then((details) => {
             setWorkoutDetails(details);
         });
     };
 
-    const openEditByName = (name: string) => {
-        withLoading(BackendClient.getWorkoutDetails(name)).then((workout) =>
+    const openEditById = (id: number) => {
+        withLoading(BackendClient.getWorkoutDetails(id)).then((workout) =>
             openEdit(workout, true),
         );
     };
 
-    const openDuplicateByName = (name: string) => {
-        withLoading(BackendClient.getWorkoutDetails(name)).then((workout) => {
+    const openDuplicateById = (id: number) => {
+        withLoading(BackendClient.getWorkoutDetails(id)).then((workout) => {
             openEdit(workout, false);
         });
     };
 
-    const setWorkoutState = (name: string, status: boolean) => {
+    const setWorkoutState = (id: number, status: boolean) => {
         const res = workouts.map((w) => {
-            if (w.name == name) {
+            if (w.id == id) {
                 return { ...w, enabled: status };
             } else {
                 return { ...w };
@@ -177,11 +181,11 @@ export function WorkoutsList() {
         }
     });
 
-    const changeEnabled = (workout: string, enabled: boolean) => {
+    const changeEnabled = (workout: number, enabled: boolean) => {
         setWorkouts((prev) =>
             sortWorkouts(
                 prev.map((wk) => {
-                    if (wk.name == workout) {
+                    if (wk.id == workout) {
                         wk.enabled = enabled;
                     }
                     return wk;
@@ -218,11 +222,11 @@ export function WorkoutsList() {
                     <tbody>
                         {filteredWorkouts.map((workout) => (
                             <WorkoutRow
-                                key={workout.name}
+                                key={workout.id}
                                 workout={workout}
                                 onSelect={getWorkoutDetails}
-                                onOpenEdit={openEditByName}
-                                onOpenDuplicate={openDuplicateByName}
+                                onOpenEdit={openEditById}
+                                onOpenDuplicate={openDuplicateById}
                             />
                         ))}
                     </tbody>
@@ -238,7 +242,7 @@ export function WorkoutsList() {
                         onUpdate={setWorkoutState}
                         onOpenEdit={(workout) => openEdit(workout, true)}
                         onEnabledChange={(enabled) =>
-                            changeEnabled(workoutDetails.name, enabled)
+                            changeEnabled(workoutDetails.id, enabled)
                         }
                     />
                 )}
@@ -281,6 +285,7 @@ export function WorkoutsList() {
 
             <PlanningPanel
                 plans={plans}
+                workoutNames={workoutNames}
                 selectedDay={selectedDay}
                 onSelectDay={setSelectedDay}
                 onRemove={removePlan}

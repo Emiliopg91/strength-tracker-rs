@@ -55,7 +55,7 @@ async fn migration_29_moves_hyperextensions_to_the_generic() {
     );
 
     let mut steps = WorkoutStepRepository::select().fetch(&db).await.unwrap();
-    steps.sort_by(|a, b| a.workout.cmp(&b.workout));
+    steps.sort_by_key(|s| s.workout);
     let steps: Vec<_> = steps.iter().map(|s| (s.ex_cat, s.ex_id)).collect();
     assert_eq!(
         steps,
@@ -75,7 +75,7 @@ async fn migration_29_moves_hyperextensions_to_the_generic() {
         ("", Some("Slow"), "12-15")
     );
 
-    let pending: Vec<(String, bool)> = db
+    let pending: Vec<(u16, bool)> = db
         .run_in_connection(async move |conn| {
             let mut stmt =
                 conn.prepare("SELECT workout, pending FROM WORKOUT_DEVICE ORDER BY workout")?;
@@ -86,10 +86,8 @@ async fn migration_29_moves_hyperextensions_to_the_generic() {
         })
         .await
         .unwrap();
-    assert_eq!(
-        pending,
-        [("Back".to_string(), true), ("Chest".to_string(), false)]
-    );
+    // Back and Chest, numbered by name when they got their id
+    assert_eq!(pending, [(1, true), (2, false)]);
 }
 
 #[tokio::test]

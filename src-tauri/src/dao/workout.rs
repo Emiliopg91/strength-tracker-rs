@@ -20,8 +20,13 @@ use crate::dao::{
 };
 
 #[derive(Entity, Clone, Serialize, Deserialize)]
-#[primary_key(name)]
+#[primary_key(id)]
+#[unique("name", (name))]
 pub struct Workout {
+    /// Assigned by the database on insert; 0 until then
+    #[autoincrement]
+    #[serde(default)]
+    pub id: u16,
     pub name: String,
     pub enabled: bool,
     pub notes: Option<String>,
@@ -29,8 +34,9 @@ pub struct Workout {
     /// Creation time of the workout in Connect, UTC timestamp in seconds
     #[serde(default)]
     pub connect_created_time: Option<u32>,
+    pub progression: bool,
 
-    #[relationship((name, workout_step::entity::columns::WORKOUT))]
+    #[relationship((id, workout_step::entity::columns::WORKOUT))]
     pub steps: Vec<WorkoutStep>,
 }
 
@@ -48,9 +54,9 @@ impl Workout {
     /// The workout with its steps in order, `None` if it doesn't exist.
     pub async fn get_with_steps(
         conn: &Connection,
-        name: &str,
+        id: u16,
     ) -> rusqlite_orm::errors::Result<Option<Workout>> {
-        let Some(mut workout) = WorkoutRepository::select_by_id_in(conn, name).await? else {
+        let Some(mut workout) = WorkoutRepository::select_by_id_in(conn, id).await? else {
             return Ok(None);
         };
         workout.fetch_steps_relationship_in(conn).await?;
@@ -61,9 +67,9 @@ impl Workout {
     /// The workout with its steps in order and their exercises, `None` if it doesn't exist.
     pub async fn get_with_exercises(
         conn: &Connection,
-        name: &str,
+        id: u16,
     ) -> rusqlite_orm::errors::Result<Option<Workout>> {
-        let Some(mut workout) = Workout::get_with_steps(conn, name).await? else {
+        let Some(mut workout) = Workout::get_with_steps(conn, id).await? else {
             return Ok(None);
         };
         WorkoutStep::fill_exercises(conn, &mut workout.steps).await?;
@@ -74,9 +80,9 @@ impl Workout {
     /// exercise notes, `None` if it doesn't exist.
     pub async fn get_for_device(
         conn: &Connection,
-        name: &str,
+        id: u16,
     ) -> rusqlite_orm::errors::Result<Option<Workout>> {
-        let Some(mut wk) = Workout::get_with_steps(conn, name).await? else {
+        let Some(mut wk) = Workout::get_with_steps(conn, id).await? else {
             return Ok(None);
         };
 
@@ -110,23 +116,39 @@ impl Workout {
         Ok(Some(wk))
     }
 
-    /// Stores the notes and steps of a workout downloaded from a device.
+    /// Stores the notes and steps of a workout downloaded from a device on the stored workout with
+    /// its name, if any.
     pub async fn store_steps(
         tx: &Transaction<'_>,
         workout: &mut Workout,
     ) -> rusqlite_orm::errors::Result<()> {
+        let Some(id) = Workout::get_id(tx, &workout.name).await? else {
+            return Ok(());
+        };
+        workout.id = id;
+
         WorkoutRepository::update()
             .set(entity::columns::NOTES, workout.notes.clone().into())
-            .where_(Where::Eq(
-                entity::columns::NAME,
-                workout.name.clone().into(),
-            ))
+            .where_(Where::Eq(entity::columns::ID, id.into()))
             .execute_in(tx)
             .await?;
 
+        for step in &mut workout.steps {
+            step.workout = id;
+        }
         WorkoutStep::insert_all(tx, &mut workout.steps).await?;
 
         Ok(())
+    }
+
+    /// Id of the workout called `name`, `None` if there is none.
+    pub async fn get_id(
+        conn: &Connection,
+        name: &str,
+    ) -> rusqlite_orm::errors::Result<Option<u16>> {
+        Ok(WorkoutRepository::select_by_name_in(conn, name)
+            .await?
+            .map(|workout| workout.id))
     }
 
     /// Workouts recorded in sessions of the device `serial` that have no steps stored yet.
@@ -138,13 +160,13 @@ impl Workout {
             .columns(&[entity::columns::NAME])
             .where_(Where::And(vec![
                 Where::NotInSub(
-                    entity::columns::NAME,
+                    entity::columns::ID,
                     WorkoutStepRepository::select()
                         .distinct(&[workout_step_cols::WORKOUT])
                         .to_subquery(),
                 ),
                 Where::InSub(
-                    entity::columns::NAME,
+                    entity::columns::ID,
                     SessionRepository::select()
                         .distinct(&[session_cols::WORKOUT])
                         .where_(Where::Eq(session_cols::DEVICE, serial.into()))
@@ -194,7 +216,7 @@ impl Workout {
             }
             workout.connect_created_time = created;
             workout.update_by_id_in(tx).await?;
-            changed.push(workout.name);
+            changed.push(workout.id);
         }
         WorkoutDevice::requeue_on_devices(tx, &changed).await?;
         Ok(changed.len())
@@ -203,20 +225,7 @@ impl Workout {
     /// Saves the new Connect id and creation time of the workout and queues it again for its devices.
     pub async fn set_connect_keys(&self, tx: &Transaction<'_>) -> rusqlite_orm::errors::Result<()> {
         self.update_by_id_in(tx).await?;
-        WorkoutDevice::requeue_on_devices(tx, std::slice::from_ref(&self.name)).await
-    }
-
-    /// Connect id of the workout, `None` if it doesn't exist or hasn't been uploaded.
-    pub async fn get_connect_id(
-        conn: &Connection,
-        name: &str,
-    ) -> rusqlite_orm::errors::Result<Option<String>> {
-        Ok(WorkoutRepository::select()
-            .columns(&[entity::columns::CONNECT_ID])
-            .where_(Where::Eq(entity::columns::NAME, name.into()))
-            .fetch_one_in(conn)
-            .await?
-            .and_then(|row| row.get_text_nullable(entity::columns::CONNECT_ID.as_ref())))
+        WorkoutDevice::requeue_on_devices(tx, &[self.id]).await
     }
 
     /// Every workout, without its steps.
@@ -225,21 +234,18 @@ impl Workout {
     }
 
     /// The workout, without its steps, `None` if it doesn't exist.
-    pub async fn get(
-        conn: &Connection,
-        name: &str,
-    ) -> rusqlite_orm::errors::Result<Option<Workout>> {
-        WorkoutRepository::select_by_id_in(conn, name).await
+    pub async fn get(conn: &Connection, id: u16) -> rusqlite_orm::errors::Result<Option<Workout>> {
+        WorkoutRepository::select_by_id_in(conn, id).await
     }
 
     /// Enables or disables the workout and queues the change for the devices that have it.
     pub async fn set_enabled(
         tx: &Transaction<'_>,
-        workout: &str,
+        workout: u16,
         status: bool,
     ) -> rusqlite_orm::errors::Result<()> {
         let res = WorkoutRepository::update()
-            .where_(Where::Eq(entity::columns::NAME, workout.into()))
+            .where_(Where::Eq(entity::columns::ID, workout.into()))
             .set(entity::columns::ENABLED, status.into())
             .execute_in(tx)
             .await
@@ -247,24 +253,26 @@ impl Workout {
 
         if res.is_ok() {
             // The enabled flag only exists on devices, so Connect is left as it was
-            let _ = WorkoutDevice::requeue_on_devices(tx, &[workout.to_string()]).await;
+            let _ = WorkoutDevice::requeue_on_devices(tx, &[workout]).await;
         }
 
         res
     }
 
-    /// Inserts the workout, or replaces the notes and steps of an existing one when editing, and
-    /// queues it for the devices that already have it.
+    /// Inserts the workout, or replaces the notes and steps of the existing one with its id when
+    /// editing (its name is kept), and queues it for the devices that already have it. Returns the
+    /// id of the workout.
     pub async fn store(
         tx: &Transaction<'_>,
         workout: &Workout,
         edit: bool,
-    ) -> rusqlite_orm::errors::Result<()> {
-        if edit
-            && WorkoutRepository::select_by_id_in(tx, &workout.name)
+    ) -> rusqlite_orm::errors::Result<u16> {
+        let id = if edit
+            && WorkoutRepository::select_by_id_in(tx, workout.id)
                 .await?
                 .is_some()
         {
+            let id = workout.id;
             WorkoutRepository::update()
                 .set(
                     entity::columns::NOTES,
@@ -277,41 +285,34 @@ impl Workout {
                     })
                     .into(),
                 )
-                .where_(Where::Eq(
-                    entity::columns::NAME,
-                    workout.name.clone().into(),
-                ))
+                .where_(Where::Eq(entity::columns::ID, id.into()))
                 .execute_in(tx)
                 .await?;
 
             WorkoutStepRepository::delete()
-                .where_(Where::Eq(
-                    workout_step_cols::WORKOUT,
-                    workout.name.clone().into(),
-                ))
+                .where_(Where::Eq(workout_step_cols::WORKOUT, id.into()))
                 .execute_in(tx)
                 .await?;
 
             // Re-send the edited workout to every device that already has it
             WorkoutDeviceRepository::update()
                 .set(workout_device_cols::PENDING, true.into())
-                .where_(Where::Eq(
-                    workout_device_cols::WORKOUT,
-                    workout.name.clone().into(),
-                ))
+                .where_(Where::Eq(workout_device_cols::WORKOUT, id.into()))
                 .execute_in(tx)
                 .await?;
+            id
         } else {
             let mut item = workout.clone();
             WorkoutRepository::insert()
                 .item(&mut item)
                 .execute_in(tx)
                 .await?;
-        }
+            item.id
+        };
 
         let mut steps = workout.steps.clone();
         for step in &mut steps {
-            step.workout = workout.name.clone();
+            step.workout = id;
             // Empty notes are stored as NULL so the exercise notes fallback applies on upload
             if step.notes.as_deref().is_some_and(str::is_empty) {
                 step.notes = None;
@@ -319,6 +320,19 @@ impl Workout {
         }
         WorkoutStep::insert_all(tx, &mut steps).await?;
 
-        Ok(())
+        Ok(id)
+    }
+
+    pub async fn workout_with_progression(
+        conn: &Connection,
+    ) -> rusqlite_orm::errors::Result<Vec<u16>> {
+        Ok(WorkoutRepository::select()
+            .columns(&[entity::columns::ID])
+            .where_(Where::Eq(entity::columns::PROGRESSION, true.into()))
+            .fetch_in(conn)
+            .await?
+            .iter()
+            .map(|r| r.get_u16(entity::columns::ID.as_ref()))
+            .collect())
     }
 }

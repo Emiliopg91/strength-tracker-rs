@@ -3,7 +3,7 @@ import { StepType, WorkoutStep } from "@/utils/backend/models";
 import { WorkoutUtils } from "@/utils/WorkoutUtils";
 
 const exerciseStep = (overrides: Partial<WorkoutStep>): WorkoutStep => ({
-    workout: "w",
+    workout: 1,
     idx: 0,
     kind: StepType.Exercise,
     begin_idx: null,
@@ -112,7 +112,7 @@ describe("WorkoutUtils", () => {
         });
         expect(WorkoutUtils.validateSteps(parsed)).toBe(true);
 
-        const written = WorkoutUtils.toWorkoutSteps(parsed, "w", (kg) => kg);
+        const written = WorkoutUtils.toWorkoutSteps(parsed, 1, (kg) => kg);
         expect(
             written.map(({ idx, kind, begin_idx, reps }) => ({
                 idx,

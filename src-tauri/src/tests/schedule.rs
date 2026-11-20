@@ -14,6 +14,18 @@ use crate::{
 const DAY: u32 = 86_400;
 const FROM: u32 = 1_794_783_600;
 
+/// Ids of the workouts "a" and "b", inserted in that order on an empty database
+const A: u16 = 1;
+const B: u16 = 2;
+
+fn id(name: &str) -> u16 {
+    match name {
+        "a" => A,
+        "b" => B,
+        _ => unreachable!("unknown workout {name}"),
+    }
+}
+
 async fn setup(plans: &[(u32, &'static str)]) -> DatabasePool {
     let db = common::test_db().await;
     let plans = plans.to_vec();
@@ -24,12 +36,14 @@ async fn setup(plans: &[(u32, &'static str)]) -> DatabasePool {
         ] {
             WorkoutRepository::insert()
                 .item(&mut Workout {
+                    id: 0,
                     name: name.to_string(),
                     enabled: true,
                     notes: None,
                     steps: Vec::new(),
                     connect_id: Some(id.to_string()),
                     connect_created_time: created,
+                    progression: true,
                 })
                 .execute_in(tx)
                 .await?;
@@ -38,7 +52,7 @@ async fn setup(plans: &[(u32, &'static str)]) -> DatabasePool {
             WorkoutPlanningRepository::insert()
                 .item(&mut WorkoutPlanning {
                     date,
-                    workout: workout.to_string(),
+                    workout: id(workout),
                     session: None,
                     connect_id: None,
                     workout_obj: None,
@@ -72,8 +86,8 @@ async fn only_plans_inside_the_window_are_listed_in_order() {
 
     let plans = between(&db, FROM, FROM + 30 * DAY).await;
 
-    let listed: Vec<_> = plans.iter().map(|p| (p.date, p.workout.as_str())).collect();
-    assert_eq!(listed, [(FROM, "a"), (FROM, "b"), (FROM + 2 * DAY, "b")]);
+    let listed: Vec<_> = plans.iter().map(|p| (p.date, p.workout)).collect();
+    assert_eq!(listed, [(FROM, A), (FROM, B), (FROM + 2 * DAY, B)]);
 }
 
 #[tokio::test]
@@ -110,7 +124,7 @@ async fn link(db: &DatabasePool, links: Vec<(&'static str, &'static str, bool)>)
         for (workout, device, pending) in links {
             WorkoutDeviceRepository::insert()
                 .item(&mut WorkoutDevice {
-                    workout: workout.to_string(),
+                    workout: id(workout),
                     device: device.to_string(),
                     pending,
                 })
@@ -123,8 +137,8 @@ async fn link(db: &DatabasePool, links: Vec<(&'static str, &'static str, bool)>)
     .unwrap();
 }
 
-async fn pending_links(db: &DatabasePool) -> Vec<(String, String)> {
-    let mut links: Vec<(String, String)> = WorkoutDeviceRepository::select()
+async fn pending_links(db: &DatabasePool) -> Vec<(u16, String)> {
+    let mut links: Vec<(u16, String)> = WorkoutDeviceRepository::select()
         .fetch(db)
         .await
         .unwrap()
@@ -154,7 +168,7 @@ async fn only_workouts_sent_to_the_device_count_as_on_it() {
         .await
         .unwrap();
 
-    assert_eq!(on_device, ["a".to_string()].into());
+    assert_eq!(on_device, [A].into());
 }
 
 #[tokio::test]
@@ -188,9 +202,6 @@ async fn new_connect_creation_time_queues_the_workout_for_its_devices() {
     assert_eq!(changed, 1);
     assert_eq!(
         pending_links(&db).await,
-        [
-            ("b".to_string(), "other".to_string()),
-            ("b".to_string(), "watch".to_string())
-        ]
+        [(B, "other".to_string()), (B, "watch".to_string())]
     );
 }

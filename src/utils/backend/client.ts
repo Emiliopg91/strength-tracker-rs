@@ -14,8 +14,8 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/workouts/commands.rs:95
-	public static addPlannedWorkout(date: number, workout: string): Promise<void> {
+	// From src-tauri/src/logic/workouts/commands.rs:91
+	public static addPlannedWorkout(date: number, workout: number): Promise<void> {
 	  return BackendClient.inner_invoke("add_planned_workout", { date, workout }); 
 	}
 	
@@ -63,7 +63,7 @@ export class BackendClient {
 	
 
 	// From src-tauri/src/logic/workouts/commands.rs:84
-	public static deletePlannedWorkout(date: number, workout: string): Promise<void> {
+	public static deletePlannedWorkout(date: number, workout: number): Promise<void> {
 	  return BackendClient.inner_invoke("delete_planned_workout", { date, workout }); 
 	}
 	
@@ -116,7 +116,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/workouts/commands.rs:102
+	// From src-tauri/src/logic/workouts/commands.rs:98
 	public static getNextPlannedWorkout(): Promise<WorkoutPlanListItem | null> {
 	  return BackendClient.inner_invoke("get_next_planned_workout"); 
 	}
@@ -177,8 +177,8 @@ export class BackendClient {
 	
 
 	// From src-tauri/src/logic/workouts/commands.rs:25
-	public static getWorkoutDetails(name: string): Promise<WorkoutDetails> {
-	  return BackendClient.inner_invoke("get_workout_details", { name }); 
+	public static getWorkoutDetails(id: number): Promise<WorkoutDetails> {
+	  return BackendClient.inner_invoke("get_workout_details", { id }); 
 	}
 	
 
@@ -225,7 +225,7 @@ export class BackendClient {
 	
 
 	// From src-tauri/src/logic/workouts/commands.rs:61
-	public static loadWorkoutPage(workout: string): Promise<void> {
+	public static loadWorkoutPage(workout: number): Promise<void> {
 	  return BackendClient.inner_invoke("load_workout_page", { workout }); 
 	}
 	
@@ -261,13 +261,13 @@ export class BackendClient {
 	
 
 	// From src-tauri/src/logic/connect/commands.rs:66
-	public static sendToConnect(workout: string, serial: string): Promise<void> {
+	public static sendToConnect(workout: number, serial: string): Promise<void> {
 	  return BackendClient.inner_invoke("send_to_connect", { workout, serial }); 
 	}
 	
 
 	// From src-tauri/src/logic/devices/commands.rs:12
-	public static sendToDevice(workout: string, serial: string): Promise<void> {
+	public static sendToDevice(workout: number, serial: string): Promise<void> {
 	  return BackendClient.inner_invoke("send_to_device", { workout, serial }); 
 	}
 	
@@ -291,7 +291,7 @@ export class BackendClient {
 	
 
 	// From src-tauri/src/logic/workouts/commands.rs:37
-	public static setWorkoutStatus(workout: string, status: boolean): Promise<void> {
+	public static setWorkoutStatus(workout: number, status: boolean): Promise<void> {
 	  return BackendClient.inner_invoke("set_workout_status", { workout, status }); 
 	}
 	

@@ -55,17 +55,19 @@ async fn test_app() -> App<MockRuntime> {
 }
 
 fn step(idx: u16, kind: Intensity, weight: f32, reps: u16) -> WorkoutStep {
-    WorkoutStep::active("", idx, kind, Some(BENCH), weight, Some(reps), None, None)
+    WorkoutStep::active(0, idx, kind, Some(BENCH), weight, Some(reps), None, None)
 }
 
 fn workout(name: &str, steps: Vec<WorkoutStep>) -> Workout {
     Workout {
+        id: 0,
         name: name.to_string(),
         enabled: true,
         notes: None,
         connect_id: None,
         connect_created_time: None,
         steps,
+        progression: true,
     }
 }
 
@@ -81,8 +83,13 @@ async fn save_workout(app: &App<MockRuntime>, edit: bool, workout: Workout) {
     .unwrap();
 }
 
+async fn workout_id(app: &App<MockRuntime>, name: &str) -> u16 {
+    common::workout_id_in(&app.state::<DatabasePool>(), name).await
+}
+
 async fn workout_steps(app: &App<MockRuntime>, name: &str) -> Vec<WorkoutStep> {
-    workouts::get_workout_details(app.handle(), &app.state::<SettingsLock>(), name)
+    let id = workout_id(app, name).await;
+    workouts::get_workout_details(app.handle(), &app.state::<SettingsLock>(), id)
         .await
         .unwrap()
         .steps
@@ -214,7 +221,8 @@ async fn workout_for_an_unplugged_device_is_left_pending() {
         .await
         .unwrap();
 
-    devices::send_to_device(app.handle(), &app.state::<SettingsLock>(), "Push", "watch")
+    let id = workout_id(&app, "Push").await;
+    devices::send_to_device(app.handle(), &app.state::<SettingsLock>(), id, "watch")
         .await
         .unwrap();
 
@@ -412,21 +420,20 @@ async fn workouts_are_saved_edited_and_toggled() {
         workout("Push", vec![step(0, Intensity::ACTIVE, 60.0, 10)]),
     )
     .await;
-    save_workout(
-        &app,
-        true,
-        workout(
-            "Push",
-            vec![
-                step(0, Intensity::WARMUP, 20.0, 15),
-                step(1, Intensity::ACTIVE, 60.0, 10),
-            ],
-        ),
-    )
-    .await;
+    let id = workout_id(&app, "Push").await;
+    let mut edited = workout(
+        "Push",
+        vec![
+            step(0, Intensity::WARMUP, 20.0, 15),
+            step(1, Intensity::ACTIVE, 60.0, 10),
+        ],
+    );
+    edited.id = id;
+    save_workout(&app, true, edited).await;
     assert_eq!(workout_steps(&app, "Push").await.len(), 2);
+    assert_eq!(workout_id(&app, "Push").await, id);
 
-    workouts::set_workout_status(app.handle(), "Push", false)
+    workouts::set_workout_status(app.handle(), id, false)
         .await
         .unwrap();
 

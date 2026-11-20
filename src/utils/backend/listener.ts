@@ -5,8 +5,8 @@ import { listen } from "@tauri-apps/api/event";
 import { DeviceListItem, PromptRequest, SessionLocation } from "./models";
 
 export class BackendListener {
-	public static onAddedWorkoutSteps(callback: (payload: string[]) => void): () => void {
-	  return BackendListener.inner_listen<string[]>("added_workout_steps", callback);
+	public static onAddedWorkoutSteps(callback: (payload: number[]) => void): () => void {
+	  return BackendListener.inner_listen<number[]>("added_workout_steps", callback);
 	}
 
 	public static onConnectLogged(callback: (payload: string | null) => void): () => void {

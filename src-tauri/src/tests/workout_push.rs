@@ -14,18 +14,24 @@ const LINKED: &str = "linked";
 const LINKED_SENT: &str = "linked_sent";
 const USB_ONLY: &str = "usb_only";
 
+/// Ids of the workouts "a" and "b", inserted in that order on an empty database
+const A: u16 = 1;
+const B: u16 = 2;
+
 async fn setup() -> DatabasePool {
     let db = common::test_db().await;
     db.run_in_transaction(async move |tx| {
         for name in ["a", "b"] {
             WorkoutRepository::insert()
                 .item(&mut Workout {
+                    id: 0,
                     name: name.to_string(),
                     enabled: true,
                     notes: None,
                     steps: Vec::new(),
                     connect_id: None,
                     connect_created_time: None,
+                    progression: true,
                 })
                 .execute_in(tx)
                 .await?;
@@ -47,14 +53,14 @@ async fn setup() -> DatabasePool {
         }
 
         for (workout, device, pending) in [
-            ("a", LINKED, true),
-            ("a", LINKED_SENT, false),
-            ("a", USB_ONLY, true),
-            ("b", LINKED, true),
+            (A, LINKED, true),
+            (A, LINKED_SENT, false),
+            (A, USB_ONLY, true),
+            (B, LINKED, true),
         ] {
             WorkoutDeviceRepository::insert()
                 .item(&mut WorkoutDevice {
-                    workout: workout.to_string(),
+                    workout,
                     device: device.to_string(),
                     pending,
                 })
@@ -74,7 +80,7 @@ async fn only_linked_devices_still_waiting_for_the_workout_are_returned() {
 
     let serials = db
         .run_in_connection(async move |conn| {
-            Ok(WorkoutDevice::get_pending_connect_devices(conn, "a").await?)
+            Ok(WorkoutDevice::get_pending_connect_devices(conn, A).await?)
         })
         .await
         .unwrap();
@@ -88,7 +94,7 @@ async fn workout_without_entries_has_no_devices() {
 
     let serials = db
         .run_in_connection(async move |conn| {
-            Ok(WorkoutDevice::get_pending_connect_devices(conn, "c").await?)
+            Ok(WorkoutDevice::get_pending_connect_devices(conn, 3).await?)
         })
         .await
         .unwrap();
@@ -96,7 +102,7 @@ async fn workout_without_entries_has_no_devices() {
     assert_eq!(serials, Vec::<String>::new());
 }
 
-async fn connect_entry(db: &DatabasePool, workout: &str) -> Option<bool> {
+async fn connect_entry(db: &DatabasePool, workout: u16) -> Option<bool> {
     WorkoutDeviceRepository::select_by_id(db, workout, constants::CONNECT_DEVICE_SERIAL)
         .await
         .unwrap()
@@ -106,24 +112,24 @@ async fn connect_entry(db: &DatabasePool, workout: &str) -> Option<bool> {
 #[tokio::test]
 async fn connect_pending_is_created_and_cleared() {
     let db = setup().await;
-    let workouts = ["a".to_string(), "b".to_string()];
+    let workouts = [A, B];
 
-    let all = workouts.clone();
+    let all = workouts;
     db.run_in_transaction(async move |tx| {
         Ok(WorkoutDevice::set_connect_pending(tx, &all, true).await?)
     })
     .await
     .unwrap();
-    assert_eq!(connect_entry(&db, "a").await, Some(true));
-    assert_eq!(connect_entry(&db, "b").await, Some(true));
+    assert_eq!(connect_entry(&db, A).await, Some(true));
+    assert_eq!(connect_entry(&db, B).await, Some(true));
 
     db.run_in_transaction(async move |tx| {
         Ok(WorkoutDevice::set_connect_pending(tx, &workouts[..1], false).await?)
     })
     .await
     .unwrap();
-    assert_eq!(connect_entry(&db, "a").await, Some(false));
-    assert_eq!(connect_entry(&db, "b").await, Some(true));
+    assert_eq!(connect_entry(&db, A).await, Some(false));
+    assert_eq!(connect_entry(&db, B).await, Some(true));
 }
 
 #[tokio::test]
@@ -131,13 +137,13 @@ async fn connect_pending_is_not_a_linked_device() {
     let db = setup().await;
 
     db.run_in_transaction(async move |tx| {
-        Ok(WorkoutDevice::set_connect_pending(tx, &["b".to_string()], true).await?)
+        Ok(WorkoutDevice::set_connect_pending(tx, &[B], true).await?)
     })
     .await
     .unwrap();
     let serials = db
         .run_in_connection(async move |conn| {
-            Ok(WorkoutDevice::get_pending_connect_devices(conn, "b").await?)
+            Ok(WorkoutDevice::get_pending_connect_devices(conn, B).await?)
         })
         .await
         .unwrap();
@@ -150,8 +156,8 @@ async fn only_workouts_pending_for_connect_are_listed() {
     let db = setup().await;
 
     db.run_in_transaction(async move |tx| {
-        WorkoutDevice::set_connect_pending(tx, &["a".to_string()], false).await?;
-        WorkoutDevice::set_connect_pending(tx, &["b".to_string()], true).await?;
+        WorkoutDevice::set_connect_pending(tx, &[A], false).await?;
+        WorkoutDevice::set_connect_pending(tx, &[B], true).await?;
         Ok(())
     })
     .await
@@ -164,5 +170,5 @@ async fn only_workouts_pending_for_connect_are_listed() {
         .unwrap();
 
     // Workouts pending only for real devices are not listed
-    assert_eq!(pending, ["b"]);
+    assert_eq!(pending, [(B, "b".to_string())]);
 }

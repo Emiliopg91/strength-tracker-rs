@@ -39,12 +39,12 @@ impl Export {
         db.run_in_connection(async move |conn| {
             let body_metrics = BodyMetricRepository::select().fetch_in(conn).await?;
             let mut workouts = WorkoutRepository::select().fetch_in(conn).await?;
-            let mut steps: HashMap<String, Vec<WorkoutStep>> = HashMap::new();
+            let mut steps: HashMap<u16, Vec<WorkoutStep>> = HashMap::new();
             for step in WorkoutStepRepository::select().fetch_in(conn).await? {
-                steps.entry(step.workout.clone()).or_default().push(step);
+                steps.entry(step.workout).or_default().push(step);
             }
             for workout in &mut workouts {
-                workout.steps = steps.remove(&workout.name).unwrap_or_default();
+                workout.steps = steps.remove(&workout.id).unwrap_or_default();
             }
             let devices = DeviceRepository::select().fetch_in(conn).await?;
             let settings = SettingsRepository::select().fetch_in(conn).await?;

@@ -78,10 +78,16 @@ export function WorkoutStepsModal({ workout, isEdit, onClose }: Props) {
 
     const saveWorkout = () => {
         if (canSave) {
+            // A new workout goes with id 0 and gets its own once stored
             const newWorkout: Workout = {
+                id: isEdit ? workout.id : 0,
                 enabled: workout.enabled,
                 name,
-                steps: WorkoutUtils.toWorkoutSteps(steps, name, toKg),
+                steps: WorkoutUtils.toWorkoutSteps(
+                    steps,
+                    isEdit ? workout.id : 0,
+                    toKg,
+                ),
                 notes,
                 connect_id: null,
                 connect_created_time: null,

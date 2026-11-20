@@ -12,7 +12,7 @@ use crate::{SettingsLock, dto::devices::DeviceListItem};
 pub async fn send_to_device(
     app: AppHandle,
     settings: State<'_, SettingsLock>,
-    workout: &str,
+    workout: u16,
     serial: &str,
 ) -> Result<(), String> {
     super::send_to_device(&app, &settings, workout, serial).await

@@ -71,7 +71,8 @@ impl WorkoutAccumulator {
     }
 
     pub(super) fn push_step(&mut self, msg: &mesgdef::WorkoutStep) {
-        let name = &self.name;
+        // Not stored yet: the steps get the id of their workout when it is
+        let workout = 0;
         let idx = msg.message_index.0;
         let notes = non_empty(&msg.notes);
         // FIT files carry times in milliseconds
@@ -80,7 +81,7 @@ impl WorkoutAccumulator {
         match msg.duration_type {
             WktStepDuration::REPEAT_UNTIL_STEPS_CMPLT => {
                 self.steps.push(WorkoutStep::repeat(
-                    name,
+                    workout,
                     idx,
                     msg.duration_value as u16,
                     msg.target_value as u16,
@@ -88,7 +89,8 @@ impl WorkoutAccumulator {
             }
             _ => match msg.intensity {
                 Intensity::REST => {
-                    self.steps.push(WorkoutStep::rest(name, idx, time, notes));
+                    self.steps
+                        .push(WorkoutStep::rest(workout, idx, time, notes));
                 }
                 Intensity::ACTIVE
                 | Intensity::COOLDOWN
@@ -105,7 +107,7 @@ impl WorkoutAccumulator {
                         _ => None,
                     };
                     self.steps.push(WorkoutStep::active(
-                        name,
+                        workout,
                         idx,
                         msg.intensity,
                         exercise,
@@ -141,12 +143,14 @@ impl WorkoutAccumulator {
         }
 
         Ok(Workout {
+            id: 0,
             name: self.name,
             enabled: true,
             steps: self.steps,
             notes: self.notes,
             connect_id: None,
             connect_created_time: None,
+            progression: true,
         })
     }
 }

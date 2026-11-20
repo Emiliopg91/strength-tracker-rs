@@ -663,7 +663,7 @@ pub(crate) async fn import_file_list(
     } else {
         Device::get_serials(tx).await?
     };
-    let mut handled_workouts = HashSet::new();
+    let mut handled_workouts = HashMap::new();
 
     // Newest first, as `insert_full` stores each workout only with its latest session
     for session in sessions.iter_mut().rev() {
@@ -919,7 +919,7 @@ pub(super) async fn merge_sessions(
             to.delete_by_id_in(tx).await?;
             from.delete_by_id_in(tx).await?;
 
-            Session::insert_full(tx, &mut to, &mut HashSet::new()).await?;
+            Session::insert_full(tx, &mut to, &mut HashMap::new()).await?;
 
             let handled_exercises = to
                 .steps

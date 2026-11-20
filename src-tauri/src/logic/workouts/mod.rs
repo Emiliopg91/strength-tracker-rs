@@ -44,15 +44,14 @@ pub async fn get_workout_list<R: Runtime>(
         })
 }
 
-/// Returns every session for one workout name with per-session volume and session-over-session volume diff.
+/// Returns the workout `id` with every session following it and its per-session volume.
 pub async fn get_workout_details<R: Runtime>(
     app: &AppHandle<R>,
     settings: &SettingsLock,
-    name: &str,
+    id: u16,
 ) -> Result<WorkoutDetails, String> {
-    let name = name.to_string();
     pool(app)
-        .run_in_connection(async move |conn| Ok(workout_details(conn, &name).await?))
+        .run_in_connection(async move |conn| Ok(workout_details(conn, id).await?))
         .await
         .inspect(|l| info!("Found details for workout {}", l.name))
         .map_err(|e| {
@@ -67,20 +66,18 @@ pub async fn get_workout_details<R: Runtime>(
 
 pub async fn set_workout_status<R: Runtime>(
     app: &AppHandle<R>,
-    workout: &str,
+    workout: u16,
     status: bool,
 ) -> Result<(), String> {
-    let name = workout;
-    let workout = workout.to_string();
     let res = pool(app)
-        .run_in_transaction(async move |tx| Ok(Workout::set_enabled(tx, &workout, status).await?))
+        .run_in_transaction(async move |tx| Ok(Workout::set_enabled(tx, workout, status).await?))
         .await
         .map_err(|e| e.to_string());
 
     if res.is_ok() {
         if status {
             push_pending_to_usb(app).await;
-            send_enabled_workout_to_connect_devices(app, name).await;
+            send_enabled_workout_to_connect_devices(app, workout).await;
         } else {
             delete_pending_from_connected(app).await;
         }
@@ -97,21 +94,20 @@ pub async fn save_workout<R: Runtime>(
     workout: Workout,
 ) -> Result<(), String> {
     let name = workout.name.clone();
-    let name_cl = workout.name.clone();
     let res = pool(app)
         .run_in_transaction(async move |tx| Ok(Workout::store(tx, &workout, edit).await?))
         .await;
 
     let lang = settings_language(settings);
     match res {
-        Ok(_) => {
+        Ok(id) => {
             info!("Workout '{}' saved succesfully", name);
             show_notification(NotificationDefinition {
                 title: name,
                 body: translate("ok_workout_save", lang),
                 kind: NotificationKind::Temporal,
             });
-            sync_workouts_connect(app, connect, settings, &[name_cl]).await;
+            sync_workouts_connect(app, connect, settings, &[id]).await;
             if edit {
                 push_pending_to_usb(app).await;
             }
@@ -126,10 +122,7 @@ pub async fn save_workout<R: Runtime>(
     }
 }
 
-pub async fn load_workout_page<R: Runtime>(
-    app: &AppHandle<R>,
-    workout: &str,
-) -> Result<(), String> {
+pub async fn load_workout_page<R: Runtime>(app: &AppHandle<R>, workout: u16) -> Result<(), String> {
     open_window(app, "workout", Some(&format!("workout={workout}")))
         .map(|_| ())
         .map_err(|e| e.to_string())
@@ -156,12 +149,11 @@ pub async fn get_planned_workouts<R: Runtime>(
 pub async fn remove_planned_workout<R: Runtime>(
     app: &AppHandle<R>,
     date: u32,
-    workout: &str,
+    workout: u16,
 ) -> Result<(), String> {
-    let workout = workout.to_string();
     let res = pool(app)
         .run_in_connection(async move |conn| {
-            let entry = WorkoutPlanning::get(conn, date, &workout).await?.unwrap();
+            let entry = WorkoutPlanning::get(conn, date, workout).await?.unwrap();
             // Kept as the record of what was planned: the UI offers no delete for these either
             if entry.session.is_some()
                 || today_local_midnight().is_some_and(|today| entry.date < today)
@@ -190,13 +182,11 @@ pub async fn remove_planned_workout<R: Runtime>(
 pub async fn add_planned_workout<R: Runtime>(
     app: &AppHandle<R>,
     date: u32,
-    workout: &str,
+    workout: u16,
 ) -> Result<(), String> {
-    let workout = workout.to_string();
-    let workout_cl = workout.clone();
     let res = pool(app)
         .run_in_connection(async move |conn| {
-            WorkoutPlanning::insert(conn, date, workout_cl.as_str()).await?;
+            WorkoutPlanning::insert(conn, date, workout).await?;
             Ok(())
         })
         .await
@@ -207,7 +197,7 @@ pub async fn add_planned_workout<R: Runtime>(
         tauri::async_runtime::spawn(async move {
             // Pushing it first can upload the workout, which gives it the Connect creation time
             // the schedule needs
-            push_plan_to_connect(&app, date, &workout).await;
+            push_plan_to_connect(&app, date, workout).await;
             send_schedule_to_connected(&app).await;
         });
     }

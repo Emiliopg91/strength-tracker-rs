@@ -340,7 +340,7 @@ impl SessionStep {
     /// Volume (reps by weight) lifted in every session of the workout `name` that has sets.
     pub async fn get_volume_by_session(
         conn: &Connection,
-        name: &str,
+        workout: u16,
     ) -> rusqlite_orm::errors::Result<HashMap<u32, f32>> {
         let series = SessionStepRepository::select()
             .columns(&[
@@ -355,7 +355,7 @@ impl SessionStep {
                     entity::columns::SESSION,
                     SessionRepository::select()
                         .columns(&[session_cols::DATE])
-                        .where_(Where::Eq(session_cols::NAME, name.into()))
+                        .where_(Where::Eq(session_cols::WORKOUT, workout.into()))
                         .to_subquery(),
                 ),
             ]))

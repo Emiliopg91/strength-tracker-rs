@@ -133,14 +133,14 @@ impl Exercise {
     /// The exercises programmed in the steps of the workout `name`.
     pub async fn get_by_workout(
         conn: &Connection,
-        name: &str,
+        workout: u16,
     ) -> rusqlite_orm::errors::Result<Vec<Exercise>> {
         ExerciseRepository::select()
             .where_(Where::InMultipleSub(
                 vec![entity::columns::CATEGORY, entity::columns::ID],
                 WorkoutStepRepository::select()
                     .distinct(&[workout_step_cols::EX_CAT, workout_step_cols::EX_ID])
-                    .where_(Where::Eq(workout_step_cols::WORKOUT, name.into()))
+                    .where_(Where::Eq(workout_step_cols::WORKOUT, workout.into()))
                     .to_subquery(),
             ))
             .fetch_in(conn)
@@ -200,7 +200,7 @@ impl Exercise {
                 Where::InSub(
                     workout_step_cols::WORKOUT,
                     WorkoutRepository::select()
-                        .columns(&[workout_cols::NAME])
+                        .columns(&[workout_cols::ID])
                         .where_(Where::Eq(workout_cols::ENABLED, true.into()))
                         .to_subquery(),
                 ),
@@ -271,14 +271,14 @@ impl Exercise {
         category: u16,
         id: u16,
         notes: Option<String>,
-    ) -> rusqlite_orm::errors::Result<Vec<String>> {
+    ) -> rusqlite_orm::errors::Result<Vec<u16>> {
         ExerciseRepository::update()
             .set(entity::columns::NOTES, notes.into())
             .where_(by_key(category, id))
             .execute_in(tx)
             .await?;
 
-        let workouts: Vec<String> = WorkoutStepRepository::select()
+        let workouts: Vec<u16> = WorkoutStepRepository::select()
             .distinct(&[workout_step_cols::WORKOUT])
             .where_(Where::And(vec![
                 Where::Eq(workout_step_cols::EX_CAT, category.into()),
@@ -291,7 +291,7 @@ impl Exercise {
             .fetch_in(tx)
             .await?
             .iter()
-            .map(|r| r.get_text(workout_step_cols::WORKOUT.as_ref()))
+            .map(|r| r.get_u16(workout_step_cols::WORKOUT.as_ref()))
             .collect();
 
         if !workouts.is_empty() {
@@ -302,12 +302,12 @@ impl Exercise {
                 .where_(Where::And(vec![
                     Where::In(
                         workout_device_cols::WORKOUT,
-                        workouts.iter().map(|w| w.clone().into()).collect(),
+                        workouts.iter().map(|w| (*w).into()).collect(),
                     ),
                     Where::InSub(
                         workout_device_cols::WORKOUT,
                         WorkoutRepository::select()
-                            .distinct(&[workout_cols::NAME])
+                            .distinct(&[workout_cols::ID])
                             .where_(Where::Eq(workout_cols::ENABLED, true.into()))
                             .to_subquery(),
                     ),

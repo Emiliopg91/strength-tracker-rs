@@ -162,7 +162,7 @@ export function Home() {
                 ]).then(([next, workouts]) => {
                     const planned =
                         next !== null
-                            ? workouts.find((w) => w.name == next.workout)
+                            ? workouts.find((w) => w.id == next.workout)
                             : undefined;
 
                     if (next !== null && planned) {
@@ -225,8 +225,8 @@ export function Home() {
         );
     };
 
-    const getWorkoutDetails = (name: string) => {
-        withLoading(BackendClient.getWorkoutDetails(name)).then(
+    const getWorkoutDetails = (id: number) => {
+        withLoading(BackendClient.getWorkoutDetails(id)).then(
             setWorkoutDetails,
         );
     };
@@ -239,9 +239,9 @@ export function Home() {
         );
     });
 
-    useBackendEvent(BackendListener.onAddedWorkoutSteps, (names) => {
+    useBackendEvent(BackendListener.onAddedWorkoutSteps, (ids) => {
         setWorkout((prev) =>
-            prev && names.includes(prev.details.name)
+            prev && ids.includes(prev.details.id)
                 ? { ...prev, details: { ...prev.details, has_steps: true } }
                 : prev,
         );
@@ -253,7 +253,7 @@ export function Home() {
         onRefreshTrigger();
     }, [sessionsVersion, adapter, day]);
 
-    const openEdit = (workout: string) => {
+    const openEdit = (workout: number) => {
         withLoading(BackendClient.getWorkoutDetails(workout)).then(
             (details) => {
                 setWorkoutDetails(undefined);
@@ -480,7 +480,7 @@ export function Home() {
                                                 className="clickable-row"
                                                 onClick={() =>
                                                     getWorkoutDetails(
-                                                        workout.details.name,
+                                                        workout.details.id,
                                                     )
                                                 }
                                             >
@@ -533,15 +533,15 @@ export function Home() {
                                                     {workout.details
                                                         .has_steps && (
                                                         <WorkoutActionsMenu
-                                                            workoutName={
+                                                            workoutId={
                                                                 workout.details
-                                                                    .name
+                                                                    .id
                                                             }
                                                             onOpenEdit={() =>
                                                                 openEdit(
                                                                     workout
                                                                         .details
-                                                                        .name,
+                                                                        .id,
                                                                 )
                                                             }
                                                             send={true}
@@ -578,7 +578,7 @@ export function Home() {
                         showEnable={false}
                         onClose={() => setWorkoutDetails(undefined)}
                         onOpenEdit={() => {
-                            openEdit(workoutDetails.name);
+                            openEdit(workoutDetails.id);
                         }}
                     />
                 )}

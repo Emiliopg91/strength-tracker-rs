@@ -66,7 +66,7 @@ pub async fn connect_logout(connect: State<'_, ConnectLock>) -> Result<(), Strin
 pub async fn send_to_connect(
     app: AppHandle,
     settings: State<'_, SettingsLock>,
-    workout: &str,
+    workout: u16,
     serial: &str,
 ) -> Result<(), String> {
     super::send_to_connect(&app, &settings, workout, serial).await

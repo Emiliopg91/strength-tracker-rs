@@ -73,10 +73,12 @@ impl ToFitMessages for Vec<WorkoutPlanning> {
     fn file_key(&self) -> u32 {
         // Derived from the content so a changed schedule never looks like the previous file.
         // Never 0, the invalid value of the uint32z serial
-        fnv1a(
-            self.iter()
-                .flat_map(|p| p.date.to_le_bytes().into_iter().chain(p.workout.bytes())),
-        )
+        fnv1a(self.iter().flat_map(|p| {
+            p.date
+                .to_le_bytes()
+                .into_iter()
+                .chain(p.workout.to_le_bytes())
+        }))
         .max(1)
     }
 

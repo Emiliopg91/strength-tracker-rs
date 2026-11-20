@@ -11,7 +11,7 @@ use crate::{
     connect::client::CalendarItemType,
     dao::{body_metric::BodyMetric, device::Device},
     logic::{
-        devices::helpers::{notify_workout_sent, set_workout_on_device},
+        devices::helpers::{notify_workout_sent, set_workout_on_device, workout_name},
         pool, report_error,
         sessions::helpers::{finish_session_import, import_pending_sessions},
         settings_language,
@@ -148,14 +148,14 @@ pub async fn connect_logout(connect: &ConnectLock) -> Result<(), String> {
 pub async fn send_to_connect<R: Runtime>(
     app: &AppHandle<R>,
     settings: &SettingsLock,
-    workout: &str,
+    id: u16,
     serial: &str,
 ) -> Result<(), String> {
     let res: Result<_, Box<dyn std::error::Error>> = async {
-        queue_workout_on_connect(app, workout, serial).await?;
+        queue_workout_on_connect(app, id, serial).await?;
 
         // Register the pair so later changes (e.g. progressions) get re-sent once plugged by USB
-        set_workout_on_device(app, workout, serial, false)
+        set_workout_on_device(app, id, serial, false)
             .await
             .map_err(|e| e.to_string())?;
 
@@ -165,9 +165,11 @@ pub async fn send_to_connect<R: Runtime>(
 
     let lang = settings_language(settings);
 
+    // The error isn't Send: turned into a string so the name can be awaited while matching
+    let res = res.map_err(|e| e.to_string());
     match res {
         Ok(()) => {
-            notify_workout_sent(workout, serial, lang);
+            notify_workout_sent(&workout_name(app, id).await, serial, lang);
             Ok(())
         }
         Err(e) => Err(report_error(

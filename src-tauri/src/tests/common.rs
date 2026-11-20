@@ -130,3 +130,19 @@ pub fn lap(session: u32, idx: u16, position: Option<(i32, i32)>) -> SessionLap {
         start_longitude: position.map(|p| p.1),
     }
 }
+
+/// Id of the stored workout called `name`; panics if there is none.
+pub async fn workout_id(conn: &rusqlite_orm::rusqlite::Connection, name: &str) -> u16 {
+    crate::dao::workout::Workout::get_id(conn, name)
+        .await
+        .expect("workout lookup")
+        .unwrap_or_else(|| panic!("workout {name} not stored"))
+}
+
+/// [`workout_id`] through the pool.
+pub async fn workout_id_in(db: &DatabasePool, name: &str) -> u16 {
+    let name = name.to_string();
+    db.run_in_connection(async move |conn| Ok(workout_id(conn, &name).await))
+        .await
+        .unwrap()
+}

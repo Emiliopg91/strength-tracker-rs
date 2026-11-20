@@ -28,7 +28,7 @@ type Props = {
     showEnable: boolean;
     onClose: () => void;
     onEnabledChange?: (suggest: boolean) => void;
-    onUpdate?: (name: string, status: boolean) => void;
+    onUpdate?: (id: number, status: boolean) => void;
     onOpenEdit: (workout: WorkoutDetails) => void;
     onOpenDuplicate?: (workout: WorkoutDetails) => void;
 };
@@ -65,24 +65,24 @@ export function WorkoutModal({
         setWorkout(initialWorkout);
     }
 
-    useBackendEvent(BackendListener.onAddedWorkoutSteps, (names) => {
-        if (names.includes(initialWorkout.name)) {
+    useBackendEvent(BackendListener.onAddedWorkoutSteps, (ids) => {
+        if (ids.includes(initialWorkout.id)) {
             withLoading(
-                BackendClient.getWorkoutDetails(initialWorkout.name),
+                BackendClient.getWorkoutDetails(initialWorkout.id),
             ).then(setWorkout);
         }
     });
 
     const toggleEnabled = () => {
-        withLoading(
-            BackendClient.setWorkoutStatus(workout.name, !enabled),
-        ).then(() => {
-            if (onUpdate) {
-                onUpdate(workout.name, !enabled);
-            }
-            onSuggestChange!(!enabled);
-            setEnabled((prev) => !prev);
-        });
+        withLoading(BackendClient.setWorkoutStatus(workout.id, !enabled)).then(
+            () => {
+                if (onUpdate) {
+                    onUpdate(workout.id, !enabled);
+                }
+                onSuggestChange!(!enabled);
+                setEnabled((prev) => !prev);
+            },
+        );
     };
 
     const onStructureToggle = (_: React.SyntheticEvent, expanded: boolean) => {
@@ -103,7 +103,7 @@ export function WorkoutModal({
                     >
                         {onOpenDuplicate && (
                             <WorkoutActionsMenu
-                                workoutName={workout.name}
+                                workoutId={workout.id}
                                 onOpenEdit={() => onOpenEdit(workout)}
                                 onOpenDuplicate={() => onOpenDuplicate(workout)}
                                 send={workout.enabled}
@@ -111,7 +111,7 @@ export function WorkoutModal({
                         )}
                         {!onOpenDuplicate && (
                             <WorkoutActionsMenu
-                                workoutName={workout.name}
+                                workoutId={workout.id}
                                 onOpenEdit={() => onOpenEdit(workout)}
                                 send={workout.enabled}
                             />

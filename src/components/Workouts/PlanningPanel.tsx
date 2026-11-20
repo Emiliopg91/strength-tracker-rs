@@ -24,6 +24,8 @@ const isDone = (plan: WorkoutPlanListItem) => plan.session != null;
 
 type Props = {
     plans: WorkoutPlanListItem[];
+    /** Names of the workouts, by id. */
+    workoutNames: Map<number, string>;
     selectedDay: Date;
     onSelectDay: (day: Date) => void;
     onRemove: (plan: WorkoutPlanListItem) => void;
@@ -35,6 +37,7 @@ type Props = {
 /** Planning calendar with the workouts planned for the selected day beside it. */
 export function PlanningPanel({
     plans,
+    workoutNames,
     selectedDay,
     onSelectDay,
     onRemove,
@@ -146,7 +149,7 @@ export function PlanningPanel({
                                     className={`planning-item-dot ${dotClass(plan)}`}
                                 />
                                 <span className="planning-item-name">
-                                    {plan.workout}
+                                    {workoutNames.get(plan.workout)}
                                 </span>
                                 {!isPast(plan) && !isDone(plan) && (
                                     <IconButton

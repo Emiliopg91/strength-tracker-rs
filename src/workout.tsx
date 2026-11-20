@@ -6,8 +6,8 @@ import { AppProvider } from "./context/AppProvider";
 import WorkoutPrintView from "./components/Workouts/views/WorkoutPrintView";
 
 const params = new URLSearchParams(window.location.search);
-const workout = params.get("workout")!;
-document.title = workout;
+// Id of the workout; the view titles the window with its name once loaded
+const workout = Number(params.get("workout"));
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <I18nSettingsProvider>

@@ -134,14 +134,15 @@ async fn local_file_has_no_connect_id() {
 
 fn session_of_workout(date: u32, notes: &str) -> Session {
     let mut session = common::session(date);
-    session.workout = Some("Legs".to_string());
     session.workout_obj = Some(Workout {
+        id: 0,
         name: "Legs".to_string(),
         enabled: true,
         notes: Some(notes.to_string()),
         steps: Vec::new(),
         connect_id: None,
         connect_created_time: None,
+        progression: true,
     });
     session
 }
@@ -165,9 +166,14 @@ async fn workout_keeps_the_notes_of_its_latest_session() {
         .unwrap();
 
     assert_eq!(imported.sessions, [1, 2, 3]);
-    let workout = WorkoutRepository::select_by_id(&db, "Legs")
+    let workout = WorkoutRepository::select_by_name(&db, "Legs")
         .await
         .unwrap()
         .unwrap();
     assert_eq!(workout.notes.as_deref(), Some("Latest"));
+
+    // Every session links to the single workout stored
+    let sessions = SessionRepository::select().fetch(&db).await.unwrap();
+    assert_eq!(sessions.len(), 3);
+    assert!(sessions.iter().all(|s| s.workout == Some(workout.id)));
 }

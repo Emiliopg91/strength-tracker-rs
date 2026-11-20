@@ -17,7 +17,7 @@ import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import { DeviceContext } from "@/context/DeviceContext";
 
 type Props = {
-    workoutName: string;
+    workoutId: number;
     dense?: boolean;
     send: boolean;
     onOpenEdit: () => void;
@@ -25,7 +25,7 @@ type Props = {
 };
 
 export function WorkoutActionsMenu({
-    workoutName,
+    workoutId,
     send,
     onOpenEdit,
     onOpenDuplicate = undefined,
@@ -45,15 +45,15 @@ export function WorkoutActionsMenu({
     };
 
     const sendToDevice = (serial: string) => {
-        withLoading(BackendClient.sendToDevice(workoutName, serial));
+        withLoading(BackendClient.sendToDevice(workoutId, serial));
     };
 
     const sendToConnect = (serial: string) => {
-        withLoading(BackendClient.sendToConnect(workoutName, serial));
+        withLoading(BackendClient.sendToConnect(workoutId, serial));
     };
 
     const saveAsPdf = () => {
-        withLoading(BackendClient.loadWorkoutPage(workoutName));
+        withLoading(BackendClient.loadWorkoutPage(workoutId));
     };
 
     const workoutDevices = devices

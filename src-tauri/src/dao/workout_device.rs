@@ -20,15 +20,15 @@ use crate::{
 #[primary_key(workout, device)]
 #[index("device",(device))]
 pub struct WorkoutDevice {
-    pub workout: String,
+    pub workout: u16,
     pub device: String,
     pub pending: bool,
 }
 
 impl WorkoutDevice {
-    pub fn new(workout: &str, device: &str, pending: bool) -> Self {
+    pub fn new(workout: u16, device: &str, pending: bool) -> Self {
         Self {
-            workout: workout.to_string(),
+            workout,
             device: device.to_string(),
             pending,
         }
@@ -38,13 +38,13 @@ impl WorkoutDevice {
     /// The upserts are idempotent, so a partial run (several statements for a huge list) is harmless.
     pub async fn set_connect_pending(
         conn: &rusqlite_orm::rusqlite::Connection,
-        workouts: &[String],
+        workouts: &[u16],
         pending: bool,
     ) -> rusqlite_orm::errors::Result<()> {
         let mut insert = WorkoutDeviceRepository::insert().or_replace();
         let mut entries: Vec<WorkoutDevice> = workouts
             .iter()
-            .map(|workout| WorkoutDevice::new(workout, constants::CONNECT_DEVICE_SERIAL, pending))
+            .map(|workout| WorkoutDevice::new(*workout, constants::CONNECT_DEVICE_SERIAL, pending))
             .collect();
         for entry in &mut entries {
             insert = insert.item(entry);
@@ -57,7 +57,7 @@ impl WorkoutDevice {
     /// creation time key their files on devices, so a file written before those changed is stale.
     pub async fn requeue_on_devices(
         conn: &rusqlite_orm::rusqlite::Connection,
-        workouts: &[String],
+        workouts: &[u16],
     ) -> rusqlite_orm::errors::Result<()> {
         if workouts.is_empty() {
             return Ok(());
@@ -67,7 +67,7 @@ impl WorkoutDevice {
             .where_(Where::And(vec![
                 Where::In(
                     entity::columns::WORKOUT,
-                    workouts.iter().map(|w| w.clone().into()).collect(),
+                    workouts.iter().map(|w| (*w).into()).collect(),
                 ),
                 Where::NotEq(
                     entity::columns::DEVICE,
@@ -82,7 +82,7 @@ impl WorkoutDevice {
     /// Devices linked to the Connect account where `workout` is still pending.
     pub async fn get_pending_connect_devices(
         conn: &rusqlite_orm::rusqlite::Connection,
-        workout: &str,
+        workout: u16,
     ) -> rusqlite_orm::errors::Result<Vec<String>> {
         Ok(WorkoutDeviceRepository::select()
             .columns(&[entity::columns::DEVICE])
@@ -107,7 +107,7 @@ impl WorkoutDevice {
     /// Records that the device has the workout, keeping the entry if it was already there.
     pub async fn insert_or_ignore(
         conn: &Connection,
-        workout: &str,
+        workout: u16,
         device: &str,
     ) -> rusqlite_orm::errors::Result<usize> {
         WorkoutDeviceRepository::insert()
@@ -120,7 +120,7 @@ impl WorkoutDevice {
     /// Records the workout for the device, replacing the entry (and its `pending` flag) if any.
     pub async fn insert_or_replace(
         conn: &Connection,
-        workout: &str,
+        workout: u16,
         device: &str,
         pending: bool,
     ) -> rusqlite_orm::errors::Result<usize> {
@@ -131,44 +131,47 @@ impl WorkoutDevice {
             .await
     }
 
-    /// Workouts queued for the device `serial`, by name. With `enabled`, only the enabled ones (to
-    /// upload) or the disabled ones (to delete from it).
+    /// Workouts queued for the device `serial`, as `(id, name)` by name. With `enabled`, only the
+    /// enabled ones (to upload) or the disabled ones (to delete from it).
     pub async fn get_pending(
         conn: &Connection,
         serial: &str,
         enabled: Option<bool>,
-    ) -> rusqlite_orm::errors::Result<Vec<String>> {
-        let mut conditions = vec![
-            Where::Eq(entity::columns::DEVICE, serial.into()),
-            Where::Eq(entity::columns::PENDING, true.into()),
-        ];
+    ) -> rusqlite_orm::errors::Result<Vec<(u16, String)>> {
+        let mut conditions = vec![Where::InSub(
+            workout_cols::ID,
+            WorkoutDeviceRepository::select()
+                .columns(&[entity::columns::WORKOUT])
+                .where_(Where::And(vec![
+                    Where::Eq(entity::columns::DEVICE, serial.into()),
+                    Where::Eq(entity::columns::PENDING, true.into()),
+                ]))
+                .to_subquery(),
+        )];
         if let Some(enabled) = enabled {
-            conditions.push(Where::InSub(
-                entity::columns::WORKOUT,
-                WorkoutRepository::select()
-                    .distinct(&[workout_cols::NAME])
-                    .where_(Where::Eq(workout_cols::ENABLED, enabled.into()))
-                    .to_subquery(),
-            ));
+            conditions.push(Where::Eq(workout_cols::ENABLED, enabled.into()));
         }
-        WorkoutDeviceRepository::select()
-            .columns(&[entity::columns::WORKOUT])
+        Ok(WorkoutRepository::select()
+            .columns(&[workout_cols::ID, workout_cols::NAME])
             .where_(Where::And(conditions))
-            .order_by(OrderBy::Asc(entity::columns::WORKOUT))
+            .order_by(OrderBy::Asc(workout_cols::NAME))
             .fetch_in(conn)
-            .await
-            .map(|rows| {
-                rows.iter()
-                    .map(|r| r.get_text(entity::columns::WORKOUT.as_ref()))
-                    .collect()
+            .await?
+            .iter()
+            .map(|r| {
+                (
+                    r.get_u16(workout_cols::ID.as_ref()),
+                    r.get_text(workout_cols::NAME.as_ref()),
+                )
             })
+            .collect())
     }
 
-    /// Names of the workouts already sent to the device `serial`, those with an entry not pending.
+    /// Ids of the workouts already sent to the device `serial`, those with an entry not pending.
     pub async fn get_sent(
         conn: &Connection,
         serial: &str,
-    ) -> rusqlite_orm::errors::Result<HashSet<String>> {
+    ) -> rusqlite_orm::errors::Result<HashSet<u16>> {
         WorkoutDeviceRepository::select()
             .columns(&[entity::columns::WORKOUT])
             .where_(Where::And(vec![
@@ -179,7 +182,7 @@ impl WorkoutDevice {
             .await
             .map(|rows| {
                 rows.iter()
-                    .map(|r| r.get_text(entity::columns::WORKOUT.as_ref()))
+                    .map(|r| r.get_u16(entity::columns::WORKOUT.as_ref()))
                     .collect()
             })
     }
@@ -187,7 +190,7 @@ impl WorkoutDevice {
     /// Takes the workout off the queue of the device.
     pub async fn clear_pending(
         conn: &Connection,
-        workout: &str,
+        workout: u16,
         device: &str,
     ) -> rusqlite_orm::errors::Result<usize> {
         WorkoutDeviceRepository::update()
