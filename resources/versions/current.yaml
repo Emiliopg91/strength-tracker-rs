@@ -7,7 +7,7 @@ node:
   '@mui/material': 9.5.0
   '@mui/x-date-pickers': 9.18.0
   '@tauri-apps/api': 2.12.5
-  '@tauri-apps/cli': 2.12.5
+  '@tauri-apps/cli': 2.12.6
   '@tauri-apps/plugin-autostart': 2.7.0
   '@tauri-apps/plugin-log': 2.10.2
   '@testing-library/react': 16.3.3
@@ -26,13 +26,12 @@ node:
   prettier: 3.10.1
   react: 19.3.1
   react-dom: 19.3.1
-  react-leaflet: 5.0.0
-  recharts: 3.10.1
+  recharts: 3.11.0
   typescript: 5.8.3
   typescript-eslint: 8.73.0
   vite: 7.3.8
   vite-plugin-checker: 0.14.5
-  vitest: 5.1.0
+  vitest: 5.1.1
 rust:
   base64: 0.23.1
   bytes: 1.12.2
@@ -44,7 +43,7 @@ rust:
   keyring: 3.6.3
   libc: 0.2.191
   mtp-rs: 0.38.1
-  noyalib: 0.0.62
+  noyalib: 0.0.63
   ouroboros: 0.18.5
   percent-encoding: 2.3.2
   phf: 0.14.0
@@ -52,7 +51,7 @@ rust:
   rand: 0.10.4
   rayon: 1.12.0
   reqwest: 0.13.5
-  rusqlite_orm: 3.1.0
+  rusqlite_orm: 3.2.0
   rustyfit: 0.11.2
   semver: 1.0.28
   serde: 1.0.229
@@ -69,4 +68,4 @@ rust:
   tokio: 1.54.1
   url: 2.5.8
   webkit2gtk: 2.0.2
-  zip: 9.7.0
+  zip: 9.8.1
