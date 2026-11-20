@@ -104,3 +104,5 @@ ALTER TABLE SESSION RENAME COLUMN workout_id TO workout;
 
 -- Lets the SET NULL from WORKOUT, and the lookups of the sessions of a workout, use an index
 CREATE INDEX SESSION_WORKOUT ON SESSION(workout);
+
+ALTER TABLE WORKOUT ADD COLUMN progression BOOLEAN NOT NULL DEFAULT true;
