@@ -21,6 +21,7 @@ use crate::{
     dao::{
         device::Device, exercise::Exercise, session::Session, session_data::SessionData,
         session_lap::SessionLap, session_step::SessionStep, settings::WeightUnit,
+        workout_step::WorkoutStep,
     },
     dto::{
         notifications::{NotificationDefinition, NotificationKind},
@@ -28,6 +29,8 @@ use crate::{
     },
     fit::{FitFile, parser::FitParser, writer::FitWriter},
     logic::{
+        connect::helpers::sync_workouts_connect,
+        devices::helpers::push_pending_to_usb,
         exercises::helpers::{progression_suggestions, progression_suggestions_among},
         language,
         notifications::show_notification,
@@ -35,9 +38,27 @@ use crate::{
     },
     utils::{
         constants,
+        time::now,
         translations::{Languages, translate, translate_and_replace},
     },
 };
+
+/// Sends again, in the background, the `workouts` whose percentage loads changed with the
+/// estimated 1RM: to Connect and to the connected USB devices. In the background because the
+/// callers may hold the Connect or device lock.
+pub(crate) fn spawn_percent_load_sync<R: Runtime>(app: &AppHandle<R>, workouts: Vec<u16>) {
+    if workouts.is_empty() {
+        return;
+    }
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        info!("Percentage loads changed in {} workouts", workouts.len());
+        let connect = app.state::<ConnectLock>();
+        let settings = app.state::<SettingsLock>();
+        sync_workouts_connect(&app, &connect, &settings, &workouts).await;
+        push_pending_to_usb(&app).await;
+    });
+}
 
 pub(super) async fn retrieve_session_connect_id<R: Runtime>(app: &AppHandle<R>, timestamp: u32) {
     let connect = app.state::<ConnectLock>();
@@ -124,6 +145,7 @@ pub(crate) async fn import_file_paths<R: Runtime>(
         app,
         res.map(|imported| {
             notify_import(app, &imported, lang);
+            spawn_percent_load_sync(app, imported.refreshed_workouts);
             imported.sessions
         }),
     )
@@ -160,6 +182,7 @@ pub(crate) async fn import_pending_sessions<R: Runtime>(
         Ok((imported, updated_device)) => {
             *device = updated_device;
             notify_import(app, &imported, lang);
+            spawn_percent_load_sync(app, imported.refreshed_workouts);
             store_pending_files(
                 pending_dir,
                 &device.serial,
@@ -607,6 +630,8 @@ pub(crate) struct ImportedFiles {
     /// Whether any exercise has a progression suggestion pending, checked only when sessions
     /// were inserted (otherwise it cannot have changed).
     pub any_progression: Option<bool>,
+    /// Workouts whose percentage loads changed with the inserted sets.
+    pub refreshed_workouts: Vec<u16>,
 }
 
 /// Outcome of `parse_files`.
@@ -693,17 +718,22 @@ pub(crate) async fn import_file_list(
     // Back to chronological order
     success.reverse();
 
-    let (new_prs, imported_progression, any_progression) = if success.is_empty() {
-        (false, false, None)
+    let (new_prs, imported_progression, any_progression, refreshed_workouts) = if success.is_empty()
+    {
+        (false, false, None, Vec::new())
     } else {
         let new_prs = SessionStep::update_prs(tx, &handled_exercises, &success).await?;
+        let refreshed =
+            WorkoutStep::refresh_percent_loads(tx, Some(&handled_exercises), now()).await?;
 
-        // Evaluated once: tells both whether the imported exercises progress and whether any does
+        // Evaluated once: tells both whether the imported exercises progress and whether any
+        // does
         let suggested = progression_suggestions(tx).await?;
         (
             new_prs,
             handled_exercises.iter().any(|e| suggested.contains(e)),
             Some(!suggested.is_empty()),
+            refreshed,
         )
     };
 
@@ -713,6 +743,7 @@ pub(crate) async fn import_file_list(
         new_prs,
         imported_progression,
         any_progression,
+        refreshed_workouts,
     })
 }
 
@@ -748,6 +779,8 @@ pub(crate) struct AppliedSessionChanges {
     pub newly_suggested: bool,
     /// Whether any exercise has a progression suggestion pending.
     pub any_progression: bool,
+    /// Workouts whose percentage loads changed with the edited sets.
+    pub refreshed_workouts: Vec<u16>,
 }
 
 /// Stores the edited notes and sets of a session and recomputes the records of the exercises
@@ -780,6 +813,8 @@ pub(super) async fn apply_session_changes(
     }
 
     let new_prs = SessionStep::update_prs(tx, &exercises, &[details.timestamp]).await?;
+    let refreshed_workouts =
+        WorkoutStep::refresh_percent_loads(tx, Some(&exercises), now()).await?;
 
     // Evaluated once: tells both which exercises now progress and whether any does
     let suggested_after = progression_suggestions(tx).await?;
@@ -790,6 +825,7 @@ pub(super) async fn apply_session_changes(
         new_prs,
         newly_suggested,
         any_progression: !suggested_after.is_empty(),
+        refreshed_workouts,
     })
 }
 
@@ -927,6 +963,7 @@ pub(super) async fn merge_sessions(
                 .filter_map(|s| s.ex_cat.zip(s.ex_id))
                 .collect();
             SessionStep::update_prs(tx, &handled_exercises, &[to.date]).await?;
+            WorkoutStep::refresh_percent_loads(tx, Some(&handled_exercises), now()).await?;
 
             Ok(())
         })

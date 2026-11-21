@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use rusqlite_orm::{
     Entity,
@@ -12,12 +12,18 @@ use rusqlite_orm::{
 use rustyfit::profile::typedef::Intensity;
 use serde::{Deserialize, Serialize};
 
-use crate::dao::{
-    exercise::{self, Exercise},
-    session_step::exercise_key_values,
-    workout::{WorkoutRepository, entity::columns as workout_cols},
-    workout_device::{WorkoutDeviceRepository, entity::columns as workout_device_cols},
+use crate::{
+    dao::{
+        exercise::{self, Exercise},
+        session_step::{SessionStep, exercise_key_values},
+        workout::{WorkoutRepository, entity::columns as workout_cols},
+        workout_device::{WorkoutDeviceRepository, entity::columns as workout_device_cols},
+    },
+    utils::strength::{estimate_1rm, percent_load},
 };
+
+/// Weeks of sets the current estimated 1RM of an exercise is taken from.
+pub const ONE_RM_WINDOW_WEEKS: u32 = 8;
 
 #[derive(Clone, Serialize, Deserialize, Entity)]
 #[entity("workout_step")]
@@ -38,7 +44,11 @@ pub struct WorkoutStep {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reps: Option<Option<u16>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// In kg. With `one_rm_pct`, the load that percentage resolves to, `None` without a 1RM
     pub weight: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// Percentage of the current estimated 1RM of the exercise the step is loaded with
+    pub one_rm_pct: Option<u8>,
     #[serde(skip_serializing_if = "Option::is_none")]
     /// In seconds; FIT files carry it in milliseconds
     pub time: Option<Option<u32>>,
@@ -136,6 +146,8 @@ impl WorkoutStep {
             .where_(Where::And(vec![
                 Where::Eq(entity::columns::KIND, StepType::Exercise.into()),
                 Where::NotNull(entity::columns::REPS),
+                // Percentage loads grow with the 1RM, so they stay out of the progression
+                Where::Null(entity::columns::ONE_RM_PCT),
                 Where::InMultiple(
                     vec![entity::columns::EX_CAT, entity::columns::EX_ID],
                     exercise_key_values(keys),
@@ -173,6 +185,7 @@ impl WorkoutStep {
                 Where::Eq(entity::columns::EX_CAT, category.into()),
                 Where::Eq(entity::columns::EX_ID, id.into()),
                 Where::Eq(entity::columns::KIND, StepType::Exercise.into()),
+                Where::Null(entity::columns::ONE_RM_PCT),
                 Where::In(
                     entity::columns::WORKOUT,
                     workouts_with_prog.iter().map(|&w| w.into()).collect(),
@@ -207,6 +220,7 @@ impl WorkoutStep {
                 Where::Eq(entity::columns::EX_CAT, category.into()),
                 Where::Eq(entity::columns::EX_ID, id.into()),
                 Where::Eq(entity::columns::KIND, StepType::Exercise.into()),
+                Where::Null(entity::columns::ONE_RM_PCT),
                 in_progression_workouts(false),
             ]
         };
@@ -254,6 +268,141 @@ impl WorkoutStep {
 
         Ok((modified > 0, workouts))
     }
+
+    /// Resolves the steps loaded with a percentage of the 1RM, of the exercises in `exercises` or
+    /// of every exercise with `None`, against the best estimated 1RM of the sets performed in the
+    /// [`ONE_RM_WINDOW_WEEKS`] before `now`, rounded to the weight increment of the exercise. A
+    /// step without sets to estimate from goes unloaded. Workouts with a changed load are queued
+    /// for the devices; returns their ids.
+    pub async fn refresh_percent_loads(
+        tx: &Transaction<'_>,
+        exercises: Option<&HashSet<(u16, u16)>>,
+        now: u32,
+    ) -> rusqlite_orm::errors::Result<Vec<u16>> {
+        let mut conditions = vec![
+            Where::NotEq(entity::columns::KIND, StepType::Rest.into()),
+            Where::NotNull(entity::columns::ONE_RM_PCT),
+            Where::NotNull(entity::columns::EX_CAT),
+            Where::NotNull(entity::columns::EX_ID),
+        ];
+        if let Some(keys) = exercises {
+            if keys.is_empty() {
+                return Ok(Vec::new());
+            }
+            conditions.push(Where::InMultiple(
+                vec![entity::columns::EX_CAT, entity::columns::EX_ID],
+                exercise_key_values(keys),
+            ));
+        }
+
+        struct PercentStep {
+            workout: u16,
+            idx: u16,
+            exercise: (u16, u16),
+            weight: Option<f32>,
+            pct: u8,
+        }
+
+        let steps: Vec<PercentStep> = WorkoutStepRepository::select()
+            .columns(&[
+                entity::columns::WORKOUT,
+                entity::columns::IDX,
+                entity::columns::EX_CAT,
+                entity::columns::EX_ID,
+                entity::columns::WEIGHT,
+                entity::columns::ONE_RM_PCT,
+            ])
+            .where_(Where::And(conditions))
+            .fetch_in(tx)
+            .await?
+            .iter()
+            .map(|row| PercentStep {
+                workout: row.get_u16(entity::columns::WORKOUT.as_ref()),
+                idx: row.get_u16(entity::columns::IDX.as_ref()),
+                exercise: (
+                    row.get_u16(entity::columns::EX_CAT.as_ref()),
+                    row.get_u16(entity::columns::EX_ID.as_ref()),
+                ),
+                weight: row.get_f32_nullable(entity::columns::WEIGHT.as_ref()),
+                pct: row.get_u8(entity::columns::ONE_RM_PCT.as_ref()),
+            })
+            .collect();
+        if steps.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let keys: HashSet<(u16, u16)> = steps.iter().map(|s| s.exercise).collect();
+        let exercises: HashMap<(u16, u16), Exercise> = Exercise::get_by_keys(tx, &keys)
+            .await?
+            .into_iter()
+            .map(|e| ((e.category, e.id), e))
+            .collect();
+        let one_rms = current_one_rms(tx, Some(&keys), &exercises, now).await?;
+
+        let mut changed: BTreeSet<u16> = BTreeSet::new();
+        for PercentStep {
+            workout,
+            idx,
+            exercise,
+            weight,
+            pct,
+        } in steps
+        {
+            let increment = exercises.get(&exercise).map_or(0.0, |e| e.weight);
+            let load = one_rms
+                .get(&exercise)
+                .map(|&one_rm| percent_load(one_rm, pct, increment))
+                .filter(|&load| load > 0.0);
+            if load == weight {
+                continue;
+            }
+            WorkoutStepRepository::update()
+                .set(entity::columns::WEIGHT, load.into())
+                .where_(Where::And(vec![
+                    Where::Eq(entity::columns::WORKOUT, workout.into()),
+                    Where::Eq(entity::columns::IDX, idx.into()),
+                ]))
+                .execute_in(tx)
+                .await?;
+            changed.insert(workout);
+        }
+
+        if !changed.is_empty() {
+            WorkoutDeviceRepository::update()
+                .set(workout_device_cols::PENDING, true.into())
+                .where_(Where::In(
+                    workout_device_cols::WORKOUT,
+                    changed.iter().map(|&w| w.into()).collect(),
+                ))
+                .execute_in(tx)
+                .await?;
+        }
+
+        Ok(changed.into_iter().collect())
+    }
+}
+
+/// Best estimated 1RM of the sets performed in the [`ONE_RM_WINDOW_WEEKS`] before `now`, of the
+/// exercises in `keys` or of every exercise with `None`, by exercise. `exercises` tells which are
+/// unilateral; those missing from it count as bilateral. Exercises without sets, or only unloaded
+/// ones, are left out.
+pub async fn current_one_rms(
+    conn: &Connection,
+    keys: Option<&HashSet<(u16, u16)>>,
+    exercises: &HashMap<(u16, u16), Exercise>,
+    now: u32,
+) -> rusqlite_orm::errors::Result<HashMap<(u16, u16), f32>> {
+    let since = now.saturating_sub(ONE_RM_WINDOW_WEEKS * 7 * 24 * 3600);
+    let mut one_rms: HashMap<(u16, u16), f32> = HashMap::new();
+    for (key, weight, reps) in SessionStep::get_sets_since(conn, keys, since).await? {
+        let unilateral = exercises.get(&key).is_some_and(|e| e.unilateral);
+        let estimate = estimate_1rm(weight, reps, unilateral);
+        if estimate > 0.0 {
+            let best = one_rms.entry(key).or_default();
+            *best = best.max(estimate);
+        }
+    }
+    Ok(one_rms)
 }
 
 /// Steps of workouts with progression enabled, only the enabled ones if `only_enabled`.
@@ -382,6 +531,7 @@ impl WorkoutStep {
             reps: None,
             time: None,
             weight: None,
+            one_rm_pct: None,
             notes: None,
             exercise: None,
         }

@@ -12,3 +12,8 @@ pub fn local_midnight(ts: i64) -> Option<u32> {
 pub fn today_local_midnight() -> Option<u32> {
     local_midnight(Local::now().timestamp())
 }
+
+/// Returns the current UTC timestamp in seconds.
+pub fn now() -> u32 {
+    u32::try_from(Local::now().timestamp()).unwrap_or(u32::MAX)
+}

@@ -208,9 +208,16 @@ function leafToHtml(idx: number, leaf: LeafStep, fmt: Formatters): JSX.Element {
                 )}
             </td>
             <td className="centered">
+                {leaf.one_rm_pct != null && (
+                    <>
+                        {leaf.one_rm_pct + "% " + fmt.translate("rm")}
+                        {leaf.weight !== null && <br />}
+                    </>
+                )}
                 {leaf.weight !== null && (
                     <>
-                        {formatNumber(fromKg(leaf.weight), 1) +
+                        {(leaf.one_rm_pct != null ? "≈ " : "") +
+                            formatNumber(fromKg(leaf.weight), 1) +
                             " " +
                             getWeightUnit()}
                     </>

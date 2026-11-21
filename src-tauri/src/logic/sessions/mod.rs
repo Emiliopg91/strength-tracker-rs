@@ -8,7 +8,7 @@ use tauri_plugin_log::log::info;
 use self::helpers::{
     apply_session_changes, fetch_session_details, fetch_sessions, heatmap_data, import_file_paths,
     notify_new_prs, notify_progression_available, retrieve_session_connect_id, session_file_name,
-    write_session_fit,
+    spawn_percent_load_sync, write_session_fit,
 };
 use crate::{
     SettingsLock,
@@ -179,6 +179,8 @@ pub async fn save_session_changes<R: Runtime>(
             // Typed binding: the TypeScript generator reads the payload type from it
             let payload: bool = changes.any_progression;
             let _ = app.emit("progressions_available", payload);
+
+            spawn_percent_load_sync(app, changes.refreshed_workouts);
 
             let app_cl = app.clone();
             tauri::async_runtime::spawn(async move {

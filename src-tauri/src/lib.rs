@@ -64,8 +64,9 @@ use crate::{
         },
         workouts::commands::{
             add_planned_workout, delete_planned_workout, get_next_planned_workout,
-            get_planned_workouts, get_workout_details, get_workout_list, load_workout_page,
-            save_workout, set_workout_progression, set_workout_status, workout_print_ready,
+            get_percent_load_bases, get_planned_workouts, get_workout_details, get_workout_list,
+            load_workout_page, save_workout, set_workout_progression, set_workout_status,
+            workout_print_ready,
         },
     },
     mtp::MtpClient,
@@ -121,6 +122,29 @@ fn initialize(app: &AppHandle) -> (DatabasePool, Settings, ConnectClient, MtpCli
                 )
                 .await
                 .unwrap();
+
+                // Sets leave the 1RM window as days go by: the queued workouts reach USB devices
+                // on their next push and Connect with the pending uploads retried once logged in
+                if let Err(e) = database
+                    .run_in_transaction(async |tx| {
+                        let changed = crate::dao::workout_step::WorkoutStep::refresh_percent_loads(
+                            tx,
+                            None,
+                            utils::time::now(),
+                        )
+                        .await?;
+                        if !changed.is_empty() {
+                            crate::dao::workout_device::WorkoutDevice::set_connect_pending(
+                                tx, &changed, true,
+                            )
+                            .await?;
+                        }
+                        Ok(())
+                    })
+                    .await
+                {
+                    warn!("Could not refresh percentage loads: {}", e);
+                }
 
                 //crate::logic::sessions::helpers::merge_sessions(&database, _, _);
 
@@ -322,6 +346,7 @@ pub fn run(log_level: LevelFilter) {
             load_workout_page,
             workout_print_ready,
             get_planned_workouts,
+            get_percent_load_bases,
             delete_planned_workout,
             add_planned_workout,
             get_next_planned_workout,

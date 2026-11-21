@@ -12,6 +12,7 @@ const exerciseStep = (overrides: Partial<WorkoutStep>): WorkoutStep => ({
     reps: null,
     time: null,
     weight: 16,
+    one_rm_pct: null,
     notes: null,
     exercise: null,
     ...overrides,
@@ -128,6 +129,31 @@ describe("WorkoutUtils", () => {
                 reps,
             })),
         );
+    });
+
+    it("sends percentage loads without a weight, for the backend to resolve", () => {
+        const steps = parse(
+            exerciseStep({ reps: 5, weight: 84, one_rm_pct: 70 }),
+        );
+
+        expect(steps[0]).toMatchObject({ one_rm_pct: 70, weight: 84 });
+        expect(WorkoutUtils.validateSteps(steps)).toBe(true);
+
+        const [written] = WorkoutUtils.toWorkoutSteps(steps, 1, (kg) => kg);
+        expect(written).toMatchObject({ one_rm_pct: 70, weight: null });
+    });
+
+    it("rounds percentage loads to the exercise increment like the backend", () => {
+        expect(WorkoutUtils.percentLoad(120, 70, 2.5)).toBe(85);
+        expect(WorkoutUtils.percentLoad(120, 70, 1.25)).toBe(83.8);
+        expect(WorkoutUtils.percentLoad(101, 50, 0)).toBe(50.5);
+    });
+
+    it("rejects percentages outside 1-100 or with decimals", () => {
+        for (const one_rm_pct of [0, 101, 72.5]) {
+            const steps = parse(exerciseStep({ reps: 5, one_rm_pct }));
+            expect(WorkoutUtils.validateSteps(steps)).toBe(false);
+        }
     });
 
     it("rejects a nested repeat with an invalid step inside", () => {

@@ -547,6 +547,15 @@ limit_type_reps:
 limit_type_time:
   en: Time
   es: Tiempo
+load_type:
+  en: Load
+  es: Carga
+no_recent_one_rm:
+  en: no 1RM
+  es: sin 1RM
+one_rm_pct_hint:
+  en: Percentage of the best estimated 1RM of the last 8 weeks, rounded to the exercise weight increment. Recomputed and sent again whenever that 1RM changes
+  es: Porcentaje del mejor 1RM estimado de las últimas 8 semanas, redondeado al incremento de peso del ejercicio. Se recalcula y se reenvía cada vez que cambia ese 1RM
 create_workout:
   en: New workout
   es: Nuevo entrenamiento

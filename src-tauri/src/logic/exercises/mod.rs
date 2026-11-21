@@ -1,7 +1,7 @@
 pub mod commands;
 pub mod helpers;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use rusqlite_orm::errors::DatabaseError;
 use tauri::{AppHandle, Runtime};
@@ -17,8 +17,9 @@ use crate::{
     dto::exercises::{ExerciseDetails, ExerciseListItem, ProgressionSuggestion},
     logic::{
         connect::helpers::sync_workouts_connect, devices::helpers::push_pending_to_usb, pool,
-        report_error,
+        report_error, sessions::helpers::spawn_percent_load_sync,
     },
+    utils::time::now,
 };
 
 /// Returns the exercises with a personal record, annotated with it, plus those planned in some
@@ -86,10 +87,14 @@ pub async fn set_exercise_unilateral<R: Runtime>(
     value: bool,
 ) -> Result<(), String> {
     pool(app)
-        .run_in_connection(async move |conn| {
-            Ok(Exercise::set_unilateral(conn, category, id, value).await?)
+        .run_in_transaction(async move |tx| {
+            Exercise::set_unilateral(tx, category, id, value).await?;
+            // Unilateral sets estimate the 1RM from half their reps
+            let keys: HashSet<(u16, u16)> = [(category, id)].into();
+            Ok(WorkoutStep::refresh_percent_loads(tx, Some(&keys), now()).await?)
         })
         .await
+        .map(|refreshed| spawn_percent_load_sync(app, refreshed))
         .inspect(|_| info!("Updated unilateral flag for exercise"))
         .map_err(|e| {
             report_error(
@@ -134,10 +139,14 @@ pub async fn set_exercise_progression_parameters<R: Runtime>(
 ) -> Result<(), String> {
     let reps = reps.to_string();
     pool(app)
-        .run_in_connection(async move |conn| {
-            Ok(Exercise::set_progression_parameters(conn, category, id, reps, weight).await?)
+        .run_in_transaction(async move |tx| {
+            Exercise::set_progression_parameters(tx, category, id, reps, weight).await?;
+            // Percentage loads are rounded to the weight increment
+            let keys: HashSet<(u16, u16)> = [(category, id)].into();
+            Ok(WorkoutStep::refresh_percent_loads(tx, Some(&keys), now()).await?)
         })
         .await
+        .map(|refreshed| spawn_percent_load_sync(app, refreshed))
         .inspect(|_| info!("Updated rep ranges for exercise"))
         .map_err(|e| {
             report_error(

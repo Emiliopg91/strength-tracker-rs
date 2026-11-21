@@ -41,8 +41,9 @@ pub async fn get_exercises_catalog(app: AppHandle) -> Result<HashMap<u16, Vec<u1
     super::get_exercises_catalog(&app).await
 }
 
-/// Marks the exercise `category`/`id` as performed one side at a time, or not. On failure, shows a
-/// persistent error notification and rejects with the message.
+/// Marks the exercise `category`/`id` as performed one side at a time, or not, and sends again the
+/// workouts whose percentage loads change with its estimated 1RM. On failure, shows a persistent
+/// error notification and rejects with the message.
 #[traced_command]
 #[tauri::command]
 pub async fn set_exercise_unilateral(
@@ -70,8 +71,9 @@ pub async fn set_exercise_progression(
 }
 
 /// Sets the progression parameters of the exercise `category`/`id`: the rep range `reps` (e.g.
-/// `"8-10-12"`) and the weight increment `weight`. On failure, shows a persistent error
-/// notification and rejects with the message.
+/// `"8-10-12"`) and the weight increment `weight`, and sends again the workouts whose percentage
+/// loads change with the new rounding. On failure, shows a persistent error notification and
+/// rejects with the message.
 #[traced_command]
 #[tauri::command]
 pub async fn set_exercise_progression_parameters(

@@ -33,6 +33,7 @@ fn step(idx: u16, kind: StepType) -> WorkoutStep {
         ex_id: None,
         reps: None,
         weight: None,
+        one_rm_pct: None,
         time: None,
         begin_idx: None,
         notes: None,

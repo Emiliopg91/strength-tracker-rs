@@ -14,6 +14,7 @@ mod home;
 mod import;
 mod notes;
 mod parser;
+mod percent_loads;
 mod progressions;
 mod prs;
 mod schedule;

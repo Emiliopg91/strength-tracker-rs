@@ -1,4 +1,9 @@
-import { StepType, Workout, WorkoutDetails } from "@/utils/backend/models";
+import {
+    PercentLoadBase,
+    StepType,
+    Workout,
+    WorkoutDetails,
+} from "@/utils/backend/models";
 import {
     Button,
     Dialog,
@@ -8,7 +13,7 @@ import {
     TextField,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
-import { useContext, useState } from "react";
+import { useContext, useEffect, useEffectEvent, useState } from "react";
 import { WorkoutStepData, WorkoutUtils } from "@/utils/WorkoutUtils";
 import { WorkoutSetGroup } from "../steps/WorkoutSetGroup";
 import { WorkoutSetLeaf } from "../steps/WorkoutSetLeaf";
@@ -28,11 +33,29 @@ export function WorkoutStepsModal({ workout, isEdit, onClose }: Props) {
     const withLoading = useLoadingTask();
     const { translate, fromKg, toKg } = useContext(I18nSettingsContext);
     const { exercisesCatalog: fullCatalog } = useContext(AppContext);
+    // Null until loaded: steps loaded with a percentage show their last saved load meanwhile
+    const [loadBases, setLoadBases] = useState<PercentLoadBase[] | null>(null);
     // Exercise notes only reach the steps of workouts with progression, so they aren't offered as
-    // the placeholder of the step notes otherwise
-    const exercisesCatalog = workout.progression
-        ? fullCatalog
-        : fullCatalog.map((e) => ({ ...e, notes: null }));
+    // the placeholder of the step notes otherwise. The 1RM lets percentage loads be previewed
+    const exercisesCatalog = fullCatalog.map((e) => {
+        const base = loadBases?.find(
+            (b) => b.ex_cat == e.ex_cat && b.ex_id == e.ex_id,
+        );
+        return {
+            ...e,
+            notes: workout.progression ? e.notes : null,
+            one_rm: loadBases ? (base?.one_rm ?? null) : undefined,
+            increment: base?.increment,
+        };
+    });
+
+    const fetchLoadBases = useEffectEvent(() => {
+        withLoading(BackendClient.getPercentLoadBases()).then(setLoadBases);
+    });
+
+    useEffect(() => {
+        fetchLoadBases();
+    }, []);
 
     const [name, setName] = useState(workout?.name);
     const [notes, setNotes] = useState(workout?.notes);

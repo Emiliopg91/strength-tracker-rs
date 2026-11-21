@@ -337,6 +337,56 @@ impl SessionStep {
             .collect())
     }
 
+    /// Exercise sets of the exercises in `keys`, or of every exercise with `None`, performed in
+    /// sessions from `since` on, as `(exercise, weight, reps)`, a missing weight or reps counting
+    /// as 0.
+    pub async fn get_sets_since(
+        conn: &Connection,
+        keys: Option<&HashSet<(u16, u16)>>,
+        since: u32,
+    ) -> rusqlite_orm::errors::Result<Vec<((u16, u16), f32, u16)>> {
+        let mut conditions = vec![
+            Where::Eq(entity::columns::KIND, StepType::Exercise.into()),
+            Where::Gte(entity::columns::SESSION, since.into()),
+            Where::NotNull(entity::columns::EX_CAT),
+            Where::NotNull(entity::columns::EX_ID),
+        ];
+        if let Some(keys) = keys {
+            if keys.is_empty() {
+                return Ok(Vec::new());
+            }
+            conditions.push(Where::InMultiple(
+                vec![entity::columns::EX_CAT, entity::columns::EX_ID],
+                exercise_key_values(keys),
+            ));
+        }
+
+        Ok(SessionStepRepository::select()
+            .columns(&[
+                entity::columns::EX_CAT,
+                entity::columns::EX_ID,
+                entity::columns::WEIGHT,
+                entity::columns::REPS,
+            ])
+            .where_(Where::And(conditions))
+            .fetch_in(conn)
+            .await?
+            .iter()
+            .map(|row| {
+                (
+                    (
+                        row.get_u16(entity::columns::EX_CAT.as_ref()),
+                        row.get_u16(entity::columns::EX_ID.as_ref()),
+                    ),
+                    row.get_f32_nullable(entity::columns::WEIGHT.as_ref())
+                        .unwrap_or_default(),
+                    row.get_u16_nullable(entity::columns::REPS.as_ref())
+                        .unwrap_or_default(),
+                )
+            })
+            .collect())
+    }
+
     /// Volume (reps by weight) lifted in every session of the workout `name` that has sets.
     pub async fn get_volume_by_session(
         conn: &Connection,

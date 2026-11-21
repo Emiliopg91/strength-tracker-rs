@@ -15,6 +15,7 @@ export interface LeafErrors {
     time: boolean;
     exercise: boolean;
     weight: boolean;
+    oneRmPct: boolean;
     reps: boolean;
     notes: string;
 }
@@ -88,6 +89,7 @@ export class WorkoutUtils {
                 ex_cat: null,
                 ex_id: null,
                 weight: null,
+                one_rm_pct: null,
                 notes: step.notes && step.notes!.length > 0 ? step.notes : "",
                 exercise: null,
             };
@@ -107,10 +109,12 @@ export class WorkoutUtils {
                         : null,
                 ex_cat: step.ex_cat,
                 ex_id: step.ex_id,
+                // With a percentage, the load it resolved to when last saved, shown as a hint
                 weight:
                     step.weight != null
                         ? Math.round(fromKg(step.weight) * 10) / 10
                         : null,
+                one_rm_pct: step.one_rm_pct ?? null,
                 notes: step.notes && step.notes!.length > 0 ? step.notes : "",
                 exercise: null,
             };
@@ -137,7 +141,17 @@ export class WorkoutUtils {
             exercise:
                 leaf.kind == StepType.Exercise &&
                 (leaf.ex_cat == null || leaf.ex_id == null),
-            weight: isActive && leaf.weight != null && leaf.weight < 0,
+            weight:
+                isActive &&
+                leaf.one_rm_pct == null &&
+                leaf.weight != null &&
+                leaf.weight < 0,
+            oneRmPct:
+                isActive &&
+                leaf.one_rm_pct != null &&
+                (!Number.isInteger(leaf.one_rm_pct) ||
+                    leaf.one_rm_pct < 1 ||
+                    leaf.one_rm_pct > 100),
             reps: isActive && leaf.reps != null && leaf.reps < 1,
             notes: "",
         };
@@ -183,6 +197,7 @@ export class WorkoutUtils {
                     ex_id: null,
                     time: null,
                     weight: null,
+                    one_rm_pct: null,
                     notes: "",
                     exercise: null,
                 });
@@ -216,6 +231,7 @@ export class WorkoutUtils {
                 ex_id: null,
                 reps: null,
                 weight: null,
+                one_rm_pct: null,
                 notes:
                     leaf.notes !== null && leaf.notes.length > 0
                         ? leaf.notes
@@ -231,12 +247,14 @@ export class WorkoutUtils {
                 ex_cat: leaf.ex_cat,
                 ex_id: leaf.ex_id,
                 reps: leaf.reps,
+                // The backend resolves percentage loads itself
                 weight:
-                    leaf.weight != null
+                    leaf.one_rm_pct == null && leaf.weight != null
                         ? leaf.weight > 0
                             ? Math.round(toKg(leaf.weight) * 10) / 10
                             : null
                         : null,
+                one_rm_pct: leaf.one_rm_pct,
                 begin_idx: null,
                 notes:
                     leaf.notes !== null && leaf.notes.length > 0
@@ -245,6 +263,20 @@ export class WorkoutUtils {
                 exercise: null,
             };
         }
+    }
+
+    /**
+     * `pct` percent of `oneRm`, rounded to the nearest multiple of `increment` (0.5 without one).
+     * Mirrors `percent_load` in the backend, which resolves the load that is actually sent.
+     */
+    public static percentLoad(
+        oneRm: number,
+        pct: number,
+        increment: number,
+    ): number {
+        const step = increment > 0 ? increment : 0.5;
+        const load = (oneRm * pct) / 100;
+        return Math.round(Math.round(load / step) * step * 10) / 10;
     }
 
     public static getDefaultLeaf(kind: StepType): LeafStep {
@@ -272,6 +304,7 @@ export class WorkoutUtils {
         ex_id: null,
         reps: null,
         weight: null,
+        one_rm_pct: null,
         notes: "",
         exercise: null,
     };
@@ -283,6 +316,7 @@ export class WorkoutUtils {
         ex_id: null,
         reps: 8,
         weight: 0,
+        one_rm_pct: null,
         notes: "",
         exercise: null,
     };

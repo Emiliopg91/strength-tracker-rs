@@ -1,16 +1,23 @@
 pub mod commands;
 pub mod helpers;
 
+use std::collections::{HashMap, HashSet};
+
 use tauri::{AppHandle, Emitter, Runtime, WebviewWindow};
 use tauri_plugin_log::log::info;
 
 use self::helpers::{workout_details, workout_list};
 use crate::{
     ConnectLock, SettingsLock,
-    dao::{workout::Workout, workout_planning::WorkoutPlanning},
+    dao::{
+        exercise::Exercise,
+        workout::Workout,
+        workout_planning::WorkoutPlanning,
+        workout_step::{WorkoutStep, current_one_rms},
+    },
     dto::{
         notifications::{NotificationDefinition, NotificationKind},
-        workouts::{WorkoutDetails, WorkoutListItem, WorkoutPlanListItem},
+        workouts::{PercentLoadBase, WorkoutDetails, WorkoutListItem, WorkoutPlanListItem},
     },
     logic::{
         connect::helpers::{delete_plan_from_connect, push_plan_to_connect, sync_workouts_connect},
@@ -23,7 +30,7 @@ use crate::{
         open_window, pool, print_to_pdf, report_error, settings_language,
     },
     utils::{
-        time::today_local_midnight,
+        time::{now, today_local_midnight},
         translations::{translate, translate_and_replace},
     },
 };
@@ -157,19 +164,34 @@ pub async fn save_workout<R: Runtime>(
     }
 
     let res = pool(app)
-        .run_in_transaction(async move |tx| Ok(Workout::store(tx, &workout, edit).await?))
+        .run_in_transaction(async move |tx| {
+            let id = Workout::store(tx, &workout, edit).await?;
+            // Percentage loads are resolved here: whatever weight the step came with is replaced
+            let exercises: HashSet<(u16, u16)> = workout
+                .steps
+                .iter()
+                .filter(|s| s.one_rm_pct.is_some())
+                .filter_map(|s| s.ex_cat.zip(s.ex_id))
+                .collect();
+            let refreshed = WorkoutStep::refresh_percent_loads(tx, Some(&exercises), now()).await?;
+            Ok((id, refreshed))
+        })
         .await;
 
     match res {
-        Ok(id) => {
+        Ok((id, refreshed)) => {
             info!("Workout '{}' saved succesfully", name);
             show_notification(NotificationDefinition {
                 title: name,
                 body: translate("ok_workout_save", lang),
                 kind: NotificationKind::Temporal,
             });
-            sync_workouts_connect(app, connect, settings, &[id]).await;
-            if edit {
+            let mut workouts = refreshed;
+            if !workouts.contains(&id) {
+                workouts.push(id);
+            }
+            sync_workouts_connect(app, connect, settings, &workouts).await;
+            if edit || workouts.len() > 1 {
                 push_pending_to_usb(app).await;
             }
             Ok(())
@@ -181,6 +203,40 @@ pub async fn save_workout<R: Runtime>(
             "Error saving workout",
         )),
     }
+}
+
+/// Current estimated 1RM and weight increment of every exercise with recent loaded sets.
+pub async fn get_percent_load_bases<R: Runtime>(
+    app: &AppHandle<R>,
+    settings: &SettingsLock,
+) -> Result<Vec<PercentLoadBase>, String> {
+    pool(app)
+        .run_in_connection(async move |conn| {
+            let exercises: HashMap<(u16, u16), Exercise> = Exercise::get_all(conn)
+                .await?
+                .into_iter()
+                .map(|e| ((e.category, e.id), e))
+                .collect();
+            let one_rms = current_one_rms(conn, None, &exercises, now()).await?;
+            Ok(one_rms
+                .into_iter()
+                .map(|((ex_cat, ex_id), one_rm)| PercentLoadBase {
+                    ex_cat,
+                    ex_id,
+                    one_rm,
+                    increment: exercises.get(&(ex_cat, ex_id)).map_or(0.0, |e| e.weight),
+                })
+                .collect())
+        })
+        .await
+        .map_err(|e| {
+            report_error(
+                e,
+                settings,
+                "error_workout_details",
+                "Error getting the current 1RM estimates",
+            )
+        })
 }
 
 pub async fn load_workout_page<R: Runtime>(app: &AppHandle<R>, workout: u16) -> Result<(), String> {

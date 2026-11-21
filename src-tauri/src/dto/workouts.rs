@@ -48,6 +48,17 @@ pub struct WorkoutDetails {
     pub secondary_muscles: Vec<String>,
 }
 
+/// What a step loaded with a percentage of the 1RM resolves against for an exercise.
+#[derive(Serialize)]
+pub struct PercentLoadBase {
+    pub ex_cat: u16,
+    pub ex_id: u16,
+    /// Best estimated 1RM of the recent sets, in kg
+    pub one_rm: f32,
+    /// Weight increment of the exercise the load is rounded to, in kg
+    pub increment: f32,
+}
+
 #[derive(Serialize)]
 pub struct WorkoutPlanListItem {
     pub date: u32,

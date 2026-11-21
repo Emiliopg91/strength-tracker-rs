@@ -111,6 +111,14 @@ export interface MuscleExercise {
   muscle_obj: Muscle | null;
 }
 
+// From src-tauri/src/dto/workouts.rs:53
+export interface PercentLoadBase {
+  ex_cat: number;
+  ex_id: number;
+  increment: number;
+  one_rm: number;
+}
+
 // From src-tauri/src/dto/exercises.rs:103
 export interface ProgressionSuggestion {
   reps: number;
@@ -220,7 +228,7 @@ export interface Settings {
   weight_unit: WeightUnit;
 }
 
-// From src-tauri/src/dao/workout_step.rs:306
+// From src-tauri/src/dao/workout_step.rs:455
 export enum StepType {
 	Exercise = "Exercise",
 	Warmup = "Warmup",
@@ -278,7 +286,7 @@ export interface WorkoutListItem {
   sessions: number;
 }
 
-// From src-tauri/src/dto/workouts.rs:52
+// From src-tauri/src/dto/workouts.rs:63
 export interface WorkoutPlanListItem {
   date: number;
   session: number | null;
@@ -292,7 +300,7 @@ export interface WorkoutSession {
   volume: number;
 }
 
-// From src-tauri/src/dao/workout_step.rs:27
+// From src-tauri/src/dao/workout_step.rs:33
 export interface WorkoutStep {
   begin_idx: number | null;
   ex_cat: number | null;
@@ -301,6 +309,7 @@ export interface WorkoutStep {
   idx: number;
   kind: StepType;
   notes: string | null;
+  one_rm_pct: number | null;
   reps: number | null | null;
   time: number | null | null;
   weight: number | null;

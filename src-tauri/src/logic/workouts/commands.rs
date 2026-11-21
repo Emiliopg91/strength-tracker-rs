@@ -4,7 +4,7 @@ use tauri::{AppHandle, State, WebviewWindow};
 use crate::{
     ConnectLock, SettingsLock,
     dao::workout::Workout,
-    dto::workouts::{WorkoutDetails, WorkoutListItem, WorkoutPlanListItem},
+    dto::workouts::{PercentLoadBase, WorkoutDetails, WorkoutListItem, WorkoutPlanListItem},
 };
 
 /// Every workout with its session stats (count, average time and load, latest date), by name. On
@@ -86,6 +86,18 @@ pub async fn load_workout_page(app: AppHandle, workout: u16) -> Result<(), Strin
 #[tauri::command]
 pub async fn workout_print_ready(window: WebviewWindow, workout: &str) -> Result<(), String> {
     super::workout_print_ready(window, workout).await
+}
+
+/// Current estimated 1RM (best of the last weeks) and weight increment of every exercise with
+/// recent loaded sets, to preview the steps loaded with a percentage of it. On failure, shows a
+/// persistent error notification and rejects with the message.
+#[traced_command]
+#[tauri::command]
+pub async fn get_percent_load_bases(
+    app: AppHandle,
+    settings: State<'_, SettingsLock>,
+) -> Result<Vec<PercentLoadBase>, String> {
+    super::get_percent_load_bases(&app, &settings).await
 }
 
 /// List planned workouts.

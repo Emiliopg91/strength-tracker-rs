@@ -5,6 +5,7 @@ import {
     Box,
     FormControl,
     IconButton,
+    InputAdornment,
     InputLabel,
     MenuItem,
     Select,
@@ -37,6 +38,11 @@ enum LimitType {
     Reps,
 }
 
+enum LoadType {
+    Weight,
+    OneRmPercent,
+}
+
 export function WorkoutSetLeaf({
     leaf,
     index,
@@ -46,9 +52,13 @@ export function WorkoutSetLeaf({
     swapPosition,
     onChange,
 }: Props) {
-    const { translate } = useContext(I18nSettingsContext);
+    const { translate, formatNumber, getWeightUnit, fromKg } =
+        useContext(I18nSettingsContext);
     const typeLabelId = useId();
     const limitLabelId = useId();
+    const loadLabelId = useId();
+    const loadType =
+        leaf.one_rm_pct != null ? LoadType.OneRmPercent : LoadType.Weight;
     const [timeInput, setTimeInput] = useState<string | null>(null);
     const isActive = leaf.kind != StepType.Rest;
     const errors = WorkoutUtils.leafErrors(leaf);
@@ -69,6 +79,27 @@ export function WorkoutSetLeaf({
         exercisesCatalog.find(
             (e) => e.ex_cat == leaf.ex_cat && e.ex_id == leaf.ex_id,
         ) ?? undefined;
+    // Live preview of the load a percentage resolves to; until the 1RMs load (one_rm undefined),
+    // the load it resolved to when last saved
+    const percentPreview: string | null = (() => {
+        if (leaf.one_rm_pct == null || errors.oneRmPct) {
+            return null;
+        }
+        if (selected?.one_rm === undefined) {
+            return leaf.weight != null
+                ? "≈ " + formatNumber(leaf.weight, 1) + " " + getWeightUnit()
+                : null;
+        }
+        if (selected.one_rm === null) {
+            return translate("no_recent_one_rm");
+        }
+        const kg = WorkoutUtils.percentLoad(
+            selected.one_rm,
+            leaf.one_rm_pct,
+            selected.increment ?? 0,
+        );
+        return "≈ " + formatNumber(fromKg(kg), 1) + " " + getWeightUnit();
+    })();
     const notesPlaceholder =
         leaf.kind == StepType.Exercise
             ? (selected?.notes ?? undefined)
@@ -111,6 +142,26 @@ export function WorkoutSetLeaf({
         });
     };
 
+    const onLoadTypeChange = (e: SelectChangeEvent<number>) => {
+        onChange(
+            (e.target.value as LoadType) == LoadType.OneRmPercent
+                ? { ...leaf, weight: null, one_rm_pct: 70 }
+                : { ...leaf, weight: 0, one_rm_pct: null },
+        );
+    };
+
+    // Integers only; clearing the field leaves it invalid until a value is typed
+    const onPercentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value;
+        if (!/^\d{0,3}$/.test(value)) {
+            return;
+        }
+        onChange({
+            ...leaf,
+            one_rm_pct: value == "" ? 0 : parseInt(value),
+        });
+    };
+
     const onRepsChange = (reps: number | null) => {
         onChange({
             ...leaf,
@@ -140,6 +191,8 @@ export function WorkoutSetLeaf({
             ...leaf,
             ex_cat: opt?.ex_cat ?? null,
             ex_id: opt?.ex_id ?? null,
+            // A percentage resolved for the previous exercise no longer applies
+            weight: leaf.one_rm_pct != null ? null : leaf.weight,
         });
     };
 
@@ -235,6 +288,30 @@ export function WorkoutSetLeaf({
             )}
 
             {isActive && (
+                <FormControl size="small" sx={{ width: 110 }}>
+                    <InputLabel id={loadLabelId}>
+                        {translate("load_type")}
+                    </InputLabel>
+                    <Select
+                        labelId={loadLabelId}
+                        value={loadType}
+                        label={translate("load_type")}
+                        onChange={onLoadTypeChange}
+                    >
+                        <MenuItem value={LoadType.Weight}>
+                            {getWeightUnit()}
+                        </MenuItem>
+                        <MenuItem
+                            value={LoadType.OneRmPercent}
+                            // Percentages resolve against the 1RM of the exercise
+                            disabled={leaf.ex_cat == null || leaf.ex_id == null}
+                        >
+                            {"% " + translate("rm")}
+                        </MenuItem>
+                    </Select>
+                </FormControl>
+            )}
+            {isActive && loadType == LoadType.Weight && (
                 <WeightField
                     allowEmpty
                     error={errors.weight}
@@ -242,6 +319,35 @@ export function WorkoutSetLeaf({
                     onChange={onWeightChange}
                     sx={{ width: 100 }}
                 />
+            )}
+            {isActive && loadType == LoadType.OneRmPercent && (
+                <Tooltip title={translate("one_rm_pct_hint")}>
+                    <TextField
+                        label={"% " + translate("rm")}
+                        error={errors.oneRmPct}
+                        size="small"
+                        sx={{ width: 170 }}
+                        value={leaf.one_rm_pct || ""}
+                        slotProps={{
+                            htmlInput: {
+                                inputMode: "numeric",
+                                style: { textAlign: "center" },
+                            },
+                            input: {
+                                endAdornment:
+                                    percentPreview != null ? (
+                                        <InputAdornment
+                                            position="end"
+                                            sx={{ ml: 0 }}
+                                        >
+                                            {percentPreview}
+                                        </InputAdornment>
+                                    ) : undefined,
+                            },
+                        }}
+                        onChange={onPercentChange}
+                    />
+                </Tooltip>
             )}
         </>
     );
@@ -351,6 +457,11 @@ export function WorkoutSetLeaf({
                                           ...leaf,
                                           ex_cat: null,
                                           ex_id: null,
+                                          // Without an exercise there is no 1RM
+                                          ...(leaf.one_rm_pct != null && {
+                                              weight: 0,
+                                              one_rm_pct: null,
+                                          }),
                                       })
                                 : undefined
                         }
