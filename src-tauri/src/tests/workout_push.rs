@@ -63,6 +63,7 @@ async fn setup() -> DatabasePool {
                     workout,
                     device: device.to_string(),
                     pending,
+                    previous_name: None,
                 })
                 .execute_in(tx)
                 .await?;

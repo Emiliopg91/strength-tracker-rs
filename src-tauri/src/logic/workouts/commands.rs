@@ -54,8 +54,9 @@ pub async fn set_workout_progression(
     super::set_workout_progression(&app, &settings, &connect, workout, value).await
 }
 
-/// Creates `workout`, or replaces the notes and steps of the existing one with its id when `edit`
-/// (its name is kept), and uploads it to Connect. When editing, it is also pushed to the connected
+/// Creates `workout`, or replaces the name, notes and steps of the existing one with its id when
+/// `edit`, and uploads it to Connect. A renamed workout has its old file deleted from each USB
+/// device before the next push there. When editing, it is also pushed to the connected
 /// USB devices that have it. Notifies on success. On failure, shows a persistent error notification
 /// and rejects with the message.
 #[traced_command]

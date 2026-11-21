@@ -392,6 +392,11 @@ pub(super) async fn delete_pending_workouts<R: Runtime>(app: &AppHandle<R>, seri
 
     let lang = language(app);
     for (id, workout) in pending {
+        // A workout renamed since sent is still under its old name on the device
+        if let Err(e) = delete_previous_file(app, id, &serial).await {
+            error!("Error deleting previous file of workout '{workout}' from {serial}: {e}");
+            continue;
+        }
         match delete_workout_from_device(app, &workout, &serial).await {
             Ok(deleted) => {
                 clear_workout_pending(app, &workout, id, &serial).await;
@@ -522,6 +527,9 @@ pub(super) async fn send_workout_to_device<R: Runtime>(
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("Workout {id} not found"))?;
 
+    // The device would ignore the renamed workout, or keep both, next to the old file
+    delete_previous_file(app, id, serial).await?;
+
     // File name is kept as-is since it becomes the workout file name on the device
     let file_name = workout.get_workout_file_name();
     upload_fit(app, serial, &file_name, move || {
@@ -552,6 +560,36 @@ async fn upload_fit<R: Runtime, E: ToString>(
             file_name,
             data,
         )
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Deletes from the device `serial` the file the workout `id` had there before being renamed, if
+/// any, and forgets that name.
+async fn delete_previous_file<R: Runtime>(
+    app: &AppHandle<R>,
+    id: u16,
+    serial: &str,
+) -> Result<(), String> {
+    let device = serial.to_string();
+    let previous = pool(app)
+        .run_in_connection(async move |conn| {
+            Ok(WorkoutDevice::get_previous_name(conn, id, &device).await?)
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+    let Some(previous) = previous else {
+        return Ok(());
+    };
+
+    if delete_workout_from_device(app, &previous, serial).await? {
+        info!("Deleted file of previous workout name '{previous}' from device {serial}");
+    }
+    let device = serial.to_string();
+    pool(app)
+        .run_in_connection(async move |conn| {
+            Ok(WorkoutDevice::clear_previous_name(conn, id, &device).await?)
+        })
         .await
         .map_err(|e| e.to_string())
 }

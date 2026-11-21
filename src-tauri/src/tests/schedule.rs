@@ -127,6 +127,7 @@ async fn link(db: &DatabasePool, links: Vec<(&'static str, &'static str, bool)>)
                     workout: id(workout),
                     device: device.to_string(),
                     pending,
+                    previous_name: None,
                 })
                 .execute_in(tx)
                 .await?;

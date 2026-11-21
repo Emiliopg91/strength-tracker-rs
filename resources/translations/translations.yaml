@@ -58,6 +58,9 @@ error_workout_list:
 error_workout_save:
   en: Error saving workout
   es: Error guardando el entrenamiento
+workout_name_taken:
+  en: A workout named '{}' already exists
+  es: Ya existe un entrenamiento llamado '{}'
 error_workout_send:
   en: Error sending workout to device
   es: Error enviando el entrenamiento al dispositivo

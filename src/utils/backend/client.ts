@@ -14,7 +14,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/workouts/commands.rs:107
+	// From src-tauri/src/logic/workouts/commands.rs:108
 	public static addPlannedWorkout(date: number, workout: number): Promise<void> {
 	  return BackendClient.inner_invoke("add_planned_workout", { date, workout }); 
 	}
@@ -62,7 +62,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/workouts/commands.rs:100
+	// From src-tauri/src/logic/workouts/commands.rs:101
 	public static deletePlannedWorkout(date: number, workout: number): Promise<void> {
 	  return BackendClient.inner_invoke("delete_planned_workout", { date, workout }); 
 	}
@@ -116,13 +116,13 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/workouts/commands.rs:114
+	// From src-tauri/src/logic/workouts/commands.rs:115
 	public static getNextPlannedWorkout(): Promise<WorkoutPlanListItem | null> {
 	  return BackendClient.inner_invoke("get_next_planned_workout"); 
 	}
 	
 
-	// From src-tauri/src/logic/workouts/commands.rs:93
+	// From src-tauri/src/logic/workouts/commands.rs:94
 	public static getPlannedWorkouts(): Promise<WorkoutPlanListItem[]> {
 	  return BackendClient.inner_invoke("get_planned_workouts"); 
 	}
@@ -224,7 +224,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/workouts/commands.rs:77
+	// From src-tauri/src/logic/workouts/commands.rs:78
 	public static loadWorkoutPage(workout: number): Promise<void> {
 	  return BackendClient.inner_invoke("load_workout_page", { workout }); 
 	}
@@ -254,7 +254,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/workouts/commands.rs:63
+	// From src-tauri/src/logic/workouts/commands.rs:64
 	public static saveWorkout(edit: boolean, workout: Workout): Promise<void> {
 	  return BackendClient.inner_invoke("save_workout", { edit, workout }); 
 	}
@@ -314,7 +314,7 @@ export class BackendClient {
 	}
 	
 
-	// From src-tauri/src/logic/workouts/commands.rs:86
+	// From src-tauri/src/logic/workouts/commands.rs:87
 	public static workoutPrintReady(workout: string): Promise<void> {
 	  return BackendClient.inner_invoke("workout_print_ready", { workout }); 
 	}

@@ -4720,7 +4720,7 @@ checksum = "ff7589a1859b09232522bb9edf076ca7fcf14ded96685d3fa629db73023ffbb7"
 
 [[package]]
 name = "strength-coach-for-garmin"
-version = "5.1.2"
+version = "5.1.3"
 dependencies = [
  "base64 0.23.1",
  "bytes",

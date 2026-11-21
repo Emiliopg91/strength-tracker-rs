@@ -46,9 +46,9 @@ export function WorkoutStepsModal({ workout, isEdit, onClose }: Props) {
     const [addMenuAnchor, setAddMenuAnchor] = useState<HTMLElement | null>(
         null,
     );
-    const valid = name.length > 0 && WorkoutUtils.validateSteps(steps);
+    const valid = name.trim().length > 0 && WorkoutUtils.validateSteps(steps);
     const changed =
-        name != workout.name ||
+        name.trim() != workout.name ||
         (notes ?? "") != (originalNotes ?? "") ||
         JSON.stringify(steps) != originalSteps;
     const canSave = valid && (!isEdit || changed);
@@ -88,7 +88,7 @@ export function WorkoutStepsModal({ workout, isEdit, onClose }: Props) {
                 id: isEdit ? workout.id : 0,
                 enabled: workout.enabled,
                 progression: workout.progression,
-                name,
+                name: name.trim(),
                 steps: WorkoutUtils.toWorkoutSteps(
                     steps,
                     isEdit ? workout.id : 0,
@@ -116,16 +116,13 @@ export function WorkoutStepsModal({ workout, isEdit, onClose }: Props) {
             {exercisesCatalog.length > 0 && (
                 <Dialog open={true} onClose={onClose} fullWidth maxWidth="md">
                     <DialogTitle>
-                        {isEdit && <span>{name}</span>}
-                        {!isEdit && (
-                            <TextField
-                                placeholder={translate("workout")}
-                                error={name.length == 0}
-                                onChange={onNameChange}
-                                value={name}
-                                sx={{ width: 600 }}
-                            ></TextField>
-                        )}
+                        <TextField
+                            placeholder={translate("workout")}
+                            error={name.trim().length == 0}
+                            onChange={onNameChange}
+                            value={name}
+                            sx={{ width: 600 }}
+                        ></TextField>
                         <IconButton
                             onClick={onClose}
                             className="modal-close-button"

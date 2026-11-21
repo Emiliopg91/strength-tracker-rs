@@ -23,6 +23,9 @@ pub struct WorkoutDevice {
     pub workout: u16,
     pub device: String,
     pub pending: bool,
+    /// Name the workout had when last sent to the device, if renamed since: its file there is
+    /// still named after it and has to be deleted before the next push
+    pub previous_name: Option<String>,
 }
 
 impl WorkoutDevice {
@@ -31,6 +34,7 @@ impl WorkoutDevice {
             workout,
             device: device.to_string(),
             pending,
+            previous_name: None,
         }
     }
 
@@ -117,18 +121,78 @@ impl WorkoutDevice {
             .await
     }
 
-    /// Records the workout for the device, replacing the entry (and its `pending` flag) if any.
+    /// Records the workout for the device, replacing the `pending` flag of the entry if any. The
+    /// previous name of an existing entry is kept, as its file is still on the device.
     pub async fn insert_or_replace(
         conn: &Connection,
         workout: u16,
         device: &str,
         pending: bool,
     ) -> rusqlite_orm::errors::Result<usize> {
+        let updated = WorkoutDeviceRepository::update()
+            .set(entity::columns::PENDING, pending.into())
+            .where_(by_key(workout, device))
+            .execute_in(conn)
+            .await?;
+        if updated > 0 {
+            return Ok(updated);
+        }
         WorkoutDeviceRepository::insert()
-            .or_replace()
             .item(&mut WorkoutDevice::new(workout, device, pending))
             .execute_in(conn)
             .await
+    }
+
+    /// Records `old_name` as the name the renamed `workout` still has on every device holding it,
+    /// Connect aside. A name already recorded is kept: it is the one of the file on the device.
+    pub async fn set_previous_name(
+        conn: &Connection,
+        workout: u16,
+        old_name: &str,
+    ) -> rusqlite_orm::errors::Result<()> {
+        WorkoutDeviceRepository::update()
+            .set(entity::columns::PREVIOUS_NAME, old_name.into())
+            .where_(Where::And(vec![
+                Where::Eq(entity::columns::WORKOUT, workout.into()),
+                Where::NotEq(
+                    entity::columns::DEVICE,
+                    constants::CONNECT_DEVICE_SERIAL.into(),
+                ),
+                Where::Null(entity::columns::PREVIOUS_NAME),
+            ]))
+            .execute_in(conn)
+            .await?;
+        Ok(())
+    }
+
+    /// Name the workout still has on the device `serial`, `None` if it wasn't renamed since sent.
+    pub async fn get_previous_name(
+        conn: &Connection,
+        workout: u16,
+        serial: &str,
+    ) -> rusqlite_orm::errors::Result<Option<String>> {
+        Ok(
+            WorkoutDeviceRepository::select_by_id_in(conn, workout, serial)
+                .await?
+                .and_then(|entry| entry.previous_name),
+        )
+    }
+
+    /// Forgets the previous name of the workout on the device `serial`, once its file is gone.
+    pub async fn clear_previous_name(
+        conn: &Connection,
+        workout: u16,
+        serial: &str,
+    ) -> rusqlite_orm::errors::Result<()> {
+        WorkoutDeviceRepository::update()
+            .set(
+                entity::columns::PREVIOUS_NAME,
+                Option::<String>::None.into(),
+            )
+            .where_(by_key(workout, serial))
+            .execute_in(conn)
+            .await?;
+        Ok(())
     }
 
     /// Workouts queued for the device `serial`, as `(id, name)` by name. With `enabled`, only the
@@ -195,11 +259,16 @@ impl WorkoutDevice {
     ) -> rusqlite_orm::errors::Result<usize> {
         WorkoutDeviceRepository::update()
             .set(entity::columns::PENDING, false.into())
-            .where_(Where::And(vec![
-                Where::Eq(entity::columns::WORKOUT, workout.into()),
-                Where::Eq(entity::columns::DEVICE, device.into()),
-            ]))
+            .where_(by_key(workout, device))
             .execute_in(conn)
             .await
     }
+}
+
+/// Condition matching the entry of `workout` on `device`.
+fn by_key(workout: u16, device: &str) -> Where<WorkoutDevice> {
+    Where::And(vec![
+        Where::Eq(entity::columns::WORKOUT, workout.into()),
+        Where::Eq(entity::columns::DEVICE, device.into()),
+    ])
 }

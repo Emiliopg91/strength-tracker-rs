@@ -193,6 +193,130 @@ async fn connect_starts_logged_out_and_logout_never_fails() {
 
 // Devices
 
+/// Registers an unplugged USB device "watch" and queues the workout `id` on it.
+async fn queue_on_watch(app: &App<MockRuntime>, id: u16) {
+    app.state::<DatabasePool>()
+        .run_in_transaction(async move |tx| {
+            DeviceRepository::insert()
+                .item(&mut Device {
+                    serial: "watch".to_string(),
+                    model: "model".to_string(),
+                    last_activity_sync: None,
+                    last_body_metric_sync: None,
+                    usb: true,
+                    connect: false,
+                    strength_workout: true,
+                })
+                .execute_in(tx)
+                .await?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    devices::send_to_device(app.handle(), &app.state::<SettingsLock>(), id, "watch")
+        .await
+        .unwrap();
+}
+
+/// Previous name of the workout `id` by device, of every device entry.
+async fn previous_names(app: &App<MockRuntime>, id: u16) -> Vec<(String, Option<String>)> {
+    let mut entries: Vec<_> = WorkoutDeviceRepository::select()
+        .fetch(&app.state::<DatabasePool>())
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|e| e.workout == id)
+        .map(|e| (e.device, e.previous_name))
+        .collect();
+    entries.sort();
+    entries
+}
+
+#[tokio::test]
+async fn renamed_workout_keeps_its_id_and_records_the_old_name_on_usb_devices() {
+    let app = test_app().await;
+    save_workout(
+        &app,
+        false,
+        workout("Push", vec![step(0, Intensity::ACTIVE, 60.0, 10)]),
+    )
+    .await;
+    let id = workout_id(&app, "Push").await;
+    queue_on_watch(&app, id).await;
+
+    let mut renamed = workout("Push A", vec![step(0, Intensity::ACTIVE, 60.0, 10)]);
+    renamed.id = id;
+    save_workout(&app, true, renamed).await;
+
+    assert_eq!(workout_id(&app, "Push A").await, id);
+    assert_eq!(
+        previous_names(&app, id).await,
+        [
+            (constants::CONNECT_DEVICE_SERIAL.to_string(), None),
+            ("watch".to_string(), Some("Push".to_string())),
+        ]
+    );
+
+    // Renamed again before plugging the watch: its file is still the first one
+    let mut renamed = workout("Push B", vec![step(0, Intensity::ACTIVE, 60.0, 10)]);
+    renamed.id = id;
+    save_workout(&app, true, renamed).await;
+    assert_eq!(
+        previous_names(&app, id).await[1],
+        ("watch".to_string(), Some("Push".to_string()))
+    );
+
+    // Queuing it again keeps the name of the file on the device
+    devices::send_to_device(app.handle(), &app.state::<SettingsLock>(), id, "watch")
+        .await
+        .unwrap();
+    assert_eq!(
+        previous_names(&app, id).await[1],
+        ("watch".to_string(), Some("Push".to_string()))
+    );
+}
+
+#[tokio::test]
+async fn workout_name_of_another_workout_is_rejected() {
+    let app = test_app().await;
+    save_workout(
+        &app,
+        false,
+        workout("Push", vec![step(0, Intensity::ACTIVE, 60.0, 10)]),
+    )
+    .await;
+    save_workout(
+        &app,
+        false,
+        workout("Pull", vec![step(0, Intensity::ACTIVE, 60.0, 10)]),
+    )
+    .await;
+    let pull = workout_id(&app, "Pull").await;
+
+    let mut renamed = workout("Push", vec![step(0, Intensity::ACTIVE, 60.0, 10)]);
+    renamed.id = pull;
+    let edit = workouts::save_workout(
+        app.handle(),
+        &app.state::<SettingsLock>(),
+        &app.state::<ConnectLock>(),
+        true,
+        renamed,
+    )
+    .await;
+    let create = workouts::save_workout(
+        app.handle(),
+        &app.state::<SettingsLock>(),
+        &app.state::<ConnectLock>(),
+        false,
+        workout("Push", vec![step(0, Intensity::ACTIVE, 60.0, 10)]),
+    )
+    .await;
+
+    assert!(edit.is_err());
+    assert!(create.is_err());
+    assert_eq!(workout_id(&app, "Pull").await, pull);
+}
+
 #[tokio::test]
 async fn workout_for_an_unplugged_device_is_left_pending() {
     let app = test_app().await;

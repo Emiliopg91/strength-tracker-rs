@@ -264,21 +264,27 @@ impl Workout {
         res
     }
 
-    /// Inserts the workout, or replaces the notes, progression flag and steps of the existing one with its id when
-    /// editing (its name is kept), and queues it for the devices that already have it. Returns the
-    /// id of the workout.
+    /// Inserts the workout, or replaces the name, notes, progression flag and steps of the existing
+    /// one with its id when editing, and queues it for the devices that already have it. Returns
+    /// the id of the workout.
     pub async fn store(
         tx: &Transaction<'_>,
         workout: &Workout,
         edit: bool,
     ) -> rusqlite_orm::errors::Result<u16> {
-        let id = if edit
-            && WorkoutRepository::select_by_id_in(tx, workout.id)
-                .await?
-                .is_some()
-        {
+        let stored = if edit {
+            WorkoutRepository::select_by_id_in(tx, workout.id).await?
+        } else {
+            None
+        };
+        let id = if let Some(stored) = stored {
             let id = workout.id;
+            if stored.name != workout.name {
+                // Device files are named after the workout, so the old one is deleted on next push
+                WorkoutDevice::set_previous_name(tx, id, &stored.name).await?;
+            }
             WorkoutRepository::update()
+                .set(entity::columns::NAME, workout.name.clone().into())
                 .set(
                     entity::columns::NOTES,
                     (if let Some(note) = workout.notes.clone()

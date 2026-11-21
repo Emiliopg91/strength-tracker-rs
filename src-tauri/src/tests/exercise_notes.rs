@@ -69,6 +69,7 @@ async fn program(db: &DatabasePool, name: &str, steps: &[((u16, u16), Option<&st
                     workout: id,
                     device: device.to_string(),
                     pending: false,
+                    previous_name: None,
                 })
                 .execute_in(tx)
                 .await?;

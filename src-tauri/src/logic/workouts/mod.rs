@@ -22,7 +22,10 @@ use crate::{
         notifications::show_notification,
         open_window, pool, print_to_pdf, report_error, settings_language,
     },
-    utils::{time::today_local_midnight, translations::translate},
+    utils::{
+        time::today_local_midnight,
+        translations::{translate, translate_and_replace},
+    },
 };
 
 /// Returns sessions grouped/aggregated by workout name (count, average time, latest date), sorted by name.
@@ -129,11 +132,34 @@ pub async fn save_workout<R: Runtime>(
     workout: Workout,
 ) -> Result<(), String> {
     let name = workout.name.clone();
+    let lang = settings_language(settings);
+
+    // Names are unique: a clear message instead of the constraint error
+    let lookup = name.clone();
+    let owner = pool(app)
+        .run_in_connection(async move |conn| Ok(Workout::get_id(conn, &lookup).await?))
+        .await
+        .map_err(|e| {
+            report_error(
+                e,
+                settings,
+                "error_workout_save",
+                "Error checking workout name",
+            )
+        })?;
+    if owner.is_some_and(|owner| !edit || owner != workout.id) {
+        return Err(report_error(
+            translate_and_replace("workout_name_taken", &[&name], lang),
+            settings,
+            "error_workout_save",
+            "Workout name already taken",
+        ));
+    }
+
     let res = pool(app)
         .run_in_transaction(async move |tx| Ok(Workout::store(tx, &workout, edit).await?))
         .await;
 
-    let lang = settings_language(settings);
     match res {
         Ok(id) => {
             info!("Workout '{}' saved succesfully", name);
