@@ -32,6 +32,7 @@ No account required, no cloud, no Garmin Express (which doesn't exist on Linux a
 - **Only when it's earned** — No suggestion while any set is below the range or sets were done at mixed weights. Progression can be turned off per exercise.
 - **Unilateral aware** — Rep ranges count per side for single-arm or single-leg exercises.
 - **One click to apply** — Accepted suggestions update your workouts, which are pushed to the watch on its next USB connection and kept up to date in your Garmin Connect library.
+- **Loads as a percentage of your 1RM** — Instead of a fixed weight, a workout step can load a percentage of the exercise's current estimated 1RM (the best of your last 8 weeks, counting unilateral sets per side), rounded to the nearest kg and previewed live while you edit. Whenever that 1RM changes, the affected workouts are updated and sent again to the watch and Garmin Connect. These steps grow with your 1RM, so they stay out of progression suggestions.
 
 ## Strength analysis
 

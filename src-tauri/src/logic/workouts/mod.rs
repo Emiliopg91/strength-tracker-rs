@@ -205,7 +205,7 @@ pub async fn save_workout<R: Runtime>(
     }
 }
 
-/// Current estimated 1RM and weight increment of every exercise with recent loaded sets.
+/// Current estimated 1RM of every exercise with recent loaded sets.
 pub async fn get_percent_load_bases<R: Runtime>(
     app: &AppHandle<R>,
     settings: &SettingsLock,
@@ -224,7 +224,6 @@ pub async fn get_percent_load_bases<R: Runtime>(
                     ex_cat,
                     ex_id,
                     one_rm,
-                    increment: exercises.get(&(ex_cat, ex_id)).map_or(0.0, |e| e.weight),
                 })
                 .collect())
         })

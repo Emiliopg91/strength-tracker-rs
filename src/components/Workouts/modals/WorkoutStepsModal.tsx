@@ -45,7 +45,6 @@ export function WorkoutStepsModal({ workout, isEdit, onClose }: Props) {
             ...e,
             notes: workout.progression ? e.notes : null,
             one_rm: loadBases ? (base?.one_rm ?? null) : undefined,
-            increment: base?.increment,
         };
     });
 

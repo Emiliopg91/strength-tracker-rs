@@ -55,8 +55,6 @@ pub struct PercentLoadBase {
     pub ex_id: u16,
     /// Best estimated 1RM of the recent sets, in kg
     pub one_rm: f32,
-    /// Weight increment of the exercise the load is rounded to, in kg
-    pub increment: f32,
 }
 
 #[derive(Serialize)]

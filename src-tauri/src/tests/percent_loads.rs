@@ -5,7 +5,6 @@ use rustyfit::profile::typedef::Intensity;
 
 use crate::{
     dao::{
-        exercise::{self, ExerciseRepository},
         workout::{Workout, WorkoutRepository},
         workout_device::{WorkoutDevice, WorkoutDeviceRepository, entity::columns as wd_cols},
         workout_step::{WorkoutStep, WorkoutStepRepository, entity::columns as step_cols},
@@ -34,27 +33,11 @@ fn estimate_1rm_matches_the_frontend_formula() {
 }
 
 #[test]
-fn percent_load_rounds_to_the_increment() {
-    assert_eq!(percent_load(120.0, 70, 2.5), 85.0);
-    assert_eq!(percent_load(120.0, 70, 1.25), 83.8);
-    // Without an increment, to 0.5 kg
-    assert_eq!(percent_load(101.0, 50, 0.0), 50.5);
-}
-
-async fn set_increment(db: &DatabasePool, exercise: (u16, u16), increment: f32) {
-    db.run_in_transaction(async move |tx| {
-        ExerciseRepository::update()
-            .set(exercise::entity::columns::WEIGHT, increment.into())
-            .where_(Where::And(vec![
-                Where::Eq(exercise::entity::columns::CATEGORY, exercise.0.into()),
-                Where::Eq(exercise::entity::columns::ID, exercise.1.into()),
-            ]))
-            .execute_in(tx)
-            .await?;
-        Ok(())
-    })
-    .await
-    .unwrap();
+fn percent_load_rounds_to_the_nearest_kg() {
+    assert_eq!(percent_load(120.0, 70), 84.0);
+    assert_eq!(percent_load(101.0, 70), 71.0);
+    assert_eq!(percent_load(101.0, 50), 51.0);
+    assert_eq!(percent_load(103.0, 30), 31.0);
 }
 
 async fn log_session(db: &DatabasePool, date: u32, sets: &[(u16, f32)]) {
@@ -158,14 +141,13 @@ async fn connect_pending(db: &DatabasePool, workout: u16) -> bool {
 #[tokio::test]
 async fn percent_step_resolves_against_the_best_recent_estimate() {
     let db = common::test_db().await;
-    set_increment(&db, BENCH, 2.5).await;
     // Out of the window, so its higher estimate is ignored
     log_session(&db, NOW - 9 * WEEK, &[(1, 140.0)]).await;
     log_session(&db, NOW - WEEK, &[(1, 120.0), (5, 90.0)]).await;
     let workout = program(&db, 70, 60.0).await;
 
     assert_eq!(refresh(&db).await, vec![workout]);
-    assert_eq!(step_weight(&db, workout, 0).await, Some(85.0));
+    assert_eq!(step_weight(&db, workout, 0).await, Some(84.0));
     // Fixed loads are left alone
     assert_eq!(step_weight(&db, workout, 1).await, Some(60.0));
     assert!(connect_pending(&db, workout).await);
@@ -174,7 +156,6 @@ async fn percent_step_resolves_against_the_best_recent_estimate() {
 #[tokio::test]
 async fn unchanged_percent_load_queues_nothing() {
     let db = common::test_db().await;
-    set_increment(&db, BENCH, 2.5).await;
     log_session(&db, NOW - WEEK, &[(1, 120.0)]).await;
     let workout = program(&db, 70, 60.0).await;
     refresh(&db).await;
@@ -201,7 +182,6 @@ async fn percent_step_without_recent_sets_goes_unloaded() {
 #[tokio::test]
 async fn percent_steps_stay_out_of_the_progression() {
     let db = common::test_db().await;
-    set_increment(&db, BENCH, 2.5).await;
     log_session(&db, NOW - WEEK, &[(12, 100.0), (12, 100.0)]).await;
     let workout = program(&db, 70, 100.0).await;
     refresh(&db).await;
@@ -236,12 +216,11 @@ async fn percent_steps_stay_out_of_the_progression() {
 #[tokio::test]
 async fn unilateral_exercises_estimate_from_half_their_reps() {
     let db = common::test_db().await;
-    set_increment(&db, BENCH, 2.5).await;
     // 10 reps: 120 kg estimated bilateral, 101 kg unilateral (5 reps a side)
     log_session(&db, NOW - WEEK, &[(10, 90.0)]).await;
     let workout = program(&db, 70, 60.0).await;
     refresh(&db).await;
-    assert_eq!(step_weight(&db, workout, 0).await, Some(85.0));
+    assert_eq!(step_weight(&db, workout, 0).await, Some(84.0));
 
     db.run_in_connection(async |conn| {
         Ok(crate::dao::exercise::Exercise::set_unilateral(conn, BENCH.0, BENCH.1, true).await?)
@@ -250,5 +229,5 @@ async fn unilateral_exercises_estimate_from_half_their_reps() {
     .unwrap();
 
     assert_eq!(refresh(&db).await, vec![workout]);
-    assert_eq!(step_weight(&db, workout, 0).await, Some(70.0));
+    assert_eq!(step_weight(&db, workout, 0).await, Some(71.0));
 }

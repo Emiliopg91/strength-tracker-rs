@@ -9,8 +9,6 @@ export type ExerciseOption = {
     // Only filled where steps loaded with a percentage of the 1RM are previewed
     /** Current estimated 1RM, in kg; null without recent loaded sets. */
     one_rm?: number | null;
-    /** Weight increment percentage loads are rounded to, in kg. */
-    increment?: number;
 };
 
 interface AppContexType {

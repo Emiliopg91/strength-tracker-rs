@@ -139,14 +139,10 @@ pub async fn set_exercise_progression_parameters<R: Runtime>(
 ) -> Result<(), String> {
     let reps = reps.to_string();
     pool(app)
-        .run_in_transaction(async move |tx| {
-            Exercise::set_progression_parameters(tx, category, id, reps, weight).await?;
-            // Percentage loads are rounded to the weight increment
-            let keys: HashSet<(u16, u16)> = [(category, id)].into();
-            Ok(WorkoutStep::refresh_percent_loads(tx, Some(&keys), now()).await?)
+        .run_in_connection(async move |conn| {
+            Ok(Exercise::set_progression_parameters(conn, category, id, reps, weight).await?)
         })
         .await
-        .map(|refreshed| spawn_percent_load_sync(app, refreshed))
         .inspect(|_| info!("Updated rep ranges for exercise"))
         .map_err(|e| {
             report_error(

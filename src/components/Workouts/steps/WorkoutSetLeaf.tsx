@@ -93,11 +93,7 @@ export function WorkoutSetLeaf({
         if (selected.one_rm === null) {
             return translate("no_recent_one_rm");
         }
-        const kg = WorkoutUtils.percentLoad(
-            selected.one_rm,
-            leaf.one_rm_pct,
-            selected.increment ?? 0,
-        );
+        const kg = WorkoutUtils.percentLoad(selected.one_rm, leaf.one_rm_pct);
         return "≈ " + formatNumber(fromKg(kg), 1) + " " + getWeightUnit();
     })();
     const notesPlaceholder =

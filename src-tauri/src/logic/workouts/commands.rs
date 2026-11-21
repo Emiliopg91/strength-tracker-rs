@@ -88,8 +88,7 @@ pub async fn workout_print_ready(window: WebviewWindow, workout: &str) -> Result
     super::workout_print_ready(window, workout).await
 }
 
-/// Current estimated 1RM (best of the last weeks) and weight increment of every exercise with
-/// recent loaded sets, to preview the steps loaded with a percentage of it. On failure, shows a
+/// Current estimated 1RM (best of the last weeks) of every exercise with recent loaded sets, to preview the steps loaded with a percentage of it. On failure, shows a
 /// persistent error notification and rejects with the message.
 #[traced_command]
 #[tauri::command]

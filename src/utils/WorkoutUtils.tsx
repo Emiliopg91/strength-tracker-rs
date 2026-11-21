@@ -266,17 +266,11 @@ export class WorkoutUtils {
     }
 
     /**
-     * `pct` percent of `oneRm`, rounded to the nearest multiple of `increment` (0.5 without one).
-     * Mirrors `percent_load` in the backend, which resolves the load that is actually sent.
+     * `pct` percent of `oneRm`, rounded to the nearest whole kg. Mirrors `percent_load` in the
+     * backend, which resolves the load that is actually sent.
      */
-    public static percentLoad(
-        oneRm: number,
-        pct: number,
-        increment: number,
-    ): number {
-        const step = increment > 0 ? increment : 0.5;
-        const load = (oneRm * pct) / 100;
-        return Math.round(Math.round(load / step) * step * 10) / 10;
+    public static percentLoad(oneRm: number, pct: number): number {
+        return Math.round((oneRm * pct) / 100);
     }
 
     public static getDefaultLeaf(kind: StepType): LeafStep {

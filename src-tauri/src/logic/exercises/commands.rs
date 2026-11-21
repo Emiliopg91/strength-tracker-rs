@@ -71,9 +71,8 @@ pub async fn set_exercise_progression(
 }
 
 /// Sets the progression parameters of the exercise `category`/`id`: the rep range `reps` (e.g.
-/// `"8-10-12"`) and the weight increment `weight`, and sends again the workouts whose percentage
-/// loads change with the new rounding. On failure, shows a persistent error notification and
-/// rejects with the message.
+/// `"8-10-12"`) and the weight increment `weight`. On failure, shows a persistent error
+/// notification and rejects with the message.
 #[traced_command]
 #[tauri::command]
 pub async fn set_exercise_progression_parameters(

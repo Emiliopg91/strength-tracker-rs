@@ -143,10 +143,11 @@ describe("WorkoutUtils", () => {
         expect(written).toMatchObject({ one_rm_pct: 70, weight: null });
     });
 
-    it("rounds percentage loads to the exercise increment like the backend", () => {
-        expect(WorkoutUtils.percentLoad(120, 70, 2.5)).toBe(85);
-        expect(WorkoutUtils.percentLoad(120, 70, 1.25)).toBe(83.8);
-        expect(WorkoutUtils.percentLoad(101, 50, 0)).toBe(50.5);
+    it("rounds percentage loads to the nearest kg like the backend", () => {
+        expect(WorkoutUtils.percentLoad(120, 70)).toBe(84);
+        expect(WorkoutUtils.percentLoad(101, 70)).toBe(71);
+        expect(WorkoutUtils.percentLoad(101, 50)).toBe(51);
+        expect(WorkoutUtils.percentLoad(103, 30)).toBe(31);
     });
 
     it("rejects percentages outside 1-100 or with decimals", () => {
